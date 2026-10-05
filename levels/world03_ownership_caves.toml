@@ -1,0 +1,506 @@
+id = 3
+name = "Ownership Caves"
+blurb = "Rust's big idea: every value has exactly one owner."
+
+[[level]]
+id = "3.1"
+title = "The sword in the stone"
+kind = "fix"
+book = ["4.1"]
+xp = 40
+goal = '''Make it print:
+The hero holds Excalibur
+The stone still shows Excalibur'''
+lesson = '''
+Welcome to the most important cave in Rust. The **three rules of ownership**:
+
+1. Each value has **one owner** (a variable).
+2. There can only be **one owner at a time**.
+3. When the owner goes out of scope, the value is **dropped** (freed).
+
+So `let b = a;` with a `String` **moves** it: `b` now owns the text and `a` is no longer valid. Using `a` afterwards is error **E0382**.
+
+If you really need two separate copies, ask for one explicitly with **`.clone()`**.
+'''
+c_compare = '''
+A `String` is a pointer to heap memory (plus a length and a capacity). If `let b = a;` copied the pointer, you'd have two owners and **two `free()`s**: a double free! Rust instead *moves* ownership, so exactly one variable is responsible for freeing. No `free()` to forget, and none twice.
+'''
+py_compare = '''
+In Python, `b = a` makes two names point at one object, and the garbage collector frees it later. Rust has no garbage collector. Instead it tracks a single owner at compile time, which is why the old name stops working.
+'''
+check = "output"
+expected_output = '''
+The hero holds Excalibur
+The stone still shows Excalibur
+'''
+starter = '''
+fn main() {
+    let sword = String::from("Excalibur");
+    let hero_item = sword;
+    println!("The hero holds {}", hero_item);
+    println!("The stone still shows {}", sword);
+}
+'''
+solution = '''
+fn main() {
+    let sword = String::from("Excalibur");
+    let hero_item = sword.clone();
+    println!("The hero holds {}", hero_item);
+    println!("The stone still shows {}", sword);
+}
+'''
+hints = [
+    "After line 3, who owns the `String`? Can `sword` still be used?",
+    "Ownership *moved* to `hero_item`. To keep `sword` usable, give `hero_item` its own copy of the text.",
+    "Write `let hero_item = sword.clone();` on line 3.",
+]
+
+[[level]]
+id = "3.2"
+title = "Copy or move?"
+kind = "predict"
+book = ["4.1"]
+xp = 25
+goal = "Does this compile? If so, what does it print?"
+lesson = '''
+Not everything moves! Simple values that live entirely on the stack, like integers, floats, `bool` and `char`, are **`Copy`**: assigning them makes a cheap copy, and both variables stay usable.
+
+Types that own heap memory, like `String`, **move** instead.
+'''
+starter = '''
+fn main() {
+    let a = 5;
+    let b = a;
+    let s1 = String::from("hi");
+    let s2 = s1;
+    println!("{} {}", a, b);
+    println!("{}", s2);
+}
+'''
+choices = [
+    "5 5 / hi",
+    "It doesn't compile: a was moved into b",
+    "It doesn't compile: s1 was moved into s2",
+    "5 0 / hi",
+]
+answer = 0
+expected_output = '''
+5 5
+hi
+'''
+explanation = "`i32` is `Copy`, so `a` and `b` both hold 5. `s1` *was* moved into `s2`, but `s1` is never used again, so there's no error. Moving isn't a problem by itself; only using the old name afterwards is."
+
+[[level]]
+id = "3.3"
+title = "Echoes in the cave"
+kind = "fix"
+book = ["4.1"]
+xp = 40
+goal = '''Make it print the battle cry twice:
+FOR FERRIS!!!
+FOR FERRIS!!!'''
+lesson = '''
+Passing a value to a function **moves it into the function**, just like assigning it. The function's parameter becomes the new owner, and the value is dropped when the function ends.
+
+So after `shout(battle_cry)`, `main` no longer owns `battle_cry`.
+
+(Next world, Borrow Bridge, shows a better way: *lending* a value with `&` without giving it away. For now, use what you know.)
+'''
+c_compare = '''
+It's as if every function that takes a `String` were documented "this function takes ownership and will `free()` the argument". Rust makes that contract part of the type, and enforces it.
+'''
+py_compare = '''
+In Python, passing an object to a function never makes it unusable afterwards. In Rust, passing an owned value hands it over for good.
+'''
+check = "output"
+expected_output = '''
+FOR FERRIS!!!
+FOR FERRIS!!!
+'''
+starter = '''
+fn shout(s: String) {
+    println!("{}!!!", s.to_uppercase());
+}
+
+fn main() {
+    let battle_cry = String::from("for ferris");
+    shout(battle_cry);
+    shout(battle_cry);
+}
+'''
+solution = '''
+fn shout(s: String) {
+    println!("{}!!!", s.to_uppercase());
+}
+
+fn main() {
+    let battle_cry = String::from("for ferris");
+    shout(battle_cry.clone());
+    shout(battle_cry);
+}
+'''
+hints = [
+    "After the first `shout(battle_cry)`, who owns the text?",
+    "The first call moves `battle_cry` into the function. Give the first call a copy, and let the last call take the original.",
+    "Change line 7 to `shout(battle_cry.clone());`",
+]
+
+[[level]]
+id = "3.4"
+title = "Giving it back"
+kind = "fill"
+book = ["4.1"]
+xp = 40
+goal = "Write `add_star` so the program prints: Ferris★★"
+lesson = '''
+A function can take ownership **and give it back** by returning the value:
+
+```rust
+fn shine(mut s: String) -> String {
+    s.push_str("!");
+    s                  // ownership moves back out to the caller
+}
+```
+
+`push_str` appends text to a `String`. It changes the string, so the parameter has to be `mut`.
+
+Notice how `main` uses **shadowing** to catch the returned value: `let name = add_star(name);`.
+'''
+c_compare = '''
+Like a C function that takes a `malloc`ed buffer, maybe `realloc`s it, and returns the (possibly new) pointer. In Rust, the compiler checks that you actually use the returned value instead of the old pointer.
+'''
+py_compare = '''
+Similar to `name = add_star(name)` in Python, but in Rust the old `name` is truly gone after the call until you reassign it.
+'''
+check = "output"
+expected_output = "Ferris★★"
+starter = '''
+// TODO: write `fn add_star(...) -> String`
+// It should take ownership of a String, add "★" to the end, and return it.
+
+fn main() {
+    let name = String::from("Ferris");
+    let name = add_star(name);
+    let name = add_star(name);
+    println!("{}", name);
+}
+'''
+solution = '''
+fn add_star(mut s: String) -> String {
+    s.push_str("★");
+    s
+}
+
+fn main() {
+    let name = String::from("Ferris");
+    let name = add_star(name);
+    let name = add_star(name);
+    println!("{}", name);
+}
+'''
+hints = [
+    "The function doesn't exist yet. What should its parameter type and return type be?",
+    "`fn add_star(mut s: String) -> String`: append with `push_str`, then return `s` as the last expression.",
+    "```rust\nfn add_star(mut s: String) -> String {\n    s.push_str(\"★\");\n    s\n}\n```",
+]
+
+[[level]]
+id = "3.5"
+title = "Lost in the dark"
+kind = "predict"
+book = ["4.1"]
+xp = 25
+goal = "Does this compile? If so, what does it print?"
+lesson = '''
+**Scope** is the region between `{` and `}`. A variable lives from its `let` until the end of its scope. That's exactly when an owned value gets dropped.
+'''
+starter = '''
+fn main() {
+    let outer = String::from("outer");
+    {
+        let inner = String::from("inner");
+        println!("{} {}", outer, inner);
+    }
+    println!("{} {}", outer, inner);
+}
+'''
+choices = [
+    "outer inner / outer inner",
+    "outer inner / outer",
+    "It doesn't compile: `inner` doesn't exist on the last line",
+    "It panics at runtime: inner was already freed",
+]
+answer = 2
+compile_fails = true
+explanation = "`inner` only exists inside the inner `{ }`. At the `}` it is dropped and its name is gone, so the last line is error E0425. Rust catches this at compile time, so it can never become a use-after-free at runtime."
+
+[[level]]
+id = "3.6"
+title = "The looping echo"
+kind = "fix"
+book = ["4.1"]
+xp = 40
+goal = '''Make it greet three times:
+Hello, Ferris!
+Hello, Ferris!
+Hello, Ferris!'''
+lesson = '''
+Moves inside loops are sneaky: the **first** time round, the loop moves the value away, so on the **second** time round there's nothing left to move. The compiler says *"value moved here, in previous iteration of loop"*.
+'''
+c_compare = '''
+The C version of this bug would free the buffer on the first pass and then use freed memory on every pass after. Rust turns that into a compile error.
+'''
+py_compare = '''
+In Python this just works, because nothing is ever moved. In Rust, each call needs its own owned `String`.
+'''
+check = "output"
+expected_output = '''
+Hello, Ferris!
+Hello, Ferris!
+Hello, Ferris!
+'''
+starter = '''
+fn greet(name: String) -> String {
+    format!("Hello, {}!", name)
+}
+
+fn main() {
+    let name = String::from("Ferris");
+    for _ in 0..3 {
+        println!("{}", greet(name));
+    }
+}
+'''
+solution = '''
+fn greet(name: String) -> String {
+    format!("Hello, {}!", name)
+}
+
+fn main() {
+    let name = String::from("Ferris");
+    for _ in 0..3 {
+        println!("{}", greet(name.clone()));
+    }
+}
+'''
+hints = [
+    "Read the note about the *previous iteration of loop*. What happens to `name` on the first pass?",
+    "Each call to `greet` takes ownership. Give each call its own copy.",
+    "Use `greet(name.clone())` inside the loop.",
+]
+
+[[level]]
+id = "3.7"
+title = "Gifts from the deep"
+kind = "predict"
+book = ["4.1"]
+xp = 25
+goal = "Does this compile? If so, what does it print?"
+lesson = '''
+In C, returning a pointer to a local variable is a famous bug: the local's memory is gone once the function returns. What happens in Rust when a function returns a `String` it created?
+'''
+starter = '''
+fn make_greeting() -> String {
+    let s = String::from("hello from the deep");
+    s
+}
+
+fn main() {
+    let g = make_greeting();
+    println!("{}", g);
+}
+'''
+choices = [
+    "It doesn't compile: s is dropped at the end of make_greeting",
+    "hello from the deep",
+    "Garbage text, like returning a local pointer in C",
+    "It prints nothing",
+]
+answer = 1
+expected_output = "hello from the deep"
+explanation = "Returning `s` **moves** ownership out to the caller, so nothing is dropped. The heap text now belongs to `g`. No dangling pointer is possible."
+
+[[level]]
+id = "3.8"
+title = "The longer rope"
+kind = "fill"
+book = ["4.1"]
+xp = 45
+goal = "Write `longer(a, b)`: return whichever String is longer (if they tie, return `a`)."
+lesson = '''
+This function takes ownership of **two** Strings and returns **one**. What happens to the other one? It's **dropped** automatically when the function ends. No leak, no `free()`.
+
+`s.len()` gives a String's length in bytes.
+'''
+c_compare = '''
+In C you'd have to remember to `free()` the loser yourself, or leak it. In Rust, the value that isn't returned is cleaned up at the closing `}`.
+'''
+py_compare = '''
+Python's garbage collector frees the loser *eventually*. Rust frees it at a known moment: the end of its owner's scope.
+'''
+check = "tests"
+starter = '''
+fn longer(a: String, b: String) -> String {
+    todo!()
+}
+
+fn main() {
+    let rope = longer(String::from("short"), String::from("much longer"));
+    println!("{}", rope);
+}
+'''
+solution = '''
+fn longer(a: String, b: String) -> String {
+    if b.len() > a.len() { b } else { a }
+}
+
+fn main() {
+    let rope = longer(String::from("short"), String::from("much longer"));
+    println!("{}", rope);
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn second_is_longer() {
+        assert_eq!(longer(String::from("ab"), String::from("abc")), "abc");
+    }
+
+    #[test]
+    fn first_is_longer() {
+        assert_eq!(longer(String::from("crab"), String::from("eel")), "crab");
+    }
+
+    #[test]
+    fn tie_returns_first() {
+        assert_eq!(longer(String::from("left"), String::from("righ")), "left");
+    }
+}
+'''
+hints = [
+    "Compare the lengths with `.len()`. `if` is an expression, so it can be the whole body.",
+    "Return `b` only when it's strictly longer; otherwise return `a`.",
+    "`if b.len() > a.len() { b } else { a }`",
+]
+
+[[level]]
+id = "3.9"
+title = "BOSS: The cave inventory"
+kind = "boss"
+book = ["4.1"]
+xp = 90
+goal = '''Write `pick_up` and `count`, then fix the ownership bug in `main`.
+Ferris' tests check both functions, and main must compile too.'''
+lesson = '''
+**Boss fight!** Meet **`Vec<T>`**, a growable list (like Python's `list`, or a C array that `realloc`s itself):
+
+```rust
+let mut bag: Vec<String> = Vec::new();
+bag.push(String::from("rope"));   // the Vec now OWNS the String
+let n = bag.len();
+println!("{:?}", bag);            // ["rope"]
+```
+
+Your tasks:
+1. `pick_up(inventory, item)` adds `item` to the inventory and returns the inventory.
+2. `count(inventory)` returns the inventory **and** its length, as a tuple. Why give it back? Because you *moved* it in!
+3. `main` uses a value after it was moved. Find it and fix it.
+
+Notice how annoying it is to pass ownership in and back out all the time. That pain is exactly why **borrowing** exists. That's the next world! 🌉
+'''
+c_compare = '''
+Pushing a `String` into a `Vec` moves the pointer into the vector. The vector is now responsible for freeing every item. In C you'd write that cleanup loop by hand.
+'''
+py_compare = '''
+`Vec<String>` is like a `list[str]` that can only hold strings. Unlike Python, `bag.push(item)` *moves* `item` into the list.
+'''
+check = "tests"
+starter = '''
+fn pick_up(inventory: Vec<String>, item: String) -> Vec<String> {
+    todo!()
+}
+
+fn count(inventory: Vec<String>) -> (Vec<String>, usize) {
+    todo!()
+}
+
+fn main() {
+    let mut inventory = Vec::new();
+    let sword = String::from("sword");
+    inventory = pick_up(inventory, sword);
+    inventory = pick_up(inventory, String::from("shield"));
+    let (inventory, n) = count(inventory);
+    println!("Carrying {} items: {:?}", n, inventory);
+    println!("My trusty {} gleams.", sword);
+}
+'''
+solution = '''
+fn pick_up(mut inventory: Vec<String>, item: String) -> Vec<String> {
+    inventory.push(item);
+    inventory
+}
+
+fn count(inventory: Vec<String>) -> (Vec<String>, usize) {
+    let n = inventory.len();
+    (inventory, n)
+}
+
+fn main() {
+    let mut inventory = Vec::new();
+    let sword = String::from("sword");
+    inventory = pick_up(inventory, sword.clone());
+    inventory = pick_up(inventory, String::from("shield"));
+    let (inventory, n) = count(inventory);
+    println!("Carrying {} items: {:?}", n, inventory);
+    println!("My trusty {} gleams.", sword);
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn picks_up_one() {
+        let inv = pick_up(Vec::new(), String::from("sword"));
+        assert_eq!(inv, vec![String::from("sword")]);
+    }
+
+    #[test]
+    fn keeps_order() {
+        let inv = pick_up(Vec::new(), String::from("a"));
+        let inv = pick_up(inv, String::from("b"));
+        assert_eq!(inv, vec![String::from("a"), String::from("b")]);
+    }
+
+    #[test]
+    fn count_gives_inventory_back() {
+        let inv = pick_up(pick_up(Vec::new(), String::from("x")), String::from("y"));
+        let (inv, n) = count(inv);
+        assert_eq!(n, 2);
+        assert_eq!(inv.len(), 2);
+    }
+}
+'''
+hints = [
+    "Start with the compile error in `main`: which value is used after being moved? Then do the two functions.",
+    "`pick_up` needs a `mut` parameter so it can `push`. `count` should read `.len()` first, then return `(inventory, n)`. In `main`, give `pick_up` a clone of `sword`.",
+    "```rust\nfn pick_up(mut inventory: Vec<String>, item: String) -> Vec<String> {\n    inventory.push(item);\n    inventory\n}\n\nfn count(inventory: Vec<String>) -> (Vec<String>, usize) {\n    let n = inventory.len();\n    (inventory, n)\n}\n```\nAnd in `main`: `pick_up(inventory, sword.clone())`.",
+]
+
+# ---- Planned (not built yet) ----
+
+[[planned]]
+title = "Treasure in the storeroom"
+kind = "predict"
+book = ["4.1"]
+about = "Box puts data on the heap; the stack holds the pointer."
+
+[[planned]]
+title = "Handing over the key"
+kind = "fix"
+book = ["4.1"]
+about = "Moving a Box hands over the pointer, not the data."

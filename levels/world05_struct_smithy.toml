@@ -1,0 +1,53 @@
+id = 5
+name = "Struct Smithy"
+blurb = "Forge your own types."
+
+# Placeholder island: these levels are planned but not built yet.
+
+[[planned]]
+title = "Forging your first struct"
+kind = "fill"
+book = ["5.1"]
+about = "Group related values into one named type."
+
+[[planned]]
+title = "Copying the blueprint"
+kind = "predict"
+book = ["5.1"]
+about = "Build a new struct from an old one with ..update syntax."
+
+[[planned]]
+title = "Tiny tuple structs"
+kind = "fill"
+book = ["5.1"]
+about = "Give a tuple a name, like Meters(5.0)."
+
+[[planned]]
+title = "Who owns the pieces?"
+kind = "fix"
+book = ["5.1"]
+about = "Structs that own their Strings, and structs that borrow them."
+
+[[planned]]
+title = "Measuring rectangles"
+kind = "fill"
+book = ["5.2"]
+about = "Turn loose variables into a struct and print it with {:?} and dbg!."
+
+[[planned]]
+title = "Teaching your struct tricks"
+kind = "fill"
+book = ["5.3"]
+about = "Add methods with impl and &self."
+
+[[planned]]
+title = "The factory: ::new"
+kind = "fill"
+book = ["5.3"]
+about = "Associated functions that build new values."
+
+[[planned]]
+title = "BOSS: The character sheet"
+kind = "boss"
+book = ["5.1", "5.2", "5.3"]
+about = "Stats, methods and level-ups for an RPG hero."

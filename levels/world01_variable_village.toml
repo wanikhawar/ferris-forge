@@ -1,0 +1,392 @@
+id = 1
+name = "Variable Village"
+blurb = "Where values live: let, mut, shadowing, number types, tuples and arrays."
+
+[[level]]
+id = "1.1"
+title = "Set in stone"
+kind = "fix"
+book = ["3.1"]
+xp = 30
+goal = "Make it compile so it prints: Gold: 15"
+lesson = '''
+In Rust, variables are **immutable by default**. Once set, they can't change:
+
+```rust
+let x = 5;
+x = 6;        // ❌ error[E0384]
+```
+
+To allow changes, say so with **`mut`**:
+
+```rust
+let mut x = 5;
+x = 6;        // ✅
+```
+
+Why? When most values never change, the ones that *do* change stand out, and the compiler can catch accidental changes.
+'''
+c_compare = '''
+C is the other way round: everything is mutable unless you write `const`. Rust's `let` is like C's `const`, and `let mut` is like a normal C variable.
+'''
+py_compare = '''
+Python lets you rebind any name at any time. Rust makes you say up front which variables are going to change.
+'''
+check = "output"
+expected_output = "Gold: 15"
+starter = '''
+fn main() {
+    let gold = 10;
+    gold = gold + 5;
+    println!("Gold: {}", gold);
+}
+'''
+solution = '''
+fn main() {
+    let mut gold = 10;
+    gold += 5;
+    println!("Gold: {}", gold);
+}
+'''
+hints = [
+    "The compiler mentions an *immutable* variable. Which variable is being changed?",
+    "Variables are immutable by default. One keyword on line 2 makes `gold` changeable.",
+    "Write `let mut gold = 10;` on line 2.",
+]
+
+[[level]]
+id = "1.2"
+title = "Shadows in the village"
+kind = "predict"
+book = ["3.1"]
+xp = 20
+goal = "What does this print?"
+lesson = '''
+**Shadowing**: you can declare a *new* variable with the same name using `let` again. The new one hides the old one. A shadow inside `{ }` only lasts until the closing `}`.
+
+This is different from `mut`. Shadowing makes a brand-new variable, which can even have a different type.
+'''
+starter = '''
+fn main() {
+    let x = 5;
+    let x = x + 1;
+    {
+        let x = x * 2;
+        println!("inner: {}", x);
+    }
+    println!("outer: {}", x);
+}
+'''
+choices = [
+    "inner: 12 / outer: 12",
+    "inner: 12 / outer: 6",
+    "It doesn't compile: x is immutable",
+    "inner: 10 / outer: 5",
+]
+answer = 1
+expected_output = '''
+inner: 12
+outer: 6
+'''
+explanation = "`let x = x + 1` makes a new `x` (6). Inside the block, another new `x` is 12, but it disappears at the `}`, so the outer `x` is still 6. Nothing was mutated, so no `mut` is needed."
+
+[[level]]
+id = "1.3"
+title = "Apples and pennies"
+kind = "fix"
+book = ["3.2"]
+xp = 30
+goal = "Make it print: Total: 3.5"
+lesson = '''
+Rust has exact number types, and you pick their size:
+
+| Type | Like in C | Holds |
+|---|---|---|
+| `i32` | `int32_t` | whole numbers, ±2 billion (the default) |
+| `u8` | `uint8_t` | 0 to 255 |
+| `i64`, `u64` | `int64_t`, `uint64_t` | bigger whole numbers |
+| `f64` | `double` | decimals (the default) |
+
+Rust **never converts number types silently**. To mix them, convert on purpose with **`as`**:
+
+```rust
+let n: i32 = 7;
+let half = n as f64 / 2.0;   // 3.5
+```
+'''
+c_compare = '''
+In C, `7 * 0.5` quietly converts the `int` to a `double`. That's convenient, but it's also a classic source of bugs (think `int/int` division, or a negative number turning into a huge unsigned one). Rust makes you write the conversion out.
+'''
+py_compare = '''
+Python mixes `int` and `float` freely. Rust doesn't: an `i32` times an `f64` is a compile error until you convert one of them.
+'''
+check = "output"
+expected_output = "Total: 3.5"
+starter = '''
+fn main() {
+    let apples: i32 = 7;
+    let price: f64 = 0.5;
+    let total = apples * price;
+    println!("Total: {}", total);
+}
+'''
+solution = '''
+fn main() {
+    let apples: i32 = 7;
+    let price: f64 = 0.5;
+    let total = apples as f64 * price;
+    println!("Total: {}", total);
+}
+'''
+hints = [
+    "The error says you can't multiply an `i32` by an `f64`. What would C do here, and what does Rust want you to do instead?",
+    "Convert `apples` into an `f64` before multiplying. Rust has a keyword for converting number types.",
+    "`let total = apples as f64 * price;`",
+]
+
+[[level]]
+id = "1.4"
+title = "The overflowing well"
+kind = "predict"
+book = ["3.2"]
+xp = 20
+goal = "A u8 holds 0 to 255. What does this print?"
+lesson = '''
+What happens when a number gets too big for its type?
+
+- With plain `+`, a **debug** build stops the program (a *panic*) instead of silently giving a wrong answer.
+- If you really *want* the number to wrap around, you say so with a method like **`wrapping_add`**.
+- There's also `checked_add` and `saturating_add`. You'll meet them later.
+'''
+c_compare = '''
+In C, unsigned overflow wraps around silently, and *signed* overflow is undefined behaviour. Rust makes you choose explicitly.
+'''
+py_compare = '''
+Python ints never overflow: they just grow. Rust's fixed-size numbers are faster but have limits.
+'''
+starter = '''
+fn main() {
+    let level: u8 = 255;
+    let next = level.wrapping_add(1);
+    println!("{}", next);
+}
+'''
+choices = [
+    "256",
+    "0",
+    "It panics: attempt to add with overflow",
+    "It doesn't compile: 256 doesn't fit in a u8",
+]
+answer = 1
+expected_output = "0"
+explanation = "`wrapping_add` asks for wrap-around on purpose: 255 + 1 wraps to 0 in a `u8`. With a plain `level + 1`, a debug build would panic instead."
+
+[[level]]
+id = "1.5"
+title = "Unpacking the cart"
+kind = "fill"
+book = ["3.2"]
+xp = 30
+goal = "Unpack the tuple so the program prints: x = 3, y = 7"
+lesson = '''
+A **tuple** groups a fixed number of values, which can have different types:
+
+```rust
+let crab = ("Ferris", 9, true);
+println!("{}", crab.0);        // Ferris
+```
+
+You can **destructure** a tuple into separate variables in one `let`:
+
+```rust
+let (name, age, happy) = crab;
+```
+'''
+c_compare = '''
+Like a quick anonymous `struct` you don't have to declare first. Access fields by position: `.0`, `.1`, …
+'''
+py_compare = '''
+Exactly like Python tuple unpacking: `x, y = point`. Rust just needs the parentheses: `let (x, y) = point;`
+'''
+check = "output"
+expected_output = "x = 3, y = 7"
+starter = '''
+fn main() {
+    let point = (3, 7);
+
+    // TODO: in ONE let statement, unpack `point` into `x` and `y`
+
+    println!("x = {}, y = {}", x, y);
+}
+'''
+solution = '''
+fn main() {
+    let point = (3, 7);
+
+    let (x, y) = point;
+
+    println!("x = {}, y = {}", x, y);
+}
+'''
+hints = [
+    "The compiler can't find `x` or `y`. You need to create them from `point`.",
+    "A `let` can have a *pattern* on the left side that matches the tuple's shape.",
+    "`let (x, y) = point;`",
+]
+
+[[level]]
+id = "1.6"
+title = "Off the end of the array"
+kind = "fix"
+book = ["3.2"]
+xp = 30
+goal = '''Make it print the first and last score, and the count:
+First: 90
+Last: 77
+Count: 3'''
+lesson = '''
+An **array** has a fixed length, and every element has the same type:
+
+```rust
+let scores = [90, 85, 77];       // type: [i32; 3]
+let first = scores[0];
+let n = scores.len();            // 3
+```
+
+Indexes start at 0. Rust **checks every index**: a bad index is either caught at compile time (like here) or stops the program safely. It never reads random memory.
+'''
+c_compare = '''
+In C, `scores[3]` on a 3-element array reads whatever happens to be in memory next. That's undefined behaviour, and a classic security hole. Rust refuses.
+'''
+py_compare = '''
+Like an `IndexError` in Python, except Rust can often spot it before the program runs. Rust arrays can't grow, though. For a growable list, use `Vec` (coming soon!).
+'''
+check = "output"
+expected_output = '''
+First: 90
+Last: 77
+Count: 3
+'''
+starter = '''
+fn main() {
+    let scores = [90, 85, 77];
+    println!("First: {}", scores[0]);
+    println!("Last: {}", scores[3]);
+    println!("Count: {}", scores.length());
+}
+'''
+solution = '''
+fn main() {
+    let scores = [90, 85, 77];
+    println!("First: {}", scores[0]);
+    println!("Last: {}", scores[scores.len() - 1]);
+    println!("Count: {}", scores.len());
+}
+'''
+hints = [
+    "There are two problems: one index, and one method name. Read both errors.",
+    "Indexes start at 0, so a 3-element array's last index is 2. And Rust's method for the size is shorter than `length`.",
+    "Use `scores[2]` (or `scores[scores.len() - 1]`) and `scores.len()`.",
+]
+
+[[level]]
+id = "1.7"
+title = "Debug goggles"
+kind = "predict"
+book = ["3.2"]
+xp = 20
+goal = "What does this print?"
+lesson = '''
+`{}` is for **pretty, user-facing** output. Many types (like tuples and arrays) don't have a single "pretty" form, so for those Rust offers **`{:?}`**, the *Debug* format, meant for programmers.
+'''
+starter = '''
+fn main() {
+    let loot = (1, "two", 3.5);
+    println!("{:?}", loot);
+}
+'''
+choices = [
+    "(1, two, 3.5)",
+    "(1, \"two\", 3.5)",
+    "It doesn't compile: tuples can't be printed",
+    "1 two 3.5",
+]
+answer = 1
+expected_output = '(1, "two", 3.5)'
+explanation = "`{:?}` shows values the way you'd write them in code, so strings keep their quotes. With plain `{}` this line wouldn't compile, because tuples have no 'pretty' format."
+
+[[level]]
+id = "1.8"
+title = "BOSS: The village thermometer"
+kind = "boss"
+book = ["3.2"]
+xp = 60
+goal = '''Convert the three Fahrenheit readings to Celsius and print exactly:
+32.0F = 0.0C
+212.0F = 100.0C
+98.6F = 37.0C'''
+lesson = '''
+**Boss fight!** Use what you've learned in Variable Village.
+
+The formula is: `celsius = (fahrenheit - 32.0) * 5.0 / 9.0`
+
+To print a number with exactly one decimal place, use **`{:.1}`**:
+
+```rust
+println!("{:.1}", 2.0 / 3.0);   // 0.7
+```
+
+Use the array, use indexes, and don't mix integers with floats!
+'''
+c_compare = '''
+`{:.1}` is like `printf("%.1f", x)`.
+'''
+py_compare = '''
+`{:.1}` works just like Python's `f"{x:.1f}"`.
+'''
+check = "output"
+expected_output = '''
+32.0F = 0.0C
+212.0F = 100.0C
+98.6F = 37.0C
+'''
+starter = '''
+fn main() {
+    let readings_f: [f64; 3] = [32.0, 212.0, 98.6];
+
+    // TODO: convert each reading with (f - 32.0) * 5.0 / 9.0
+    // TODO: print each line like:  32.0F = 0.0C
+}
+'''
+solution = '''
+fn main() {
+    let readings_f: [f64; 3] = [32.0, 212.0, 98.6];
+
+    let c0 = (readings_f[0] - 32.0) * 5.0 / 9.0;
+    let c1 = (readings_f[1] - 32.0) * 5.0 / 9.0;
+    let c2 = (readings_f[2] - 32.0) * 5.0 / 9.0;
+
+    println!("{:.1}F = {:.1}C", readings_f[0], c0);
+    println!("{:.1}F = {:.1}C", readings_f[1], c1);
+    println!("{:.1}F = {:.1}C", readings_f[2], c2);
+}
+'''
+hints = [
+    "Do one reading first. How do you get the first element out of the array?",
+    "Compute each Celsius value with the formula using `f64` literals (`32.0`, not `32`), then print with `{:.1}` for both numbers.",
+    "`let c0 = (readings_f[0] - 32.0) * 5.0 / 9.0;` then `println!(\"{:.1}F = {:.1}C\", readings_f[0], c0);`, and the same for indexes 1 and 2.",
+]
+
+# ---- Planned (not built yet) ----
+
+[[planned]]
+title = "Carved in stone"
+kind = "fix"
+book = ["3.1"]
+about = "Constants: values fixed forever, written in CAPITALS."
+
+[[planned]]
+title = "Letters and light switches"
+kind = "predict"
+book = ["3.2"]
+about = "char holds any Unicode letter (not just a byte!), and bool."

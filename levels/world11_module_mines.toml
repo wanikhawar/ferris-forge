@@ -1,0 +1,41 @@
+id = 11
+name = "Module Mines"
+blurb = "Organize bigger programs into neat tunnels."
+
+# Placeholder island: these levels are planned but not built yet.
+
+[[planned]]
+title = "Crates and packages"
+kind = "predict"
+book = ["7.1"]
+about = "What a crate is, and how a package holds them."
+
+[[planned]]
+title = "Private property"
+kind = "fix"
+book = ["7.2"]
+about = "Modules keep things private until you say pub."
+
+[[planned]]
+title = "Finding your way"
+kind = "fix"
+book = ["7.3"]
+about = "Paths like crate::, super:: and self:: reach other modules."
+
+[[planned]]
+title = "Shortcuts with use"
+kind = "fill"
+book = ["7.4"]
+about = "Bring names into scope, rename them with as, and use outside crates."
+
+[[planned]]
+title = "One module per file"
+kind = "predict"
+book = ["7.5"]
+about = "Split one big file into many."
+
+[[planned]]
+title = "BOSS: Tidy up the mine"
+kind = "boss"
+book = ["7.2", "7.3", "7.4", "7.5"]
+about = "Sort a messy program into modules with a clean public API."

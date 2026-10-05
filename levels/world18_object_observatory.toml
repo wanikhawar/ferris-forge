@@ -1,0 +1,41 @@
+id = 18
+name = "Object Observatory"
+blurb = "Objects, Rust style."
+
+# Placeholder island: these levels are planned but not built yet.
+
+[[planned]]
+title = "Is Rust object-oriented?"
+kind = "predict"
+book = ["18.1"]
+about = "Objects and hiding details, but no inheritance."
+
+[[planned]]
+title = "Many shapes, one list"
+kind = "fill"
+book = ["18.2"]
+about = "Trait objects: Box<dyn Trait>, like a vtable in C."
+
+[[planned]]
+title = "Draft, review, publish"
+kind = "fill"
+book = ["18.3"]
+about = "The state pattern, done two ways."
+
+[[planned]]
+title = "Ownership Inventory #4"
+kind = "predict"
+book = ["18.4"]
+about = "The final checkpoint quiz."
+
+[[planned]]
+title = "Which design wins?"
+kind = "predict"
+book = ["18.5"]
+about = "Compare designs and their trade-offs."
+
+[[planned]]
+title = "BOSS: The blog workflow"
+kind = "boss"
+book = ["18.2", "18.3"]
+about = "Posts that move from draft to published."

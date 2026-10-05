@@ -1,0 +1,42 @@
+id = 24
+name = "Ferris' Library"
+blurb = "A bonus island: the book's appendices as quick quizzes."
+tag = "bonus"
+
+# Placeholder island: these levels are planned but not built yet.
+
+[[planned]]
+title = "Rust's reserved words"
+kind = "predict"
+book = ["A"]
+about = "Every keyword and what it does."
+
+[[planned]]
+title = "Every symbol explained"
+kind = "predict"
+book = ["B"]
+about = "All the operators and symbols."
+
+[[planned]]
+title = "Handy tools"
+kind = "predict"
+book = ["D"]
+about = "rustfmt, Clippy and rust-analyzer."
+
+[[planned]]
+title = "Rust's editions"
+kind = "predict"
+book = ["E"]
+about = "What editions are, and why they exist."
+
+[[planned]]
+title = "The book in other languages"
+kind = "predict"
+book = ["F"]
+about = "Where to read the book in other languages."
+
+[[planned]]
+title = "How Rust is made"
+kind = "predict"
+book = ["G"]
+about = "Stable, beta and nightly Rust."

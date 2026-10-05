@@ -1,0 +1,54 @@
+id = 16
+name = "Minigrep Harbor"
+blurb = "A project island: build a real command-line search tool."
+tag = "project"
+
+# Placeholder island: these levels are planned but not built yet.
+
+[[planned]]
+title = "Orders from the command line"
+kind = "fill"
+book = ["12.1"]
+about = "Read command-line arguments."
+
+[[planned]]
+title = "Opening the treasure map"
+kind = "fill"
+book = ["12.2"]
+about = "Read a whole file into a String."
+
+[[planned]]
+title = "Tidying the ship"
+kind = "fix"
+book = ["12.3"]
+about = "Split main into a Config and a run function, with good errors."
+
+[[planned]]
+title = "Test first, then build"
+kind = "fill"
+book = ["12.4"]
+about = "Test-driven development of the search function."
+
+[[planned]]
+title = "Secret settings"
+kind = "fill"
+book = ["12.5"]
+about = "Case-insensitive search switched on by an environment variable."
+
+[[planned]]
+title = "Errors to the right place"
+kind = "fix"
+book = ["12.6"]
+about = "eprintln! sends errors to stderr, like fprintf(stderr) in C."
+
+[[planned]]
+title = "Polish with iterators"
+kind = "fix"
+book = ["13.3"]
+about = "Swap loops and clones for iterator chains."
+
+[[planned]]
+title = "BOSS: minigrep"
+kind = "boss"
+book = ["12.1", "12.2", "12.3", "12.4", "12.5", "12.6"]
+about = "The finished search tool."

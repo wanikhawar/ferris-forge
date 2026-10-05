@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ferris' Forge</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;700&family=VT323&family=JetBrains+Mono:wght@400;600&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+</head>
+<body>
+  <!-- Title screen -->
+  <section id="title-screen" class="screen active">
+    <canvas id="title-bg" class="pixel-bg"></canvas>
+    <div class="title-content">
+      <div class="logo-sign">
+        <div class="logo-main">Ferris' Forge</div>
+        <div class="logo-sub">learn Rust, one crab-step at a time</div>
+      </div>
+      <canvas id="title-ferris" class="sprite"></canvas>
+      <div class="title-buttons">
+        <button id="btn-start" class="wood-btn big">Start</button>
+        <button id="btn-title-settings" class="wood-btn">Settings</button>
+      </div>
+      <div class="title-foot">Real compiler. Real Rust. A crab who believes in you.</div>
+    </div>
+  </section>
+
+  <!-- World map -->
+  <section id="map-screen" class="screen">
+    <button class="wood-btn small map-back hidden" id="btn-map-back" title="Go back to the level you were on (Esc)"></button>
+    <div class="map-wrap">
+      <canvas id="map-canvas"></canvas>
+      <div id="map-overlay"></div>
+    </div>
+  </section>
+
+  <!-- Level -->
+  <section id="level-screen" class="screen">
+    <div class="level-grid">
+
+      <aside class="lesson-dock frame-parchment" id="lesson-dock" aria-label="Lesson">
+        <div class="dock-head">
+          <span class="dock-title" id="dock-title">📜 Lesson</span>
+          <button class="mini-icon" id="btn-dock-close" title="Close the lesson panel (L)" aria-label="Close the lesson panel" data-icon="arrowLeft"></button>
+        </div>
+        <div class="dock-body" id="dock-body"></div>
+      </aside>
+
+      <div class="left-col">
+        <div class="lesson-strip frame-parchment">
+          <div class="goal" id="lv-goal"></div>
+          <div class="lesson-buttons">
+            <button class="wood-btn small" id="btn-lesson" title="Read the lesson (L)">📜 Lesson</button>
+            <button class="wood-btn small" id="btn-lesson-c" title="How C does it">In C</button>
+            <button class="wood-btn small" id="btn-lesson-py" title="How Python does it">In Python</button>
+          </div>
+        </div>
+
+        <div class="editor-frame frame-dark">
+          <div class="editor-label">
+            <span>main.rs</span>
+            <span class="editor-tools">
+              <span id="editor-status"></span>
+              <button class="mini-toggle run-mini" id="btn-run-mini" title="Run (Ctrl+Enter)"><span class="sym" data-glyph="▶"></span>RUN</button>
+              <button class="mini-toggle zen-only" id="btn-zen-compiler" data-console="compiler" title="Compiler messages">COMPILER</button>
+              <button class="mini-toggle zen-only" id="btn-zen-output" data-console="output" title="Program output">OUTPUT</button>
+              <button class="mini-toggle" id="btn-vim" aria-label="Vim mode" title="Vim mode: edit with your own Neovim">VIM</button>
+              <button class="mini-icon" id="btn-expand" aria-label="Expand the editor" title="Expand the editor (hides the chat)" data-icon="expand"></button>
+            </span>
+          </div>
+          <div id="editor"></div>
+        </div>
+
+        <div class="choices frame-parchment" id="choices"></div>
+      </div>
+
+      <aside class="right-col">
+        <div class="portrait frame-wood">
+          <canvas id="ferris-canvas" class="sprite"></canvas>
+          <div class="nameplate">
+            <span>Ferris</span>
+            <span class="ferris-status" id="ferris-status" aria-live="polite"></span>
+            <button class="model-chip" id="model-chip" title="Switch Ferris' brain (Claude model)">🧠 …</button>
+          </div>
+        </div>
+        <div class="dialogue frame-parchment">
+          <div class="dialogue-log" id="dialogue-log"></div>
+          <div class="quick-menu hidden" id="quick-menu" role="menu"></div>
+          <form class="ask" id="ask-form">
+            <button type="button" class="quick-btn" id="btn-wide-chat" aria-label="Make the chat wider" title="Make Ferris' chat panel wider" data-icon="arrowLeft"></button>
+            <button type="button" class="quick-btn" id="btn-quick" aria-label="Quick questions for Ferris" title="Quick questions for Ferris (Q)" aria-haspopup="menu">💬</button>
+            <input id="ask-input" autocomplete="off" placeholder="Ask Ferris…" maxlength="1000" aria-label="Message to Ferris">
+            <button class="wood-btn small" type="submit" id="btn-ask">Ask</button>
+            <button class="wood-btn small stop hidden" type="button" id="btn-stop" title="Stop Ferris' answer">Stop</button>
+          </form>
+        </div>
+      </aside>
+
+      <nav class="hotbar" id="hotbar"></nav>
+    </div>
+  </section>
+
+  <!-- HUD (map + level) -->
+  <div id="hud" class="hidden">
+    <div class="hud-player frame-wood">
+      <div class="hud-name" id="hud-name"></div>
+      <div class="hud-rank" id="hud-rank"></div>
+      <div class="xp-bar"><div class="xp-fill" id="xp-fill"></div></div>
+    </div>
+    <!-- On level screens, the level's title sits in the middle of the top bar. -->
+    <header class="level-header frame-wood">
+      <button class="icon-btn" id="btn-back-map" aria-label="Back to the map" title="Back to the map" data-icon="map"></button>
+      <div class="level-titles">
+        <div class="level-world" id="lv-world"></div>
+        <div class="level-name" id="lv-title"></div>
+      </div>
+      <div class="level-badges">
+        <span class="badge" id="lv-kind"></span>
+        <span class="badge xp" id="lv-xp"></span>
+      </div>
+    </header>
+    <div class="hud-clock frame-wood">
+      <div class="clock-row">
+        <span class="clock-date" id="hud-date"></span>
+        <span class="clock-time" id="hud-time"></span>
+      </div>
+      <div class="clock-gold" title="Your XP">
+        <span data-icon="coin" data-px="3"></span>
+        <span class="gold-digits"><span id="hud-xp">0</span> XP</span>
+        <div class="mini-xp" aria-hidden="true"><div class="mini-xp-fill" id="mini-xp-fill"></div></div>
+      </div>
+    </div>
+    <div class="save-status hidden" id="save-status" role="alert">⚠ Not saved</div>
+    <div class="hud-menu">
+      <button class="icon-btn" id="btn-codex" aria-label="Error Codex" title="Error Codex" data-icon="book"></button>
+      <button class="icon-btn" id="btn-workshop" aria-label="Workshop" title="Workshop (free coding)" data-icon="anvil"></button>
+      <button class="icon-btn" id="btn-settings" aria-label="Settings" title="Settings" data-icon="gear"></button>
+    </div>
+    <div class="energy" id="energy" title="Claude energy">
+      <div class="energy-label">E</div>
+      <div class="energy-bar"><div class="energy-fill" id="energy-fill"></div></div>
+    </div>
+  </div>
+
+  <div id="modal-root"></div>
+  <div id="toast-root"></div>
+  <canvas id="fx-canvas"></canvas>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

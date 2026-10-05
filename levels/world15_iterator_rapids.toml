@@ -1,0 +1,41 @@
+id = 15
+name = "Iterator Rapids"
+blurb = "Little functions and conveyor belts."
+
+# Placeholder island: these levels are planned but not built yet.
+
+[[planned]]
+title = "Little functions: closures"
+kind = "fill"
+book = ["13.1"]
+about = "Functions without names that remember their surroundings."
+
+[[planned]]
+title = "Borrow, change or keep?"
+kind = "predict"
+book = ["13.1"]
+about = "How closures capture values: Fn, FnMut, FnOnce and move."
+
+[[planned]]
+title = "Next, please!"
+kind = "fill"
+book = ["13.2"]
+about = "The Iterator trait, next(), sum and collect."
+
+[[planned]]
+title = "Down the conveyor belt"
+kind = "fill"
+book = ["13.2"]
+about = "Transform and pick items with map and filter."
+
+[[planned]]
+title = "Loops vs iterators: the race"
+kind = "predict"
+book = ["13.4"]
+about = "Iterators are just as fast as hand-written loops."
+
+[[planned]]
+title = "BOSS: The log analyzer"
+kind = "boss"
+book = ["13.1", "13.2"]
+about = "Summarize a log with one chain of iterators."

@@ -1,0 +1,59 @@
+id = 13
+name = "Trait Tower"
+blurb = "Write code once, for many types."
+
+# Placeholder island: these levels are planned but not built yet.
+
+[[planned]]
+title = "One function, many types"
+kind = "fill"
+book = ["10.1"]
+about = "Generic functions with <T>."
+
+[[planned]]
+title = "Boxes for anything"
+kind = "fill"
+book = ["10.1"]
+about = "Generic structs and enums like Point<T> and Option<T>."
+
+[[planned]]
+title = "Methods for everyone"
+kind = "fill"
+book = ["10.1"]
+about = "impl<T> blocks, and methods just for one type."
+
+[[planned]]
+title = "Generics are free"
+kind = "predict"
+book = ["10.1"]
+about = "The compiler makes a copy per type, so there's no slowdown."
+
+[[planned]]
+title = "Teaching skills: traits"
+kind = "fill"
+book = ["10.2"]
+about = "Shared behavior many types can have, with default methods."
+
+[[planned]]
+title = "Only skilled helpers allowed"
+kind = "fix"
+book = ["10.2"]
+about = "Trait bounds: impl Trait, T: Trait and where."
+
+[[planned]]
+title = "Mystery boxes"
+kind = "predict"
+book = ["10.2"]
+about = "Return impl Trait, and implement a trait for many types at once."
+
+[[planned]]
+title = "Free skills with derive"
+kind = "fill"
+book = ["C"]
+about = "Get Debug, Clone, PartialEq and friends for free."
+
+[[planned]]
+title = "BOSS: The shape zoo"
+kind = "boss"
+book = ["10.1", "10.2"]
+about = "Many shapes, one trait."

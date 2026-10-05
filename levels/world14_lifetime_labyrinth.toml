@@ -1,0 +1,47 @@
+id = 14
+name = "Lifetime Labyrinth"
+blurb = "How long does a reference live?"
+
+# Placeholder island: these levels are planned but not built yet.
+
+[[planned]]
+title = "How long does it live?"
+kind = "predict"
+book = ["10.3"]
+about = "The borrow checker compares how long values live."
+
+[[planned]]
+title = "The longest string"
+kind = "fix"
+book = ["10.3"]
+about = "Your first lifetime annotation: 'a."
+
+[[planned]]
+title = "Structs that borrow"
+kind = "fill"
+book = ["10.3"]
+about = "Put references inside structs."
+
+[[planned]]
+title = "Lifetimes you can skip"
+kind = "predict"
+book = ["10.3"]
+about = "Elision: when Rust works lifetimes out for you."
+
+[[planned]]
+title = "Forever: 'static"
+kind = "predict"
+book = ["10.3"]
+about = "The longest lifetime, and why it's rarely the fix."
+
+[[planned]]
+title = "Ownership Inventory #3"
+kind = "predict"
+book = ["10.4"]
+about = "Checkpoint quiz: generics, traits and lifetimes."
+
+[[planned]]
+title = "BOSS: The text splitter"
+kind = "boss"
+book = ["10.3"]
+about = "Split text into pieces without copying it."

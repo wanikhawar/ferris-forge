@@ -1,0 +1,35 @@
+id = 21
+name = "Cargo Docks"
+blurb = "Ship your code to the world."
+
+# Placeholder island: these levels are planned but not built yet.
+
+[[planned]]
+title = "Fast mode"
+kind = "predict"
+book = ["14.1"]
+about = "Release builds and optimization levels."
+
+[[planned]]
+title = "Write the manual"
+kind = "fill"
+book = ["14.2"]
+about = "Doc comments, doc tests, and publishing on crates.io."
+
+[[planned]]
+title = "Many crates, one workspace"
+kind = "predict"
+book = ["14.3"]
+about = "Several crates that build together."
+
+[[planned]]
+title = "New tools for Cargo"
+kind = "predict"
+book = ["14.4", "14.5"]
+about = "cargo install, and adding your own cargo commands."
+
+[[planned]]
+title = "BOSS: Ready to ship"
+kind = "boss"
+book = ["14.1", "14.2", "14.3"]
+about = "Document and organize a library like a real crate."

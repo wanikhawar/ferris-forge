@@ -1,0 +1,59 @@
+id = 7
+name = "Collection Citadel"
+blurb = "Keep lots of things: lists, text and dictionaries."
+
+# Placeholder island: these levels are planned but not built yet.
+
+[[planned]]
+title = "A growing backpack: Vec"
+kind = "fill"
+book = ["8.1"]
+about = "A list that grows: push, index and get."
+
+[[planned]]
+title = "Don't hold it while it moves"
+kind = "fix"
+book = ["8.1"]
+about = "Why you can't keep a reference into a Vec while pushing."
+
+[[planned]]
+title = "Walking the shelves"
+kind = "fill"
+book = ["8.1"]
+about = "Loop over a Vec, and change items as you go."
+
+[[planned]]
+title = "Stringing words together"
+kind = "fill"
+book = ["8.2"]
+about = "Build text with push_str, + and format!."
+
+[[planned]]
+title = "Why can't I write s[0]?"
+kind = "predict"
+book = ["8.2"]
+about = "Strings are UTF-8, so one letter can take several bytes."
+
+[[planned]]
+title = "The dictionary: HashMap"
+kind = "fill"
+book = ["8.3"]
+about = "Store and look up values by key."
+
+[[planned]]
+title = "Counting words"
+kind = "fill"
+book = ["8.3"]
+about = "Update a map in one line with entry().or_insert()."
+
+[[planned]]
+title = "Ownership Inventory #2"
+kind = "predict"
+book = ["8.4"]
+about = "Checkpoint quiz: ownership puzzles with collections."
+
+[[planned]]
+title = "BOSS: The gradebook"
+kind = "boss"
+book = ["8.1", "8.2", "8.3"]
+about = "Students, scores and averages."

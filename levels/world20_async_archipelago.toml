@@ -1,0 +1,47 @@
+id = 20
+name = "Async Archipelago"
+blurb = "Waiting for many things without wasting time."
+
+# Placeholder island: these levels are planned but not built yet.
+
+[[planned]]
+title = "Promises of later"
+kind = "predict"
+book = ["17.1"]
+about = "async, .await, and why futures do nothing until awaited."
+
+[[planned]]
+title = "Juggling tasks"
+kind = "fill"
+book = ["17.2"]
+about = "Run async work side by side."
+
+[[planned]]
+title = "Many futures at once"
+kind = "fill"
+book = ["17.3"]
+about = "Join them, race them, and add timeouts."
+
+[[planned]]
+title = "A river of values"
+kind = "fill"
+book = ["17.4"]
+about = "Streams: values that arrive one after another."
+
+[[planned]]
+title = "Under the hood"
+kind = "predict"
+book = ["17.5"]
+about = "Future, Pin and Stream: the traits that make async work."
+
+[[planned]]
+title = "Threads or async?"
+kind = "predict"
+book = ["17.6"]
+about = "Picking the right tool."
+
+[[planned]]
+title = "BOSS: The async fetcher"
+kind = "boss"
+book = ["17.2", "17.3", "17.4"]
+about = "Fetch many things at once and give up on slow ones."

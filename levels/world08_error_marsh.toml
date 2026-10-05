@@ -1,0 +1,41 @@
+id = 8
+name = "Error Marsh"
+blurb = "When things go wrong, and what to do about it."
+
+# Placeholder island: these levels are planned but not built yet.
+
+[[planned]]
+title = "Abandon ship! panic!"
+kind = "predict"
+book = ["9.1"]
+about = "When a program gives up, and how to read the backtrace."
+
+[[planned]]
+title = "Maybe it worked: Result"
+kind = "fix"
+book = ["9.2"]
+about = "Ok or Err: handle failure with match."
+
+[[planned]]
+title = "Living dangerously: unwrap"
+kind = "predict"
+book = ["9.2"]
+about = "unwrap and expect are quick, but they crash on errors."
+
+[[planned]]
+title = "Pass it up with ?"
+kind = "fill"
+book = ["9.2"]
+about = "The ? operator hands errors back to the caller (Option too)."
+
+[[planned]]
+title = "Crash or cope?"
+kind = "fix"
+book = ["9.3"]
+about = "When to panic, and when to return an error."
+
+[[planned]]
+title = "BOSS: The config parser"
+kind = "boss"
+book = ["9.2", "9.3"]
+about = "Read settings and explain every mistake kindly."

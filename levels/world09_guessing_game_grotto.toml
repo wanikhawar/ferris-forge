@@ -1,0 +1,36 @@
+id = 9
+name = "Guessing Game Grotto"
+blurb = "A project island: build the book's guessing game."
+tag = "project"
+
+# Placeholder island: these levels are planned but not built yet.
+
+[[planned]]
+title = "Ask the player"
+kind = "fill"
+book = ["2"]
+about = "Read a line of keyboard input."
+
+[[planned]]
+title = "Words into numbers"
+kind = "fix"
+book = ["2"]
+about = "Turn the text \"42\" into the number 42, safely."
+
+[[planned]]
+title = "Borrowing someone else's dice"
+kind = "predict"
+book = ["2"]
+about = "Add the rand crate to roll a secret number."
+
+[[planned]]
+title = "Hot or cold?"
+kind = "fill"
+book = ["2"]
+about = "Compare the guess with Ordering and match."
+
+[[planned]]
+title = "BOSS: The guessing game"
+kind = "boss"
+book = ["2"]
+about = "Keep asking until the player wins, without crashing on bad input."

@@ -1,0 +1,65 @@
+id = 4
+name = "Borrow Bridge"
+blurb = "Lend things out without giving them away."
+
+# Placeholder island: these levels are planned but not built yet.
+
+[[planned]]
+title = "Just looking, thanks!"
+kind = "fill"
+book = ["4.2"]
+about = "Lend a value with & so its owner gets it back."
+
+[[planned]]
+title = "The three keys: Read, Write, Own"
+kind = "predict"
+book = ["4.2"]
+about = "Track what each variable is allowed to do, line by line."
+
+[[planned]]
+title = "Borrowing the paintbrush"
+kind = "fix"
+book = ["4.2"]
+about = "Use &mut to let a function change your value."
+
+[[planned]]
+title = "One painter at a time"
+kind = "fix"
+book = ["4.2"]
+about = "Many readers or one writer, never both at once."
+
+[[planned]]
+title = "The bridge to nowhere"
+kind = "predict"
+book = ["4.2", "4.3"]
+about = "A reference can't outlive the thing it points to."
+
+[[planned]]
+title = "The troll under the bridge"
+kind = "fix"
+book = ["4.3"]
+about = "Fix a parade of real borrow-checker errors, one by one."
+
+[[planned]]
+title = "A slice of pie"
+kind = "fill"
+book = ["4.4"]
+about = "Borrow part of a String as a &str."
+
+[[planned]]
+title = "Slicing the bread"
+kind = "fill"
+book = ["4.4"]
+about = "Borrow part of an array or Vec as a &[T]."
+
+[[planned]]
+title = "Looking back across the bridge"
+kind = "predict"
+book = ["4.5"]
+about = "How ownership keeps memory safe without a garbage collector."
+
+[[planned]]
+title = "BOSS: The word counter"
+kind = "boss"
+book = ["4.4", "4.5"]
+about = "Find and count words using only borrows."

@@ -1,0 +1,41 @@
+id = 19
+name = "Thread Volcano"
+blurb = "Doing many things at once, safely."
+
+# Placeholder island: these levels are planned but not built yet.
+
+[[planned]]
+title = "Two things at once"
+kind = "fill"
+book = ["16.1"]
+about = "Start threads and wait for them with join."
+
+[[planned]]
+title = "Passing notes"
+kind = "fill"
+book = ["16.2"]
+about = "Send messages between threads with channels."
+
+[[planned]]
+title = "One at a time, please"
+kind = "fix"
+book = ["16.3"]
+about = "Lock shared data with a Mutex."
+
+[[planned]]
+title = "Sharing across threads"
+kind = "fill"
+book = ["16.3"]
+about = "Arc<Mutex<T>> for data that many threads use."
+
+[[planned]]
+title = "Safe to send?"
+kind = "predict"
+book = ["16.4"]
+about = "Send and Sync: how Rust rules out data races."
+
+[[planned]]
+title = "BOSS: The parallel downloader"
+kind = "boss"
+book = ["16.1", "16.2", "16.3"]
+about = "Split work across threads and gather the results."

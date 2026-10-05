@@ -1,0 +1,47 @@
+id = 22
+name = "Advanced Abyss"
+blurb = "The deep end of Rust."
+
+# Placeholder island: these levels are planned but not built yet.
+
+[[planned]]
+title = "Here be dragons: unsafe"
+kind = "predict"
+book = ["20.1"]
+about = "Raw pointers, and calling C code."
+
+[[planned]]
+title = "Dangerous globals"
+kind = "predict"
+book = ["20.1"]
+about = "static mut, unsafe traits and unions."
+
+[[planned]]
+title = "Trait wizardry"
+kind = "fill"
+book = ["20.2"]
+about = "Associated types, operator overloading and the newtype trick."
+
+[[planned]]
+title = "Strange types"
+kind = "predict"
+book = ["20.3"]
+about = "Type aliases, the never type !, and unsized types."
+
+[[planned]]
+title = "Functions as values"
+kind = "fill"
+book = ["20.4"]
+about = "Function pointers, and returning closures."
+
+[[planned]]
+title = "Code that writes code"
+kind = "fill"
+book = ["20.5"]
+about = "macro_rules!, and the procedural macros."
+
+[[planned]]
+title = "BOSS: Build your own vec!"
+kind = "boss"
+book = ["20.5"]
+about = "Write a macro that builds lists."

@@ -1,0 +1,35 @@
+id = 10
+name = "Pattern Plains"
+blurb = "Every shape a pattern can take."
+
+# Placeholder island: these levels are planned but not built yet.
+
+[[planned]]
+title = "Patterns everywhere"
+kind = "predict"
+book = ["19.1"]
+about = "Patterns hide in let, for, while let and function parameters."
+
+[[planned]]
+title = "Might not match"
+kind = "fix"
+book = ["19.2"]
+about = "Some patterns can fail (refutable) and some can't."
+
+[[planned]]
+title = "The pattern toolkit"
+kind = "fill"
+book = ["19.3"]
+about = "Ranges, |, and taking apart structs, enums and nested values."
+
+[[planned]]
+title = "Ignore it, guard it, name it"
+kind = "fill"
+book = ["19.3"]
+about = "_, .., match guards and @ bindings."
+
+[[planned]]
+title = "BOSS: The command parser"
+kind = "boss"
+book = ["19.1", "19.3"]
+about = "Turn typed commands into enums using patterns alone."

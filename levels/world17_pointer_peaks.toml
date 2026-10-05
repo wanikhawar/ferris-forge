@@ -1,0 +1,47 @@
+id = 17
+name = "Pointer Peaks"
+blurb = "Smart pointers: Box, Rc, RefCell and friends."
+
+# Placeholder island: these levels are planned but not built yet.
+
+[[planned]]
+title = "Box it up"
+kind = "fill"
+book = ["15.1"]
+about = "Put data on the heap, and build a list that contains itself."
+
+[[planned]]
+title = "Act like a reference"
+kind = "predict"
+book = ["15.2"]
+about = "Deref: make your own pointer work with *."
+
+[[planned]]
+title = "Cleaning up: Drop"
+kind = "predict"
+book = ["15.3"]
+about = "Run code when a value goes away."
+
+[[planned]]
+title = "Shared treasure: Rc"
+kind = "fill"
+book = ["15.4"]
+about = "Several owners, counted."
+
+[[planned]]
+title = "Change it anyway: RefCell"
+kind = "fix"
+book = ["15.5"]
+about = "Borrow rules checked while the program runs, and Rc<RefCell<T>>."
+
+[[planned]]
+title = "Round and round"
+kind = "predict"
+book = ["15.6"]
+about = "Rc loops leak memory; Weak breaks them."
+
+[[planned]]
+title = "BOSS: The family tree"
+kind = "boss"
+book = ["15.1", "15.4", "15.5", "15.6"]
+about = "A tree where children know their parents."

@@ -1,0 +1,53 @@
+id = 6
+name = "Enum Isles"
+blurb = "A value that can be one of several things."
+
+# Placeholder island: these levels are planned but not built yet.
+
+[[planned]]
+title = "Pick one: enums"
+kind = "fill"
+book = ["6.1"]
+about = "A type with several variants, each carrying its own data."
+
+[[planned]]
+title = "Something or nothing"
+kind = "fix"
+book = ["6.1"]
+about = "Option replaces null, so nothing crashes by surprise."
+
+[[planned]]
+title = "The sorting hat: match"
+kind = "fill"
+book = ["6.2"]
+about = "Handle every case, or the compiler will remind you."
+
+[[planned]]
+title = "Unpacking the treasure"
+kind = "predict"
+book = ["6.2"]
+about = "Pull the values out of enum variants inside match arms."
+
+[[planned]]
+title = "Everything else goes here"
+kind = "fix"
+book = ["6.2"]
+about = "Catch-all arms with _, and what match does with ownership."
+
+[[planned]]
+title = "Just this one: if let"
+kind = "fill"
+book = ["6.3"]
+about = "Shortcuts for when you only care about one case (if let, let...else)."
+
+[[planned]]
+title = "Ownership Inventory #1"
+kind = "predict"
+book = ["6.4"]
+about = "Checkpoint quiz: ownership puzzles using everything so far."
+
+[[planned]]
+title = "BOSS: The vending machine"
+kind = "boss"
+book = ["6.1", "6.2", "6.3"]
+about = "A snack machine whose states are enum variants."

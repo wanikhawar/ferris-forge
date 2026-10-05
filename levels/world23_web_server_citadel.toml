@@ -1,0 +1,42 @@
+id = 23
+name = "Web Server Citadel"
+blurb = "The final project: a multithreaded web server."
+tag = "project"
+
+# Placeholder island: these levels are planned but not built yet.
+
+[[planned]]
+title = "Knock knock: TCP"
+kind = "fill"
+book = ["21.1"]
+about = "Listen for connections and read a request."
+
+[[planned]]
+title = "Sending a page back"
+kind = "fill"
+book = ["21.1"]
+about = "Write a response and serve an HTML page."
+
+[[planned]]
+title = "The slow customer"
+kind = "predict"
+book = ["21.2"]
+about = "Why one slow request stalls a single-threaded server."
+
+[[planned]]
+title = "Hiring workers"
+kind = "fill"
+book = ["21.2"]
+about = "Build a thread pool with workers and channels."
+
+[[planned]]
+title = "Closing time"
+kind = "fix"
+book = ["21.3"]
+about = "Shut the server down cleanly with Drop."
+
+[[planned]]
+title = "FINAL BOSS: The web server"
+kind = "boss"
+book = ["21.1", "21.2", "21.3"]
+about = "A working multithreaded web server. You're a Rustacean!"

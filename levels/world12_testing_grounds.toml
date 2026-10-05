@@ -1,0 +1,35 @@
+id = 12
+name = "Testing Grounds"
+blurb = "Prove your code works, automatically."
+
+# Placeholder island: these levels are planned but not built yet.
+
+[[planned]]
+title = "Did it work?"
+kind = "fill"
+book = ["11.1"]
+about = "Write tests with #[test], assert! and assert_eq!."
+
+[[planned]]
+title = "Tests that expect a crash"
+kind = "fill"
+book = ["11.1"]
+about = "#[should_panic], and tests that return Result."
+
+[[planned]]
+title = "Choosing which tests run"
+kind = "predict"
+book = ["11.2"]
+about = "Filter, skip and show output with cargo test."
+
+[[planned]]
+title = "Where tests live"
+kind = "predict"
+book = ["11.3"]
+about = "Unit tests next to your code, integration tests in tests/."
+
+[[planned]]
+title = "BOSS: Bug hunt"
+kind = "boss"
+book = ["11.1", "11.2", "11.3"]
+about = "Write tests that catch a hidden bug, then fix it."
