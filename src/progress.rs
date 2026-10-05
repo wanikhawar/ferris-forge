@@ -78,6 +78,13 @@ pub struct Progress {
     /// Days (counted from 1970) on which the player played.
     pub days_played: BTreeSet<u64>,
     pub settings: Settings,
+    /// The exact model each alias (opus, sonnet, ...) last turned out to be, as reported
+    /// by Claude Code, e.g. "opus" -> "claude-opus-5-5". Names the model cards.
+    pub models: BTreeMap<String, String>,
+    /// How many times each level was replayed while the game has been running. A run
+    /// that started before a replay must not count, so it checks this didn't change.
+    #[serde(skip)]
+    pub replays: BTreeMap<String, u64>,
 }
 
 pub const RANKS: &[(u32, &str)] = &[
@@ -183,6 +190,7 @@ impl Progress {
         self.wrong_guesses.remove(level_id);
         self.review_bonus.remove(level_id);
         self.drafts.remove(level_id);
+        *self.replays.entry(level_id.to_string()).or_default() += 1;
         xp
     }
 
@@ -353,6 +361,15 @@ mod tests {
         assert!(!p.is_done("1.1"));
         assert!(p.has_reached("1.1"));
         assert_eq!(p.xp_for("1.1", 100), 100, "hint penalty is gone");
+        assert_eq!(
+            p.replays.get("1.1"),
+            Some(&1),
+            "runs started before this are stale"
+        );
+        assert!(
+            !serde_json::to_string(&p).unwrap().contains("replays"),
+            "not saved"
+        );
     }
 
     #[test]

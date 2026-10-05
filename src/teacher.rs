@@ -207,6 +207,12 @@ fn usage_from(event: &Value) -> Option<Value> {
     }))
 }
 
+/// A finished reply, and the exact model Claude Code used for it (if it said).
+pub struct Reply {
+    pub text: String,
+    pub model: Option<String>,
+}
+
 /// Run one Ferris reply. Streams `{"type":"delta"}` events to `tx` and returns the full text.
 pub async fn ask(
     prompt: String,
@@ -215,7 +221,7 @@ pub async fn ask(
     workdir: &Path,
     tx: &Sender<Value>,
     usage: &Arc<Mutex<Option<Value>>>,
-) -> Result<String, String> {
+) -> Result<Reply, String> {
     std::fs::create_dir_all(workdir).map_err(|e| e.to_string())?;
     let mut child = Command::new("claude")
         .arg("-p")
@@ -259,6 +265,7 @@ pub async fn ask(
 
     let mut lines = BufReader::new(child.stdout.take().expect("stdout is piped")).lines();
     let mut text = String::new();
+    let mut model = None;
     let mut final_result: Option<(bool, String)> = None;
 
     // Stop Claude if it runs too long, or as soon as nobody is listening any more
@@ -282,6 +289,7 @@ pub async fn ask(
                 match inner["type"].as_str() {
                     Some("message_start") => {
                         if let Some(m) = inner["message"]["model"].as_str() {
+                            model = Some(m.to_string());
                             let _ = tx.send(json!({"type": "model", "model": m})).await;
                         }
                     }
@@ -317,9 +325,12 @@ pub async fn ask(
     };
     let stderr_text = stderr_task.await.unwrap_or_default();
     match final_result {
-        Some((false, result)) => Ok(if text.is_empty() { result } else { text }),
+        Some((false, result)) => Ok(Reply {
+            text: if text.is_empty() { result } else { text },
+            model,
+        }),
         Some((true, result)) => Err(result),
-        None if !text.is_empty() => Ok(text),
+        None if !text.is_empty() => Ok(Reply { text, model }),
         None => {
             let detail: String = stderr_text.trim().chars().take(400).collect();
             Err(format!(
@@ -345,18 +356,10 @@ pub async fn test_model(
     let (tx, mut rx) = tokio::sync::mpsc::channel::<Value>(256);
     let prompt = "In one short cheerful sentence (max 12 words), say you're ready to teach Rust."
         .to_string();
-    let fallback = model.to_string();
-    let collector = tokio::spawn(async move {
-        let mut model_id = fallback;
-        while let Some(ev) = rx.recv().await {
-            if let Some(m) = ev["model"].as_str() {
-                model_id = m.to_string();
-            }
-        }
-        model_id
-    });
+    // Nobody reads the streamed events here; drain them so `ask` never waits.
+    let drain = tokio::spawn(async move { while rx.recv().await.is_some() {} });
     let reply = ask(prompt, model, effort, workdir, &tx, usage).await;
     drop(tx);
-    let model_id = collector.await.unwrap_or_else(|_| model.to_string());
-    reply.map(|text| (model_id, text))
+    let _ = drain.await;
+    reply.map(|r| (r.model.unwrap_or_else(|| model.to_string()), r.text))
 }

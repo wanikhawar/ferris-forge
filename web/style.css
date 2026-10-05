@@ -162,6 +162,24 @@ canvas.sprite, canvas.pixel-bg, #map-canvas { image-rendering: pixelated; }
 .hud-player { height: 64px; padding: 6px 16px; min-width: 260px; display: flex; flex-direction: column; justify-content: center; gap: 1px; }
 .hud-name { font-weight: 700; font-size: 18px; line-height: 1.1; }
 .hud-rank { font-size: 13px; line-height: 1.2; color: var(--wood-hi); }
+.hud-player { cursor: pointer; }
+.hud-player:hover { filter: brightness(1.08); }
+
+/* Rank ladder popup */
+.rank-total { font-size: 17px; margin: 0 0 10px; }
+.rank-list { display: flex; flex-direction: column; gap: 6px; }
+.rank-row {
+  display: grid; grid-template-columns: 30px 1fr auto; grid-template-areas: "mark name xp" "mark note note" "mark bar bar";
+  align-items: center; column-gap: 10px; padding: 6px 12px;
+  background: var(--parch-light); border: 3px solid var(--wood-dark); box-shadow: inset 0 -3px 0 var(--parch-dark);
+}
+.rank-row .rank-mark { grid-area: mark; font-size: 20px; text-align: center; }
+.rank-row .rank-name { grid-area: name; font-weight: 700; }
+.rank-row .rank-xp { grid-area: xp; font-size: 14px; color: var(--ink-soft); }
+.rank-row .rank-note { grid-area: note; font-family: var(--font-talk); font-size: 18px; line-height: 1; color: var(--ink-soft); }
+.rank-row .rank-bar { grid-area: bar; margin-top: 4px; }
+.rank-row.reached { opacity: .7; }
+.rank-row.current { background: #fff3c4; border-color: var(--gold); }
 .xp-bar { height: 10px; margin-top: 3px; flex: 0 0 auto; background: var(--wood-dark); border: 2px solid var(--wood-dark); }
 .xp-fill { height: 100%; width: 0; background: linear-gradient(var(--gold), #e0a019); transition: width .6s steps(12); }
 /* Clock + XP counter (Stardew-style: date/time on top, a dark gold counter below) */
@@ -253,6 +271,14 @@ canvas.sprite, canvas.pixel-bg, #map-canvas { image-rendering: pixelated; }
 }
 .board-item:hover:not(:disabled) { background: #fff8e4; transform: translateX(4px); }
 .board-item:disabled { opacity: .55; cursor: not-allowed; }
+.board-item.locked { opacity: .6; }
+.board-row { display: flex; gap: 6px; align-items: stretch; }
+.board-row .board-item { flex: 1; min-width: 0; }
+.bi-lesson {
+  flex: none; width: 48px; font-size: 20px; background: var(--parch-light);
+  border: 3px solid var(--wood-dark); box-shadow: inset 0 -3px 0 var(--parch-dark);
+}
+.bi-lesson:hover { background: #fff8e4; }
 .board-item .bi-icon { width: 32px; display: flex; justify-content: center; }
 .board-item .bi-icon .px-icon { display: block; }
 .board-item .bi-id { font-family: var(--font-talk); font-size: 22px; color: var(--ink-soft); width: 44px; }
@@ -268,6 +294,11 @@ canvas.sprite, canvas.pixel-bg, #map-canvas { image-rendering: pixelated; }
 .board-divider { font-size: 14px; font-weight: 700; color: var(--ink-soft); margin: 8px 2px 0; }
 .board-chapters { font-size: 14px; margin: -4px 0 8px; color: var(--wood); font-weight: 600; }
 .board-soon { font-family: var(--font-talk); font-size: 21px; margin: 0 0 8px; }
+.lock-note {
+  display: flex; align-items: center; gap: 10px; margin: 0 0 10px; padding: 8px 12px;
+  background: #f6e3b4; border: 2px dashed var(--wood); font-family: var(--font-talk); font-size: 20px; line-height: 1.1;
+}
+.lock-note .lock-icon { font-size: 24px; }
 .book-links { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; font-size: 14px; font-weight: 700; }
 .book-links a {
   color: var(--ink); text-decoration: none; padding: 2px 8px; background: var(--parch-light);
@@ -770,7 +801,6 @@ body.code-pixel .ed-hl, body.code-pixel .ed-ta, body.code-pixel .ed-gutter { fon
 @media (max-height: 680px) {
   .slot { padding-top: 12px; padding-bottom: 4px; }
   .slot-icon .px-icon { width: 24px; height: 24px; }
-  .slot-label { font-size: 11px; margin-top: 1px; }
 }
 
 @media (max-width: 900px) {
@@ -840,25 +870,27 @@ body.readable .ask input { font-size: 16px; }
 .hotbar-inner { width: max-content; }
 .slot-icon .px-icon { width: min(24px, 100%); height: auto; }
 /* Height comes from the content: key number row, icon, label. Nothing is ever clipped. */
-.slot { height: auto; padding: 14px 2px 6px; justify-content: flex-start; }
-.slot-key { top: 2px; left: 5px; font-size: 11px; line-height: 1; }
+.slot { height: auto; padding: 16px 2px 5px; justify-content: flex-start; }
+/* VT323 for the small hotbar text: Pixelify Sans blurs below ~16px (2 and 5 look like S, C like O). */
+.slot-key { top: 1px; left: 5px; font-family: var(--font-talk); font-size: 16px; line-height: 1; }
+.slot-label { font-family: var(--font-talk); font-size: 17px; font-weight: 400; line-height: 1; }
 @container (max-width: 900px) {
-  .hotbar .slot .slot-label { font-size: 9px; letter-spacing: -.3px; }
+  .hotbar .slot .slot-label { font-size: 15px; letter-spacing: 0; }
 }
 @container (max-width: 760px) {
   .hotbar-inner { width: 100%; gap: 3px; padding: 5px; }
 }
 @container (max-width: 600px) {
-  .hotbar .slot { padding: 12px 2px 5px; }
+  .hotbar .slot { padding: 15px 2px 5px; }
   .hotbar .slot .slot-label { display: none; }
-  .hotbar .slot .slot-key { font-size: 10px; }
+  .hotbar .slot .slot-key { font-size: 15px; }
 }
 .slot-badge { position: absolute; top: -6px; right: -6px; line-height: 0; z-index: 2; animation: bob 1s steps(2) infinite; pointer-events: none; }
 .zen-only { display: none; }
 body.editor-expanded .zen-only { display: inline-block; position: relative; }
 .mini-toggle .slot-badge { top: -9px; right: -9px; }
 .mini-toggle .slot-badge .px-icon { width: 12px; height: 12px; }
-.slot-label { white-space: nowrap; overflow: hidden; text-overflow: clip; max-width: 100%; font-size: 10px; letter-spacing: -.2px; margin-top: 4px; }
+.slot-label { white-space: nowrap; overflow: hidden; text-overflow: clip; max-width: 100%; margin-top: 3px; }
 
 /* Quiz levels without code: no editor, the question fills the column. */
 .left-col.no-code .editor-frame { display: none; }
@@ -866,3 +898,8 @@ body.editor-expanded .zen-only { display: inline-block; position: relative; }
 .left-col.no-code .choices.show { align-content: start; }
 .console-label { font-family: var(--font-ui); font-size: 13px; color: var(--wood-hi); margin: 6px 0 2px; }
 .console-label:first-child { margin-top: 0; }
+
+/* Short windows: slightly smaller hotbar text (after the base hotbar rules so it wins). */
+@media (max-height: 680px) {
+  .hotbar .slot .slot-label { font-size: 15px; margin-top: 1px; }
+}

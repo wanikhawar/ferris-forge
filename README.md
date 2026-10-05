@@ -70,7 +70,7 @@ The curriculum follows **The Rust Programming Language**, using Brown University
 
 ## Roadmap
 
-25 islands cover the whole book, ordered by what you need to know first rather than by chapter number. **Worlds 0–9 are playable (83 levels)**; Worlds 10–24 are placeholders whose planned levels already have names and goals.
+25 islands cover the whole book, ordered by what you need to know first rather than by chapter number. **Worlds 0–15 are playable (129 levels)**; Worlds 16–24 are placeholders whose planned levels already have names and goals.
 
 | # | Island | Book |
 |---|---|---|

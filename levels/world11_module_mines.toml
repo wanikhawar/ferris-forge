@@ -2,40 +2,865 @@ id = 11
 name = "Module Mines"
 blurb = "Organize bigger programs into neat tunnels."
 
-# Placeholder island: these levels are planned but not built yet.
-
-[[planned]]
+[[level]]
+id = "11.1"
 title = "Crates and packages"
-kind = "predict"
+kind = "quiz"
 book = ["7.1"]
-about = "What a crate is, and how a package holds them."
+xp = 20
+goal = "A package has both src/main.rs and src/lib.rs. What does Cargo build?"
+lesson = '''
+Three words to keep apart:
 
-[[planned]]
+| Word | What it is |
+|---|---|
+| **crate** | the smallest thing the compiler builds: one program or one library |
+| **crate root** | the file the compiler starts from (`src/main.rs` or `src/lib.rs`) |
+| **package** | a folder with a `Cargo.toml` that holds one or more crates |
+
+A crate is either a **binary** (has a `main`, becomes a program you run) or a **library** (no `main`, code for other crates to use).
+
+Cargo follows simple rules: `src/main.rs` is the root of a binary crate, `src/lib.rs` is the root of a library crate, and each file in `src/bin/` is another binary. A package can have many binaries but **at most one** library.
+'''
+c_compare = '''
+A binary crate is like an executable target in a Makefile, a library crate like a `.a`/`.so`. Cargo infers both from the file layout, so there's no build script to write.
+'''
+py_compare = '''
+A package is like a project with a `pyproject.toml`; a library crate is like an importable package, and a binary crate like a console script entry point.
+'''
+choices = [
+    "One crate: Cargo merges the two files",
+    "Two crates: a binary and a library, both named after the package",
+    "Nothing until you add a [lib] section to Cargo.toml",
+    "An error: a package can only have one crate root",
+]
+answer = 1
+explanation = "`src/main.rs` and `src/lib.rs` are two crate roots, so the package has two crates: a binary and a library, both with the package's name. The binary can use the library like any other crate."
+
+[[level]]
+id = "11.2"
 title = "Private property"
 kind = "fix"
 book = ["7.2"]
-about = "Modules keep things private until you say pub."
+xp = 40
+goal = '''Make the hosting module and its function public, so it prints:
+Ferris is on the waitlist'''
+lesson = '''
+A **module** groups related code under a name, and modules can nest:
 
-[[planned]]
+```rust
+mod front_of_house {
+    mod hosting {
+        fn add_to_waitlist() {}
+    }
+}
+```
+
+Everything inside a module is **private** by default: code outside can't see it. Mark what others may use with **`pub`**:
+
+```rust
+mod front_of_house {
+    pub mod hosting {             // the module is visible...
+        pub fn add_to_waitlist() {}   // ...and so is the function
+    }
+}
+```
+
+The rule: a parent can't see private things inside its children, but children can see everything in their ancestors. `main` and `front_of_house` sit side by side at the crate root, so `main` can reach `front_of_house` without `pub`.
+'''
+c_compare = '''
+Like marking functions `static` in a `.c` file to hide them, but inverted: in Rust everything is hidden until you say `pub`.
+'''
+py_compare = '''
+Python's leading underscore (`_helper`) is only a polite request. Rust's privacy is enforced by the compiler.
+'''
+check = "output"
+expected_output = "Ferris is on the waitlist"
+starter = '''
+mod front_of_house {
+    mod hosting {
+        fn add_to_waitlist(name: &str) {
+            println!("{name} is on the waitlist");
+        }
+    }
+}
+
+fn main() {
+    front_of_house::hosting::add_to_waitlist("Ferris");
+}
+'''
+solution = '''
+mod front_of_house {
+    pub mod hosting {
+        pub fn add_to_waitlist(name: &str) {
+            println!("{name} is on the waitlist");
+        }
+    }
+}
+
+fn main() {
+    front_of_house::hosting::add_to_waitlist("Ferris");
+}
+'''
+hints = [
+    "The compiler says `module hosting is private`. What keyword makes something visible outside its module?",
+    "Add `pub` to `mod hosting`. After that, the function is still private: add `pub` to it too.",
+    "```rust\npub mod hosting {\n    pub fn add_to_waitlist(name: &str) {\n```",
+]
+
+[[level]]
+id = "11.3"
+title = "The chef picks the fruit"
+kind = "fix"
+book = ["7.3"]
+xp = 40
+goal = '''Order breakfast without touching the chef's private fruit, so it prints:
+I'd like Wheat toast please
+with peaches'''
+lesson = '''
+`pub` on a **struct** makes the type public, but each **field** stays private until it gets its own `pub`:
+
+```rust
+pub struct Breakfast {
+    pub toast: String,        // customers choose this
+    seasonal_fruit: String,   // only the kitchen decides this
+}
+```
+
+Code outside the module can't set a private field, so it can't build the struct directly. The module must offer a public **constructor**:
+
+```rust
+impl Breakfast {
+    pub fn summer(toast: &str) -> Breakfast { ... }
+}
+```
+
+**Enums** are the opposite: once an enum is `pub`, all of its variants are public. An enum whose variants you can't use wouldn't be much use.
+'''
+c_compare = '''
+Like an opaque struct in C (declared in the header, defined in the `.c` file), except Rust lets you hide just some fields and keep the rest public.
+'''
+py_compare = '''
+Like a class whose `_seasonal_fruit` attribute is set in `__init__`, except Rust really stops outside code from touching it.
+'''
+check = "output"
+expected_output = '''
+I'd like Wheat toast please
+with peaches
+'''
+starter = '''
+mod back_of_house {
+    pub struct Breakfast {
+        pub toast: String,
+        seasonal_fruit: String,
+    }
+
+    impl Breakfast {
+        pub fn summer(toast: &str) -> Breakfast {
+            Breakfast {
+                toast: String::from(toast),
+                seasonal_fruit: String::from("peaches"),
+            }
+        }
+
+        pub fn fruit(&self) -> &str {
+            &self.seasonal_fruit
+        }
+    }
+
+    pub enum Appetizer {
+        Soup,
+        Salad,
+    }
+}
+
+fn main() {
+    let mut meal = back_of_house::Breakfast {
+        toast: String::from("Rye"),
+        seasonal_fruit: String::from("blueberries"),
+    };
+    meal.toast = String::from("Wheat");
+    meal.seasonal_fruit = String::from("blueberries");
+    println!("I'd like {} toast please", meal.toast);
+    println!("with {}", meal.fruit());
+
+    let _starters = [back_of_house::Appetizer::Soup, back_of_house::Appetizer::Salad];
+}
+'''
+solution = '''
+mod back_of_house {
+    pub struct Breakfast {
+        pub toast: String,
+        seasonal_fruit: String,
+    }
+
+    impl Breakfast {
+        pub fn summer(toast: &str) -> Breakfast {
+            Breakfast {
+                toast: String::from(toast),
+                seasonal_fruit: String::from("peaches"),
+            }
+        }
+
+        pub fn fruit(&self) -> &str {
+            &self.seasonal_fruit
+        }
+    }
+
+    pub enum Appetizer {
+        Soup,
+        Salad,
+    }
+}
+
+fn main() {
+    let mut meal = back_of_house::Breakfast::summer("Rye");
+    meal.toast = String::from("Wheat");
+    println!("I'd like {} toast please", meal.toast);
+    println!("with {}", meal.fruit());
+
+    let _starters = [back_of_house::Appetizer::Soup, back_of_house::Appetizer::Salad];
+}
+'''
+hints = [
+    "`seasonal_fruit` is private, so `main` can neither set it nor build a Breakfast with `Breakfast { ... }`. Is there a public function that builds one?",
+    "Build the meal with `back_of_house::Breakfast::summer(\"Rye\")`, keep the line that changes the toast, and delete the line that changes the fruit.",
+    "```rust\nlet mut meal = back_of_house::Breakfast::summer(\"Rye\");\nmeal.toast = String::from(\"Wheat\");\n```",
+]
+
+[[level]]
+id = "11.4"
 title = "Finding your way"
 kind = "fix"
 book = ["7.3"]
-about = "Paths like crate::, super:: and self:: reach other modules."
+xp = 45
+goal = '''Fix the three paths, so it prints:
+Seating Ferris
+Cooking soup
+Delivering soup'''
+lesson = '''
+To use an item in another module, you write its **path**, like a file path with `::` instead of `/`:
 
-[[planned]]
+| Path | Starts from |
+|---|---|
+| `crate::front_of_house::hosting` | the crate root (an **absolute** path) |
+| `super::deliver_order` | the parent module (like `../`) |
+| `self::cook_order` | the current module (like `./`) |
+| `hosting::seat_at_table` | the current module (a **relative** path) |
+
+A bare name like `deliver_order()` is only looked up in the **current** module. Code inside `mod back_of_house` doesn't automatically see functions at the crate root; it has to say `super::` or `crate::`.
+'''
+c_compare = '''
+C has one big global namespace, so every name must be unique. Rust's module tree lets two modules both have a `new` function, and paths say which one you mean.
+'''
+py_compare = '''
+`crate::` is like an absolute import (`from mypackage.kitchen import cook`) and `super::` like a relative one (`from .. import deliver_order`).
+'''
+check = "output"
+expected_output = '''
+Seating Ferris
+Cooking soup
+Delivering soup
+'''
+starter = '''
+fn deliver_order(dish: &str) {
+    println!("Delivering {dish}");
+}
+
+mod back_of_house {
+    fn cook_order(dish: &str) {
+        println!("Cooking {dish}");
+    }
+
+    pub fn fix_incorrect_order() {
+        cook_order("soup");
+        deliver_order("soup");
+    }
+}
+
+mod front_of_house {
+    pub mod hosting {
+        pub fn seat_at_table(name: &str) {
+            println!("Seating {name}");
+            back_of_house::fix_incorrect_order();
+        }
+    }
+}
+
+fn main() {
+    hosting::seat_at_table("Ferris");
+}
+'''
+solution = '''
+fn deliver_order(dish: &str) {
+    println!("Delivering {dish}");
+}
+
+mod back_of_house {
+    fn cook_order(dish: &str) {
+        println!("Cooking {dish}");
+    }
+
+    pub fn fix_incorrect_order() {
+        cook_order("soup");
+        super::deliver_order("soup");
+    }
+}
+
+mod front_of_house {
+    pub mod hosting {
+        pub fn seat_at_table(name: &str) {
+            println!("Seating {name}");
+            crate::back_of_house::fix_incorrect_order();
+        }
+    }
+}
+
+fn main() {
+    front_of_house::hosting::seat_at_table("Ferris");
+}
+'''
+hints = [
+    "Each broken name is looked up in the wrong module. For each one, ask: where am I, and where does the item live?",
+    "`deliver_order` lives one level up from back_of_house (`super::`). `back_of_house` is at the crate root (`crate::`). `main` needs the full path through `front_of_house`.",
+    "```rust\nsuper::deliver_order(\"soup\");\n// ...\ncrate::back_of_house::fix_incorrect_order();\n// ...\nfront_of_house::hosting::seat_at_table(\"Ferris\");\n```",
+]
+
+[[level]]
+id = "11.5"
 title = "Shortcuts with use"
-kind = "fill"
+kind = "fix"
 book = ["7.4"]
-about = "Bring names into scope, rename them with as, and use outside crates."
+xp = 45
+goal = '''Fix the clashing imports and the shed's missing shortcut, so it prints:
+shed: rake and hoe
+soil ok
+watering plot 1
+carrots: 3'''
+lesson = '''
+Long paths get tiring. **`use`** makes a shortcut:
 
-[[planned]]
+```rust
+use std::collections::HashMap;
+use crate::garden::tools;     // now `tools::rake()` works
+```
+
+Things to know:
+
+- A `use` only works in the **module where it's written**. A child module needs its own `use` (or a path like `super::tools`).
+- Two imports can't have the same name. Import their parents (`use std::fmt; use std::io;` then `fmt::Result`, `io::Result`), or rename one with **`as`**: `use std::io::Result as IoResult;`
+- Group imports with braces: `use std::collections::{HashMap, BTreeMap};`
+- `pub use` **re-exports** a name, so other code can use your shortcut too.
+
+Crates from crates.io work the same way: add `rand = "0.8"` to `Cargo.toml`, then `use rand::Rng;`.
+'''
+c_compare = '''
+Like a `#include` that brings in just one name instead of a whole header, scoped to one module rather than the whole file.
+'''
+py_compare = '''
+`use a::b::C;` is `from a.b import C`, and `use x as y` is `import x as y`. Unlike Python, a `use` at the top of a file doesn't reach into nested modules.
+'''
+check = "output"
+expected_output = '''
+shed: rake and hoe
+soil ok
+watering plot 1
+carrots: 3
+'''
+starter = '''
+use std::collections::HashMap;
+use std::fmt::Result;
+use std::io::Result;
+
+mod garden {
+    pub mod tools {
+        pub fn rake() -> &'static str {
+            "rake"
+        }
+
+        pub fn hoe() -> &'static str {
+            "hoe"
+        }
+    }
+}
+
+use garden::tools;
+
+mod shed {
+    pub fn inventory() -> String {
+        format!("{} and {}", tools::rake(), tools::hoe())
+    }
+}
+
+// The formatting kind of Result (std::fmt::Result).
+fn check_soil() -> Result {
+    println!("soil ok");
+    Ok(())
+}
+
+// The input/output kind of Result (std::io::Result).
+fn water(plot: u32) -> Result<()> {
+    println!("watering plot {plot}");
+    Ok(())
+}
+
+fn main() {
+    let mut counts = HashMap::new();
+    counts.insert("carrots", 3);
+    println!("shed: {}", shed::inventory());
+    check_soil().unwrap();
+    water(1).unwrap();
+    println!("carrots: {}", counts["carrots"]);
+}
+'''
+solution = '''
+use std::collections::HashMap;
+use std::fmt;
+use std::io;
+
+mod garden {
+    pub mod tools {
+        pub fn rake() -> &'static str {
+            "rake"
+        }
+
+        pub fn hoe() -> &'static str {
+            "hoe"
+        }
+    }
+}
+
+mod shed {
+    use crate::garden::tools;
+
+    pub fn inventory() -> String {
+        format!("{} and {}", tools::rake(), tools::hoe())
+    }
+}
+
+// The formatting kind of Result (std::fmt::Result).
+fn check_soil() -> fmt::Result {
+    println!("soil ok");
+    Ok(())
+}
+
+// The input/output kind of Result (std::io::Result).
+fn water(plot: u32) -> io::Result<()> {
+    println!("watering plot {plot}");
+    Ok(())
+}
+
+fn main() {
+    let mut counts = HashMap::new();
+    counts.insert("carrots", 3);
+    println!("shed: {}", shed::inventory());
+    check_soil().unwrap();
+    water(1).unwrap();
+    println!("carrots: {}", counts["carrots"]);
+}
+'''
+hints = [
+    "Two problems: two different `Result`s are imported under the same name, and the `use garden::tools;` at the top doesn't reach inside `mod shed`.",
+    "Import `std::fmt` and `std::io` instead and write `fmt::Result` / `io::Result<()>` (or rename one with `as`). Move the tools import inside `mod shed` as `use crate::garden::tools;`.",
+    "```rust\nuse std::fmt;\nuse std::io;\n\nmod shed {\n    use crate::garden::tools;\n    // ...\n}\n\nfn check_soil() -> fmt::Result { ... }\nfn water(plot: u32) -> io::Result<()> { ... }\n```",
+]
+
+[[level]]
+id = "11.6"
 title = "One module per file"
 kind = "predict"
 book = ["7.5"]
-about = "Split one big file into many."
+xp = 25
+goal = "This program is split across three files. What does it print?"
+lesson = '''
+As modules grow, move each one into its own file. Instead of writing the body in braces, write just the declaration:
 
-[[planned]]
+```rust
+mod garden;   // "the garden module's code is in garden.rs"
+```
+
+The compiler looks for the code here:
+
+| Declared in | Declaration | File |
+|---|---|---|
+| `src/main.rs` | `mod garden;` | `src/garden.rs` |
+| `src/garden.rs` | `pub mod vegetables;` | `src/garden/vegetables.rs` |
+
+Each `mod` line appears **once**, in the parent module. It's not an `#include`: other files reach the module by its path (`crate::garden::vegetables`), not by declaring it again.
+
+(An older style puts the code in `src/garden/mod.rs` instead of `src/garden.rs`. Both work; the newer style is preferred.)
+'''
+c_compare = '''
+Unlike `#include`, `mod garden;` doesn't paste text. The file becomes a module with its own namespace and privacy, and there are no header files to keep in sync.
+'''
+py_compare = '''
+Similar to how `garden.py` becomes the module `garden`, except Rust only includes files that are declared with `mod`. A stray `.rs` file is simply ignored.
+'''
+starter = '''
+// src/garden.rs contains:
+//
+//     pub mod vegetables;
+//
+//     pub fn plant() {
+//         println!("planting");
+//         vegetables::grow();
+//     }
+//
+// src/garden/vegetables.rs contains:
+//
+//     pub fn grow() {
+//         println!("growing asparagus");
+//     }
+
+mod garden;
+
+use crate::garden::vegetables;
+
+fn main() {
+    garden::plant();
+    vegetables::grow();
+}
+'''
+choices = [
+    "It doesn't compile: `mod garden;` needs braces with the code inside",
+    "planting / growing asparagus",
+    "planting / growing asparagus / growing asparagus",
+    "It doesn't compile: vegetables is declared in garden.rs, so main.rs can't use it",
+]
+answer = 2
+expected_output = '''
+planting
+growing asparagus
+growing asparagus
+'''
+explanation = "`mod garden;` loads `garden.rs`, which loads `garden/vegetables.rs`. `plant` prints `planting` and calls `grow` once, then `main` calls `grow` again through the `use` shortcut. `vegetables` is `pub`, so `main.rs` may use it."
+
+[level.files]
+"garden.rs" = '''
+pub mod vegetables;
+
+pub fn plant() {
+    println!("planting");
+    vegetables::grow();
+}
+'''
+"garden/vegetables.rs" = '''
+pub fn grow() {
+    println!("growing asparagus");
+}
+'''
+
+[[level]]
+id = "11.7"
+title = "Wire up the tunnels"
+kind = "fix"
+book = ["7.5"]
+xp = 45
+goal = '''The mine's code is already in its own files. Declare the module and import Cart, so it prints:
+the mine is open
+cart holds 5'''
+lesson = '''
+Two separate steps connect a file to your program:
+
+1. **`mod`** declares the module, so the compiler reads its file. Without it, the file is ignored.
+2. **`use`** (optional) makes a shortcut to something inside it.
+
+```rust
+mod mine;                       // read src/mine.rs (which declares mine::carts)
+use crate::mine::carts::Cart;   // so `Cart` works on its own
+```
+
+In this level the files `mine.rs` and `mine/carts.rs` are already there next to `main.rs`. Their code is shown in the comment at the top; only `main.rs` needs changes.
+'''
+c_compare = '''
+Like adding a `.c` file to the build and including its header. Here `mod` does both, and Cargo needs no list of source files.
+'''
+py_compare = '''
+Python finds `mine.py` as soon as you `import mine`. Rust needs the `mod mine;` declaration first; `use` then works like `from mine.carts import Cart`.
+'''
+check = "output"
+expected_output = '''
+the mine is open
+cart holds 5
+'''
+starter = '''
+// src/mine.rs contains:
+//
+//     pub mod carts;
+//
+//     pub fn open() -> &'static str {
+//         "the mine is open"
+//     }
+//
+// src/mine/carts.rs contains:
+//
+//     pub struct Cart {
+//         pub load: u32,
+//     }
+//
+//     impl Cart {
+//         pub fn new() -> Cart {
+//             Cart { load: 0 }
+//         }
+//     }
+
+fn main() {
+    println!("{}", mine::open());
+    let mut cart = Cart::new();
+    cart.load += 5;
+    println!("cart holds {}", cart.load);
+}
+'''
+solution = '''
+mod mine;
+
+use crate::mine::carts::Cart;
+
+fn main() {
+    println!("{}", mine::open());
+    let mut cart = Cart::new();
+    cart.load += 5;
+    println!("cart holds {}", cart.load);
+}
+'''
+hints = [
+    "The compiler doesn't know `mine` exists yet. Which line tells it to read `mine.rs`?",
+    "Add `mod mine;` at the top. Then `Cart` lives at `crate::mine::carts::Cart`: bring it in with `use`.",
+    "```rust\nmod mine;\n\nuse crate::mine::carts::Cart;\n```",
+]
+
+[level.files]
+"mine.rs" = '''
+pub mod carts;
+
+pub fn open() -> &'static str {
+    "the mine is open"
+}
+'''
+"mine/carts.rs" = '''
+pub struct Cart {
+    pub load: u32,
+}
+
+impl Cart {
+    pub fn new() -> Cart {
+        Cart { load: 0 }
+    }
+}
+'''
+
+[[level]]
+id = "11.8"
 title = "BOSS: Tidy up the mine"
 kind = "boss"
-book = ["7.2", "7.3", "7.4", "7.5"]
-about = "Sort a messy program into modules with a clean public API."
+book = ["7.2", "7.3", "7.4"]
+xp = 120
+goal = '''Sort the messy mine program into modules, so the tests can reach
+mine::ore::Ore, mine::Ore, mine::tunnels::dig and mine::Cart.'''
+lesson = '''
+**Boss fight!** Everything in this program sits at the top level. Sort it into this module tree:
+
+```text
+crate
+└── mine
+    ├── ore       Ore (Coal, Iron, Gold) and its value()
+    ├── tunnels   dig(depth) is public; ore_at stays private
+    ├── Cart      public struct; its contents field stays private
+    └── Ore       a re-export: `pub use ore::Ore;`
+```
+
+The tests call these exact paths: `crate::mine::ore::Ore`, `crate::mine::Ore`, `crate::mine::tunnels::dig`, `crate::mine::Cart`.
+
+Tips:
+- Inside `tunnels`, reach the enum with `use super::ore::Ore;` (or `super::Ore` after the re-export).
+- Anything another module calls needs `pub`: the modules, `dig`, `Cart`, its methods, `Ore` and `value`.
+- `main` stays at the crate root. Give it shortcuts with `use mine::{tunnels, Cart};`.
+'''
+c_compare = '''
+This is the job of splitting a `.c` file into several files with headers, and choosing what goes in each header. In Rust, `pub` is the header.
+'''
+py_compare = '''
+Like turning one big script into a package with submodules, and choosing what `__init__.py` re-exports (that's `pub use`).
+'''
+check = "tests"
+starter = '''
+// Everything is dumped at the top level. Sort it into modules:
+//
+//   mine::ore::Ore         the enum and its value()
+//   mine::Ore              the same enum, re-exported with `pub use`
+//   mine::tunnels::dig     public; ore_at stays private in tunnels
+//   mine::Cart             public struct with a private `contents` field
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Ore {
+    Coal,
+    Iron,
+    Gold,
+}
+
+impl Ore {
+    pub fn value(&self) -> u32 {
+        match self {
+            Ore::Coal => 1,
+            Ore::Iron => 5,
+            Ore::Gold => 20,
+        }
+    }
+}
+
+fn ore_at(depth: u32) -> Ore {
+    match depth {
+        0..=2 => Ore::Coal,
+        3..=5 => Ore::Iron,
+        _ => Ore::Gold,
+    }
+}
+
+pub fn dig(depth: u32) -> Vec<Ore> {
+    let mut found = Vec::new();
+    for d in 1..=depth {
+        found.push(ore_at(d));
+    }
+    found
+}
+
+pub struct Cart {
+    contents: Vec<Ore>,
+}
+
+impl Cart {
+    pub fn new() -> Cart {
+        Cart { contents: Vec::new() }
+    }
+
+    pub fn load(&mut self, ore: Ore) {
+        self.contents.push(ore);
+    }
+
+    pub fn total(&self) -> u32 {
+        let mut sum = 0;
+        for ore in &self.contents {
+            sum += ore.value();
+        }
+        sum
+    }
+}
+
+fn main() {
+    let mut cart = Cart::new();
+    for ore in dig(7) {
+        cart.load(ore);
+    }
+    println!("cart is worth {}", cart.total());
+}
+'''
+solution = '''
+mod mine {
+    pub mod ore {
+        #[derive(Debug, Clone, Copy, PartialEq)]
+        pub enum Ore {
+            Coal,
+            Iron,
+            Gold,
+        }
+
+        impl Ore {
+            pub fn value(&self) -> u32 {
+                match self {
+                    Ore::Coal => 1,
+                    Ore::Iron => 5,
+                    Ore::Gold => 20,
+                }
+            }
+        }
+    }
+
+    pub use ore::Ore;
+
+    pub mod tunnels {
+        use super::Ore;
+
+        fn ore_at(depth: u32) -> Ore {
+            match depth {
+                0..=2 => Ore::Coal,
+                3..=5 => Ore::Iron,
+                _ => Ore::Gold,
+            }
+        }
+
+        pub fn dig(depth: u32) -> Vec<Ore> {
+            let mut found = Vec::new();
+            for d in 1..=depth {
+                found.push(ore_at(d));
+            }
+            found
+        }
+    }
+
+    pub struct Cart {
+        contents: Vec<Ore>,
+    }
+
+    impl Cart {
+        pub fn new() -> Cart {
+            Cart { contents: Vec::new() }
+        }
+
+        pub fn load(&mut self, ore: Ore) {
+            self.contents.push(ore);
+        }
+
+        pub fn total(&self) -> u32 {
+            let mut sum = 0;
+            for ore in &self.contents {
+                sum += ore.value();
+            }
+            sum
+        }
+    }
+}
+
+use mine::{Cart, tunnels};
+
+fn main() {
+    let mut cart = Cart::new();
+    for ore in tunnels::dig(7) {
+        cart.load(ore);
+    }
+    println!("cart is worth {}", cart.total());
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use crate::mine::{self, Cart, Ore, tunnels};
+
+    #[test]
+    fn ore_has_its_own_module() {
+        assert_eq!(mine::ore::Ore::Gold.value(), 20);
+        assert_eq!(Ore::Iron, mine::ore::Ore::Iron);
+        assert_eq!(Ore::Coal.value(), 1);
+    }
+
+    #[test]
+    fn digging() {
+        assert_eq!(tunnels::dig(4), vec![Ore::Coal, Ore::Coal, Ore::Iron, Ore::Iron]);
+        assert_eq!(tunnels::dig(7).last(), Some(&Ore::Gold));
+        assert!(tunnels::dig(0).is_empty());
+    }
+
+    #[test]
+    fn the_cart() {
+        let mut cart = Cart::new();
+        assert_eq!(cart.total(), 0);
+        cart.load(Ore::Gold);
+        cart.load(Ore::Coal);
+        assert_eq!(cart.total(), 21);
+    }
+}
+'''
+hints = [
+    "Wrap everything except `main` in `mod mine { ... }`, then put the enum in `pub mod ore { ... }` and the two digging functions in `pub mod tunnels { ... }`.",
+    "Inside `mine`, add `pub use ore::Ore;` so `mine::Ore` works and `Cart` can name `Ore`. Inside `tunnels`, add `use super::Ore;`. In `main`, call `tunnels::dig` after `use mine::{Cart, tunnels};`.",
+    "```rust\nmod mine {\n    pub mod ore {\n        // the Ore enum and impl, unchanged\n    }\n\n    pub use ore::Ore;\n\n    pub mod tunnels {\n        use super::Ore;\n        // ore_at (private) and pub fn dig, unchanged\n    }\n\n    // pub struct Cart and its impl, unchanged\n}\n\nuse mine::{Cart, tunnels};\n```",
+]

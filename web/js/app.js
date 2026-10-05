@@ -195,8 +195,7 @@ function updateHUD() {
   $("#hud-name").textContent = p.name || "Adventurer";
   const next = p.next_rank;
   $("#hud-rank").textContent = next ? `${p.rank} · next: ${next.name} at ${next.xp} XP` : `${p.rank} · max rank!`;
-  const ranks = [0, 250, 700, 1500, 3000, 5000];
-  const floor = [...ranks].reverse().find(r => p.xp >= r) ?? 0;
+  const floor = [...(p.ranks || [])].reverse().find(r => p.xp >= r.xp)?.xp ?? 0;
   const pct = next ? ((p.xp - floor) / (next.xp - floor)) * 100 : 100;
   $("#xp-fill").style.width = `${Math.max(2, Math.min(100, pct))}%`;
   $("#mini-xp-fill").style.width = `${Math.max(2, Math.min(100, pct))}%`;
@@ -205,6 +204,39 @@ function updateHUD() {
   updateClock();
   updateEnergy(g.usage);
   updateModelChip();
+}
+
+/** The rank ladder: ranks reached, the current one, and the XP each upcoming one needs. */
+function openRanks() {
+  const p = S.game.player;
+  if (!p.ranks) return toast("⚠", "Restart the game (Ctrl+C, then cargo run) to see the ranks.");
+  const body = el("div", "ranks");
+  const current = p.ranks.findLastIndex(r => p.xp >= r.xp);
+  const list = el("div", "rank-list");
+  p.ranks.forEach((r, i) => {
+    const row = el("div", `rank-row${i < current ? " reached" : i === current ? " current" : ""}`);
+    const mark = i < current ? sym("✔") : i === current ? "⭐" : "🔒";
+    let note;
+    if (i < current) note = "reached";
+    else if (i === current) note = "you are here";
+    else note = `${(r.xp - p.xp).toLocaleString()} XP to go`;
+    row.innerHTML = `<span class="rank-mark">${mark}</span><span class="rank-name">${escapeHtml(r.name)}</span>`
+      + `<span class="rank-xp">${r.xp.toLocaleString()} XP</span><span class="rank-note">${note}</span>`;
+    if (i === current + 1) {
+      const floor = p.ranks[current].xp;
+      const pct = Math.max(2, Math.min(100, ((p.xp - floor) / (r.xp - floor)) * 100));
+      const bar = el("div", "xp-bar rank-bar");
+      bar.append(el("div", "xp-fill"));
+      bar.firstChild.style.width = `${pct}%`;
+      row.append(bar);
+    }
+    list.append(row);
+  });
+  body.append(el("p", "rank-total", `${escapeHtml(p.name || "Adventurer")} has <b>${p.xp.toLocaleString()} XP</b>.`), list);
+  // How far the islands built so far can take you.
+  const left = S.game.worlds.flatMap(w => w.levels).filter(l => l.status !== "done").reduce((sum, l) => sum + l.xp, 0);
+  if (left) body.append(el("p", "muted", `${left.toLocaleString()} XP is still waiting in the levels built so far (before hint costs), plus +15 for each idiomatic code review.`));
+  openModal({ title: "🏅 Ranks", body });
 }
 
 function updateClock() {
@@ -320,31 +352,35 @@ function plannedRow(pl) {
 
 function openWorldBoard(world) {
   sound.click();
-  if (world.available && !world.unlocked) {
-    const prev = S.game.worlds.find(w => w.id === world.id - 1);
-    toast("🔒", `Clear the last level of ${prev ? prev.name : "the previous world"} to unlock ${world.name}.`);
-    sound.fail();
-    return;
-  }
   const body = el("div");
   const tag = world.tag === "project" ? "🛠 Project island · " : world.tag === "bonus" ? "📚 Bonus island · " : "";
   body.append(el("p", "muted", `${tag}${escapeHtml(world.blurb)}`));
   if (world.chapters?.length) body.append(el("p", "board-chapters", `📖 ${world.chapters.map(escapeHtml).join(" · ")}`));
   if (!world.available) {
     body.append(el("p", "board-soon", "🚧 This island is still being built. Here's what it will teach:"));
+  } else if (!world.unlocked) {
+    const prev = S.game.worlds.find(w => w.id === world.id - 1);
+    body.append(el("p", "board-soon", `🔒 Clear the last level of ${escapeHtml(prev ? prev.name : "the previous island")} to play here. You can read the lessons already.`));
   }
   const list = el("div", "board-list");
   for (const l of world.levels) {
-    const b = el("button", `board-item${l.kind === "boss" ? " boss" : ""}`);
+    const row = el("div", "board-row");
+    const b = el("button", `board-item${l.kind === "boss" ? " boss" : ""}${l.status === "locked" ? " locked" : ""}`);
     let status = "";
     if (l.status === "done") status = `${sym("✔")}${l.earned} XP`;
     else if (l.status === "skipped") status = `${sym("⏭")}skipped`;
     else if (l.status === "locked") status = "🔒";
     else status = `${l.xp} XP`;
     b.innerHTML = `<span class="bi-icon">${pixelIcon(l.kind, 2)}</span><span class="bi-id">${l.num}</span><span class="bi-title">${escapeHtml(l.title)}</span><span class="bi-status">${status}</span>`;
-    b.disabled = l.status === "locked";
-    b.onclick = () => { m.close(); openLevel(l.id); };
-    list.append(b);
+    const read = () => { m.close(); previewLesson(l, world); };
+    b.onclick = l.status === "locked" ? read : () => { m.close(); openLevel(l.id); };
+    if (l.status === "locked") b.title = "Locked: click to read the lesson";
+    const lesson = el("button", "bi-lesson", "📜");
+    lesson.title = "Read the lesson";
+    lesson.setAttribute("aria-label", `Read the lesson for ${l.num} ${l.title}`);
+    lesson.onclick = read;
+    row.append(b, lesson);
+    list.append(row);
   }
   if (world.available && world.planned?.length) list.append(el("div", "board-divider", "🚧 Coming later on this island"));
   for (const pl of world.planned || []) list.append(plannedRow(pl));
@@ -355,13 +391,18 @@ function openWorldBoard(world) {
 // ---------------------------------------------------------------- level
 
 async function openLevel(id) {
-  flushDraft();
+  // Wait for every queued save, or the level could load an older draft than the editor had.
+  await flushDraft();
   let lv;
   try {
     lv = await api.level(id);
   } catch (e) {
-    toast("🔒", e.message);
-    return showMap();
+    await showMap();
+    // A locked level (e.g. from an old link or shortcut): explain how to unlock it.
+    const level = e.status === 403 && S.game.worlds.flatMap(w => w.levels).find(l => l.id === id);
+    if (level) previewLesson(level, null);
+    else toast("⚠", escapeHtml(e.message));
+    return;
   }
   S.level = lv;
   S.lastRun = null;
@@ -392,7 +433,10 @@ async function openLevel(id) {
   document.querySelector(".left-col").classList.toggle("predict", predict);
   // Quizzes with no code hide the editor; the question and answers fill the column.
   document.querySelector(".left-col").classList.toggle("no-code", lv.kind === "quiz" && !lv.starter.trim());
-  editor.value = lv.code;
+  // Code whose save failed is newer than the server's copy: keep it and try saving again.
+  const unsaved = unsavedDrafts.get(lv.id);
+  editor.value = unsaved ?? lv.code;
+  if (unsaved !== undefined) saveDraft(lv.id, unsaved);
   fitPredictCode();
   editor.setReadOnly(predict);
   applyVimSetting();
@@ -459,6 +503,44 @@ function lessonContent(lv, tab, { goal = true } = {}) {
   }
   show(tabs.some(t => t[0] === tab) ? tab : "lesson");
   return body;
+}
+
+/** Why a level is locked: the level just before the first locked one is the one to clear. */
+function unlockHint(id) {
+  const all = S.game.worlds.flatMap(w => w.levels);
+  const i = all.findIndex(l => l.id === id);
+  const firstLocked = all.findIndex((l, j) => j <= i && l.status === "locked");
+  const blocker = firstLocked > 0 ? all[firstLocked - 1] : null;
+  return blocker
+    ? `Clear <b>${escapeHtml(blocker.num)} ${escapeHtml(blocker.title)}</b> to unlock it.`
+    : "Clear the levels before it to unlock it.";
+}
+
+/** A level's lesson from the world board, even when the level is still locked.
+ *  Closing it goes back to the board (if there is one). */
+async function previewLesson(level, world) {
+  const locked = level.status === "locked";
+  let lv = null, problem = null;
+  try {
+    lv = await api.lesson(level.id);
+  } catch (e) {
+    problem = e.message;
+  }
+  const body = el("div", "lesson-popup");
+  if (locked) {
+    const note = el("div", "lock-note");
+    note.innerHTML = `<span class="lock-icon">🔒</span><span>This level is still locked. ${unlockHint(level.id)}${lv ? " Until then, here's what it teaches." : ""}</span>`;
+    body.append(note);
+  }
+  if (lv) body.append(lessonContent(lv, "lesson"));
+  else body.append(el("p", "muted", `The lesson couldn't be loaded. ${escapeHtml(problem || "")}`));
+  const foot = el("div", "modal-foot");
+  const back = el("button", "wood-btn small", world ? "⬅ Back to the island" : "OK");
+  foot.append(back);
+  body.append(foot);
+  if (!locked && !lv) sound.fail();
+  const m = openModal({ title: `${level.num} ${escapeHtml(level.title)}`, body, wide: !!lv, onClose: () => { if (world) openWorldBoard(world); } });
+  back.onclick = () => m.close();
 }
 
 /** Lesson button / L key: the lesson popup (with In C / In Python tabs inside). */
@@ -645,6 +727,8 @@ async function runCode() {
     const res = await api.run(lv.id, editor.value);
     S.game.player = res.player;
     updateHUD();
+    // The level was replayed while this compiled: the result belongs to the old attempt.
+    if (res.stale) return;
     // The player may have switched levels while this was compiling: then only report it.
     if (S.level !== lv) {
       if (res.first_clear) toast("⭐", `Level ${lv.num} cleared! +${res.xp_gained} XP`);
@@ -831,8 +915,14 @@ function resetCode() {
 
 async function replayLevel(lv) {
   try {
+    // Let queued saves land first, or one could restore the old code after the reset.
     cancelDraft();
+    await draftChain;
     const res = await api.replay(lv.id);
+    // Edits typed while the replay was in flight belong to the old attempt.
+    cancelDraft();
+    await draftChain;
+    unsavedDrafts.delete(lv.id);
     S.game.player = res.player;
     delete S.history[lv.id];
     saveHistory();
@@ -853,11 +943,19 @@ async function replayLevel(lv) {
 // land after a newer one (e.g. after Reset).
 let draftPending = null;
 let draftChain = Promise.resolve();
+// Code per level that the server hasn't confirmed yet. Reopening a level shows this
+// instead of the server's (older) draft, so a failed save never loses edits.
+const unsavedDrafts = new Map();
 
 function saveDraft(id, code) {
+  unsavedDrafts.set(id, code);
   draftChain = draftChain
     .then(() => api.draft(id, code))
-    .then(() => setSaveStatus(null))
+    .then(() => {
+      // A newer edit queued behind this one is still unsaved.
+      if (unsavedDrafts.get(id) === code) unsavedDrafts.delete(id);
+      if (!unsavedDrafts.size) setSaveStatus(null);
+    })
     .catch(e => setSaveStatus(e.message || "Couldn't autosave your code."));
   return draftChain;
 }
@@ -884,12 +982,13 @@ function cancelDraft() {
   draftPending = null;
 }
 
-/** Save a pending edit right away (e.g. before switching levels). */
+/** Save a pending edit right away (e.g. before switching levels). Resolves once every
+ *  queued save has finished. */
 function flushDraft() {
   clearTimeout(draftTimer);
   const d = draftPending;
   draftPending = null;
-  if (d) saveDraft(d.id, d.code);
+  return d ? saveDraft(d.id, d.code) : draftChain;
 }
 
 // ---------------------------------------------------------------- hotbar
@@ -1179,6 +1278,8 @@ async function askFerris(mode, { message = "", choice = null, label = "" } = {})
   }
   paint();
   if (modelName) m.querySelector(".msg-tag").title = `Answered by ${modelName}`;
+  // A model the cards don't know yet (e.g. a new Opus): the server saved it, so refresh the names.
+  if (modelName && !S.models.some(x => x.resolved === modelName) && S.models.some(x => x.id === S.game.settings.model)) reloadModels();
   if (!text) body.innerHTML = renderMarkdown("_(Ferris didn't say anything. Try again?)_");
   historyFor(lv.id).push(["assistant", text]);
   saveHistory();
@@ -1187,14 +1288,22 @@ async function askFerris(mode, { message = "", choice = null, label = "" } = {})
 
 // ---------------------------------------------------------------- settings & model picker
 
+/** Reload the model cards' names (after Claude Code reports a model we haven't seen). */
+async function reloadModels() {
+  try {
+    S.models = await api.models();
+    updateModelChip();
+  } catch { /* keep the old names */ }
+}
+
 function modelCards(selected, onPick) {
   const grid = el("div", "model-cards");
   const cards = [...S.models];
   const custom = !cards.some(m => m.id === selected);
   for (const m of cards) {
     const c = el("button", `model-card${m.id === selected ? " selected" : ""}`);
-    c.innerHTML = `<div><span class="mc-name">${m.name}</span><span class="mc-tag">${m.tag}</span></div><div class="mc-blurb">${m.blurb}</div><div class="mc-id">--model ${m.id}</div>`;
-    c.onclick = () => { for (const x of grid.querySelectorAll(".model-card")) x.classList.remove("selected"); c.classList.add("selected"); onPick(m.id); };
+    c.innerHTML = `<div><span class="mc-name">${m.name}</span><span class="mc-tag">${m.tag}</span></div><div class="mc-blurb">${m.blurb}</div><div class="mc-id">--model ${m.id}${m.resolved ? ` → ${escapeHtml(m.resolved)}` : ""}</div>`;
+    c.onclick = () => { selected = m.id; for (const x of grid.querySelectorAll(".model-card")) x.classList.remove("selected"); c.classList.add("selected"); onPick(m.id); };
     grid.append(c);
   }
   const wrap = el("div");
@@ -1206,9 +1315,35 @@ function modelCards(selected, onPick) {
   input.style.flex = "1";
   if (custom) input.value = selected;
   const use = el("button", "wood-btn small", "Use");
-  use.onclick = () => { if (input.value.trim()) { for (const x of grid.querySelectorAll(".model-card")) x.classList.remove("selected"); onPick(input.value.trim()); } };
+  use.onclick = () => { if (input.value.trim()) { selected = input.value.trim(); for (const x of grid.querySelectorAll(".model-card")) x.classList.remove("selected"); onPick(selected); } };
   row.append(input, use);
   wrap.append(row);
+  // Each card is an alias, so Ferris always gets the newest model. This only updates the names.
+  const check = el("button", "wood-btn small", "🔄 Check for new versions");
+  check.title = "Ask Claude Code which model each card is right now (one tiny message per card)";
+  const note = el("span", "muted", "");
+  check.onclick = async () => {
+    sound.click();
+    check.disabled = true;
+    note.textContent = " Asking Claude Code…";
+    try {
+      const res = await api.refreshModels();
+      S.models = res.models;
+      updateModelChip();
+      const fresh = modelCards(selected, onPick);
+      wrap.replaceWith(fresh);
+      if (res.errors.length) fresh.querySelector(".mc-check-note").textContent = ` Couldn't check: ${res.errors.map(e => e.id).join(", ")}.`;
+      else fresh.querySelector(".mc-check-note").textContent = " Up to date!";
+    } catch (e) {
+      note.textContent = ` ${e.message}`;
+      check.disabled = false;
+    }
+  };
+  note.classList.add("mc-check-note");
+  const checkRow = el("div", "row");
+  checkRow.style.marginTop = "8px";
+  checkRow.append(check, note);
+  wrap.append(checkRow);
   return wrap;
 }
 
@@ -1222,19 +1357,26 @@ function effortPicker(selected, onPick) {
   return seg;
 }
 
-async function saveSettings(patch, note) {
-  const next = { ...S.game.settings, ...patch };
-  try {
-    S.game.settings = await api.saveSettings(next);
-    sound.setEnabled(S.game.settings.sound);
-    document.body.classList.toggle("code-pixel", S.game.settings.code_font === "pixel");
-    document.body.classList.toggle("readable", !!S.game.settings.readable_text);
-    updateHUD();
-    applyVimSetting();
-    if (note && S.screen === "level") addMessage("system", note, { save: false });
-  } catch (e) {
-    toast("⚠", e.message);
-  }
+// Settings are saved one at a time, each built from the settings the previous save
+// returned, so quick changes (model, then effort) can't overwrite each other.
+let settingsChain = Promise.resolve();
+
+function saveSettings(patch, note) {
+  settingsChain = settingsChain.then(async () => {
+    const next = { ...S.game.settings, ...patch };
+    try {
+      S.game.settings = await api.saveSettings(next);
+      sound.setEnabled(S.game.settings.sound);
+      document.body.classList.toggle("code-pixel", S.game.settings.code_font === "pixel");
+      document.body.classList.toggle("readable", !!S.game.settings.readable_text);
+      updateHUD();
+      applyVimSetting();
+      if (note && S.screen === "level") addMessage("system", note, { save: false });
+    } catch (e) {
+      toast("⚠", e.message);
+    }
+  });
+  return settingsChain;
 }
 
 function openModelPicker() {
@@ -1542,6 +1684,9 @@ async function boot() {
   requestAnimationFrame(titleLoop);
 
   $("#btn-lesson").onclick = () => toggleLesson("lesson");
+  const hudPlayer = $("#hud-player");
+  hudPlayer.onclick = () => { sound.click(); openRanks(); };
+  hudPlayer.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); hudPlayer.click(); } };
   // Click a long goal to show or hide the rest of it.
   $("#lv-goal").onclick = () => {
     const g = $("#lv-goal");

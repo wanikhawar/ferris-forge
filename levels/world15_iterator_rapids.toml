@@ -2,40 +2,701 @@ id = 15
 name = "Iterator Rapids"
 blurb = "Little functions and conveyor belts."
 
-# Placeholder island: these levels are planned but not built yet.
-
-[[planned]]
+[[level]]
+id = "15.1"
 title = "Little functions: closures"
 kind = "fill"
 book = ["13.1"]
-about = "Functions without names that remember their surroundings."
+xp = 45
+goal = "Use closures to pick a shirt, sort words by length, and apply a function twice."
+lesson = '''
+A **closure** is a small function without a name, written with bars around its parameters:
 
-[[planned]]
+```rust
+let add_one = |x: i32| x + 1;          // types are usually inferred
+let shout = |s: &str| { let up = s.to_uppercase(); up + "!" };
+println!("{}", add_one(5));            // 6
+```
+
+Unlike a normal `fn`, a closure can use variables from **around** it:
+
+```rust
+let bonus = 10;
+let add_bonus = |x| x + bonus;   // captures bonus
+```
+
+Many standard methods take closures:
+
+```rust
+preference.unwrap_or_else(|| self.most_stocked())   // only runs if it's None
+words.sort_by_key(|w| w.len())                     // sort by what the closure returns
+```
+
+To take a closure as a parameter, use a trait bound: `f: impl Fn(i32) -> i32`.
+'''
+c_compare = '''
+A function pointer plus a `void*` context argument, rolled into one value, with types checked by the compiler.
+'''
+py_compare = '''
+Like `lambda`, but a closure can contain whole blocks of code, not just one expression.
+'''
+check = "tests"
+starter = '''
+#[derive(Debug, PartialEq, Clone, Copy)]
+enum Shirt {
+    Red,
+    Blue,
+}
+
+struct Inventory {
+    shirts: Vec<Shirt>,
+}
+
+impl Inventory {
+    fn most_stocked(&self) -> Shirt {
+        let mut reds = 0;
+        let mut blues = 0;
+        for shirt in &self.shirts {
+            match shirt {
+                Shirt::Red => reds += 1,
+                Shirt::Blue => blues += 1,
+            }
+        }
+        if reds > blues { Shirt::Red } else { Shirt::Blue }
+    }
+
+    /// The preferred shirt, or else the most stocked one. Use unwrap_or_else with a closure.
+    fn giveaway(&self, preference: Option<Shirt>) -> Shirt {
+        todo!()
+    }
+}
+
+/// Shortest words first. Use sort_by_key with a closure.
+fn sort_by_length(words: &mut Vec<String>) {
+    todo!()
+}
+
+/// Call f on x, then call f on the result.
+fn apply_twice(f: impl Fn(i32) -> i32, x: i32) -> i32 {
+    todo!()
+}
+
+fn main() {
+    let store = Inventory { shirts: vec![Shirt::Blue, Shirt::Red, Shirt::Blue] };
+    println!("{:?}", store.giveaway(None));
+}
+'''
+solution = '''
+#[derive(Debug, PartialEq, Clone, Copy)]
+enum Shirt {
+    Red,
+    Blue,
+}
+
+struct Inventory {
+    shirts: Vec<Shirt>,
+}
+
+impl Inventory {
+    fn most_stocked(&self) -> Shirt {
+        let mut reds = 0;
+        let mut blues = 0;
+        for shirt in &self.shirts {
+            match shirt {
+                Shirt::Red => reds += 1,
+                Shirt::Blue => blues += 1,
+            }
+        }
+        if reds > blues { Shirt::Red } else { Shirt::Blue }
+    }
+
+    /// The preferred shirt, or else the most stocked one. Use unwrap_or_else with a closure.
+    fn giveaway(&self, preference: Option<Shirt>) -> Shirt {
+        preference.unwrap_or_else(|| self.most_stocked())
+    }
+}
+
+/// Shortest words first. Use sort_by_key with a closure.
+fn sort_by_length(words: &mut Vec<String>) {
+    words.sort_by_key(|w| w.len());
+}
+
+/// Call f on x, then call f on the result.
+fn apply_twice(f: impl Fn(i32) -> i32, x: i32) -> i32 {
+    f(f(x))
+}
+
+fn main() {
+    let store = Inventory { shirts: vec![Shirt::Blue, Shirt::Red, Shirt::Blue] };
+    println!("{:?}", store.giveaway(None));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn giveaways() {
+        let store = Inventory { shirts: vec![Shirt::Blue, Shirt::Red, Shirt::Blue] };
+        assert_eq!(store.giveaway(Some(Shirt::Red)), Shirt::Red);
+        assert_eq!(store.giveaway(None), Shirt::Blue);
+    }
+
+    #[test]
+    fn sorting() {
+        let mut words = vec!["crab".to_string(), "a".to_string(), "rust".to_string(), "is".to_string()];
+        sort_by_length(&mut words);
+        assert_eq!(words, ["a", "is", "crab", "rust"]);
+    }
+
+    #[test]
+    fn twice() {
+        assert_eq!(apply_twice(|x| x + 1, 5), 7);
+        let step = 3;
+        assert_eq!(apply_twice(|x| x * step, 2), 18);
+    }
+}
+'''
+hints = [
+    "Each function is one line. giveaway calls `preference.unwrap_or_else(...)`, sort_by_length calls `words.sort_by_key(...)`, and apply_twice calls `f` twice.",
+    "A closure with no parameters is written `|| ...`. sort_by_key wants a closure from a word to its length: `|w| w.len()`.",
+    "```rust\npreference.unwrap_or_else(|| self.most_stocked())\n\nwords.sort_by_key(|w| w.len());\n\nf(f(x))\n```",
+]
+
+[[level]]
+id = "15.2"
 title = "Borrow, change or keep?"
 kind = "predict"
 book = ["13.1"]
-about = "How closures capture values: Fn, FnMut, FnOnce and move."
+xp = 25
+goal = "Two closures capture the same list. What does this print?"
+lesson = '''
+A closure captures what it uses in the gentlest way that works:
 
-[[planned]]
+| The closure... | It captures | It implements |
+|---|---|---|
+| only reads the value | a `&` borrow | `Fn` |
+| changes the value | a `&mut` borrow | `FnMut` |
+| moves the value out | ownership | `FnOnce` |
+
+While a closure holds a `&mut` borrow, nothing else may use the value, but the borrow ends after the closure's last use, just like any reference.
+
+**`move`** forces the closure to take ownership, even if it only reads. That's needed when the closure must outlive the current function, for example when it's sent to another thread.
+'''
+c_compare = '''
+In C, a callback's context pointer can be freed or changed behind its back. Here the borrow checker tracks what each closure captured.
+'''
+py_compare = '''
+Python closures always capture by reference. Rust picks borrow, mutable borrow or move, and checks that the choice is safe.
+'''
+starter = '''
+fn main() {
+    let mut list = vec![1, 2, 3];
+    let mut push_four = || list.push(4);
+    push_four();
+    push_four();
+    println!("{list:?}");
+
+    let count = move || list.len();
+    println!("{}", count());
+}
+'''
+choices = [
+    "[1, 2, 3, 4] / 4",
+    "It doesn't compile: list is still borrowed by push_four when it's printed",
+    "[1, 2, 3, 4, 4] / 5",
+    "It doesn't compile: count moves list, so list can't be used",
+]
+answer = 2
+expected_output = '''
+[1, 2, 3, 4, 4]
+5
+'''
+explanation = "`push_four` mutably borrows `list` and runs twice, adding two 4s. Its borrow ends after its last call, so printing is fine. `count` takes ownership with `move`, and nothing uses `list` after that, so it compiles."
+
+[[level]]
+id = "15.3"
 title = "Next, please!"
 kind = "fill"
 book = ["13.2"]
-about = "The Iterator trait, next(), sum and collect."
+xp = 50
+goal = "Make Countdown an iterator, then use it with sum, collect and a for loop."
+lesson = '''
+An **iterator** hands out items one at a time. Every iterator implements one trait:
 
-[[planned]]
+```rust
+trait Iterator {
+    type Item;                                  // what it produces
+    fn next(&mut self) -> Option<Self::Item>;   // Some(item), or None when done
+}
+```
+
+Implement `next`, and you get dozens of methods for free:
+
+```rust
+let total: u32 = countdown.sum();
+let all: Vec<u32> = countdown.collect();
+for n in countdown { ... }
+```
+
+Collections give you iterators too: `v.iter()` (borrows items), `v.iter_mut()` (mutable borrows) and `v.into_iter()` (takes ownership).
+'''
+c_compare = '''
+Like writing a `next()` function over a struct that remembers where it is, except `for` loops, `sum` and the rest work with it automatically.
+'''
+py_compare = '''
+Exactly Python's iterator protocol: `next` is `__next__`, and returning `None` is raising `StopIteration`.
+'''
+check = "tests"
+starter = '''
+struct Countdown {
+    current: u32,
+}
+
+impl Countdown {
+    fn new(from: u32) -> Countdown {
+        Countdown { current: from }
+    }
+}
+
+// TODO: impl Iterator for Countdown
+//   Item is u32. Countdown::new(3) gives 3, 2, 1 and then None.
+
+/// The sum of the countdown from n (use .sum()).
+fn total(n: u32) -> u32 {
+    todo!()
+}
+
+/// The countdown from n as a Vec (use .collect()).
+fn as_vec(n: u32) -> Vec<u32> {
+    todo!()
+}
+
+fn main() {
+    println!("{:?}", as_vec(3));
+}
+'''
+solution = '''
+struct Countdown {
+    current: u32,
+}
+
+impl Countdown {
+    fn new(from: u32) -> Countdown {
+        Countdown { current: from }
+    }
+}
+
+impl Iterator for Countdown {
+    type Item = u32;
+
+    fn next(&mut self) -> Option<u32> {
+        if self.current == 0 {
+            None
+        } else {
+            self.current -= 1;
+            Some(self.current + 1)
+        }
+    }
+}
+
+/// The sum of the countdown from n (use .sum()).
+fn total(n: u32) -> u32 {
+    Countdown::new(n).sum()
+}
+
+/// The countdown from n as a Vec (use .collect()).
+fn as_vec(n: u32) -> Vec<u32> {
+    Countdown::new(n).collect()
+}
+
+fn main() {
+    println!("{:?}", as_vec(3));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn next_by_hand() {
+        let mut c = Countdown::new(2);
+        assert_eq!(c.next(), Some(2));
+        assert_eq!(c.next(), Some(1));
+        assert_eq!(c.next(), None);
+        assert_eq!(c.next(), None);
+    }
+
+    #[test]
+    fn free_methods() {
+        assert_eq!(total(4), 10);
+        assert_eq!(total(0), 0);
+        assert_eq!(as_vec(3), vec![3, 2, 1]);
+        let mut seen = Vec::new();
+        for n in Countdown::new(2) {
+            seen.push(n * 10);
+        }
+        assert_eq!(seen, [20, 10]);
+    }
+}
+'''
+hints = [
+    "Write `impl Iterator for Countdown { type Item = u32; fn next(&mut self) -> Option<u32> { ... } }`.",
+    "In next: if `current` is 0, return None. Otherwise lower `current` by one and return the old value. total and as_vec are one line each: `Countdown::new(n).sum()` / `.collect()`.",
+    "```rust\nimpl Iterator for Countdown {\n    type Item = u32;\n\n    fn next(&mut self) -> Option<u32> {\n        if self.current == 0 {\n            None\n        } else {\n            self.current -= 1;\n            Some(self.current + 1)\n        }\n    }\n}\n```",
+]
+
+[[level]]
+id = "15.4"
 title = "Down the conveyor belt"
 kind = "fill"
 book = ["13.2"]
-about = "Transform and pick items with map and filter."
+xp = 50
+goal = "Write three short iterator chains with filter, map and collect."
+lesson = '''
+**Iterator adapters** turn one iterator into another, like stations on a conveyor belt:
 
-[[planned]]
-title = "Loops vs iterators: the race"
+```rust
+let v = vec![1, 2, 3, 4];
+let doubled_evens: Vec<i32> = v
+    .iter()                     // &1, &2, &3, &4
+    .filter(|x| *x % 2 == 0)    // keep: &2, &4
+    .map(|x| x * 2)             // change: 4, 8
+    .collect();                 // [4, 8]
+```
+
+| Method | Does |
+|---|---|
+| `map(f)` | changes each item |
+| `filter(f)` | keeps items where `f` is true |
+| `collect()` | gathers the items into a collection |
+| `sum()`, `count()` | consume the belt into one value |
+
+Use `into_iter()` when you want to keep the items themselves (it takes the collection), and `iter()` when you only need to look.
+'''
+c_compare = '''
+Each chain replaces a `for` loop with an `if`, a temporary and a push. The compiler turns it back into that loop.
+'''
+py_compare = '''
+Like a list comprehension: `[x * 2 for x in v if x % 2 == 0]`, written as a chain of steps.
+'''
+check = "tests"
+starter = '''
+#[derive(Debug, PartialEq)]
+struct Shoe {
+    size: u32,
+    style: String,
+}
+
+/// The squares of the even numbers, in order. [1, 2, 3, 4] -> [4, 16]
+fn squares_of_evens(numbers: &[i32]) -> Vec<i32> {
+    todo!()
+}
+
+/// Only the shoes in this size (takes ownership of the list).
+fn shoes_in_size(shoes: Vec<Shoe>, size: u32) -> Vec<Shoe> {
+    todo!()
+}
+
+/// Each name in capitals. ["ferris", "corro"] -> ["FERRIS", "CORRO"]
+fn shout_all(names: &[&str]) -> Vec<String> {
+    todo!()
+}
+
+fn main() {
+    println!("{:?}", squares_of_evens(&[1, 2, 3, 4]));
+}
+'''
+solution = '''
+#[derive(Debug, PartialEq)]
+struct Shoe {
+    size: u32,
+    style: String,
+}
+
+/// The squares of the even numbers, in order. [1, 2, 3, 4] -> [4, 16]
+fn squares_of_evens(numbers: &[i32]) -> Vec<i32> {
+    numbers.iter().filter(|n| *n % 2 == 0).map(|n| n * n).collect()
+}
+
+/// Only the shoes in this size (takes ownership of the list).
+fn shoes_in_size(shoes: Vec<Shoe>, size: u32) -> Vec<Shoe> {
+    shoes.into_iter().filter(|s| s.size == size).collect()
+}
+
+/// Each name in capitals. ["ferris", "corro"] -> ["FERRIS", "CORRO"]
+fn shout_all(names: &[&str]) -> Vec<String> {
+    names.iter().map(|n| n.to_uppercase()).collect()
+}
+
+fn main() {
+    println!("{:?}", squares_of_evens(&[1, 2, 3, 4]));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn shoe(size: u32, style: &str) -> Shoe {
+        Shoe { size, style: style.to_string() }
+    }
+
+    #[test]
+    fn squares() {
+        assert_eq!(squares_of_evens(&[1, 2, 3, 4]), vec![4, 16]);
+        assert_eq!(squares_of_evens(&[-2, 5, 0]), vec![4, 0]);
+        assert!(squares_of_evens(&[1, 3]).is_empty());
+    }
+
+    #[test]
+    fn shoes() {
+        let all = vec![shoe(10, "sneaker"), shoe(13, "sandal"), shoe(10, "boot")];
+        assert_eq!(shoes_in_size(all, 10), vec![shoe(10, "sneaker"), shoe(10, "boot")]);
+    }
+
+    #[test]
+    fn shouting() {
+        assert_eq!(shout_all(&["ferris", "corro"]), vec!["FERRIS", "CORRO"]);
+    }
+}
+'''
+hints = [
+    "Each function is one chain: start with `.iter()` (or `.into_iter()` for the shoes), add `.filter(...)` and/or `.map(...)`, and end with `.collect()`.",
+    "squares_of_evens: `.filter(|n| *n % 2 == 0).map(|n| n * n)`. shoes_in_size: `shoes.into_iter().filter(|s| s.size == size)`. shout_all: `.map(|n| n.to_uppercase())`.",
+    "```rust\nnumbers.iter().filter(|n| *n % 2 == 0).map(|n| n * n).collect()\n\nshoes.into_iter().filter(|s| s.size == size).collect()\n\nnames.iter().map(|n| n.to_uppercase()).collect()\n```",
+]
+
+[[level]]
+id = "15.5"
+title = "Lazy belts"
 kind = "predict"
-book = ["13.4"]
-about = "Iterators are just as fast as hand-written loops."
+book = ["13.2"]
+xp = 25
+goal = "In what order do the lines print?"
+lesson = '''
+Iterator adapters are **lazy**: `map` and `filter` don't do anything when you call them. They only describe the work. Nothing moves until something **consumes** the iterator: `sum`, `collect`, `count`, a `for` loop...
 
-[[planned]]
+```rust
+let doubled = v.iter().map(|x| x * 2);   // nothing has happened yet
+let total: i32 = doubled.sum();          // now each item is doubled and added
+```
+
+If you build an adapter and never consume it, the compiler warns: `unused Map that must be used`.
+'''
+c_compare = '''
+Unlike building a temporary array for each step, a lazy chain processes one item through every step before moving to the next, with no extra memory.
+'''
+py_compare = '''
+Like Python's `map()` and generator expressions, which also do nothing until you iterate them.
+'''
+starter = '''
+fn main() {
+    let v = vec![1, 2, 3];
+    let doubled = v.iter().map(|x| {
+        println!("doubling {x}");
+        x * 2
+    });
+    println!("before");
+    let total: i32 = doubled.sum();
+    println!("total {total}");
+}
+'''
+choices = [
+    "doubling 1 / doubling 2 / doubling 3 / before / total 12",
+    "before / doubling 1 / doubling 2 / doubling 3 / total 12",
+    "before / total 12",
+    "before / doubling 1 / total 2",
+]
+answer = 1
+expected_output = '''
+before
+doubling 1
+doubling 2
+doubling 3
+total 12
+'''
+explanation = "`map` is lazy, so creating `doubled` prints nothing. `sum` pulls the items through one by one, which runs the closure three times, and then the total (2 + 4 + 6) is printed."
+
+[[level]]
+id = "15.6"
+title = "Loops vs iterators: the race"
+kind = "quiz"
+book = ["13.4"]
+xp = 20
+goal = "A for loop with an if, or iter().filter().map().sum(): which is faster in a release build?"
+lesson = '''
+Iterators look like extra machinery: closures, adapter structs, `next` calls. Surely a plain loop is faster?
+
+No. Rust's iterators are a **zero-cost abstraction**: after optimization, a chain compiles to the same machine code as the loop you'd write by hand, and sometimes better, because the compiler can skip bounds checks and unroll it.
+
+The Rust Book times a search through a whole novel: the `for` loop and the iterator version run at essentially the same speed.
+
+So pick whichever reads better. For "filter, transform, combine", that's usually the iterator chain.
+'''
+c_compare = '''
+The same promise C++ makes for templates: abstractions you don't pay for at runtime.
+'''
+py_compare = '''
+In Python, comprehensions and loops differ in speed because each step is interpreted. In Rust both compile to the same loop.
+'''
+choices = [
+    "The for loop: iterators add function calls for every item",
+    "The iterator chain: it runs on several threads",
+    "About the same: the chain compiles down to the same loop",
+    "The iterator chain, but only for vectors with more than 1000 items",
+]
+answer = 2
+explanation = "Iterators are a zero-cost abstraction: closures get inlined and the chain becomes an ordinary loop. Iterators don't use extra threads; that needs a library like rayon."
+
+[[level]]
+id = "15.7"
 title = "BOSS: The log analyzer"
 kind = "boss"
 book = ["13.1", "13.2"]
-about = "Summarize a log with one chain of iterators."
+xp = 120
+goal = '''Summarize a server log with iterator chains: count lines per level, list error messages,
+find the slowest request, and the average response time.'''
+lesson = '''
+**Boss fight!** Each log line looks like:
+
+```text
+12:00:01 INFO  GET /home 120ms
+12:00:02 ERROR GET /cart 900ms disk full
+```
+
+That's: time, level, method, path, duration, then an optional message. Words are separated by spaces (sometimes more than one, so use `split_whitespace`).
+
+Write, each as an iterator chain:
+
+1. **`count_level(log, "ERROR")`**: how many lines have that level.
+2. **`error_messages(log)`**: the messages of the ERROR lines, in order. The message is all the words after the duration, joined by single spaces.
+3. **`slowest(log)`**: the path of the slowest request, or `None` for an empty log.
+4. **`average_ms(log)`**: the average duration as `f64` (`0.0` for an empty log).
+
+Helpful: `log.lines()`, `.split_whitespace().nth(i)`, `.trim_end_matches("ms").parse::<u32>()`, `.skip(5)`, `.collect::<Vec<_>>().join(" ")`, `.max_by_key(|...| ...)`, `.count()`, `.sum::<u32>()`.
+
+Write a small helper like `fn duration(line: &str) -> u32` that the chains can share.
+'''
+c_compare = '''
+In C this is a loop with `sscanf`, counters and a running max. Here each question is one chain over the same lines.
+'''
+py_compare = '''
+Like a few generator expressions over `log.splitlines()`, with `max(..., key=...)` and `sum(...)`.
+'''
+check = "tests"
+starter = '''
+const LOG: &str = "12:00:01 INFO  GET /home 120ms
+12:00:02 ERROR GET /cart 900ms disk full
+12:00:03 INFO  POST /login 300ms
+12:00:04 WARN  GET /home 450ms slow cache
+12:00:05 ERROR POST /pay 1500ms card declined";
+
+fn count_level(log: &str, level: &str) -> usize {
+    todo!()
+}
+
+fn error_messages(log: &str) -> Vec<String> {
+    todo!()
+}
+
+fn slowest(log: &str) -> Option<&str> {
+    todo!()
+}
+
+fn average_ms(log: &str) -> f64 {
+    todo!()
+}
+
+fn main() {
+    println!("{} errors", count_level(LOG, "ERROR"));
+}
+'''
+solution = '''
+const LOG: &str = "12:00:01 INFO  GET /home 120ms
+12:00:02 ERROR GET /cart 900ms disk full
+12:00:03 INFO  POST /login 300ms
+12:00:04 WARN  GET /home 450ms slow cache
+12:00:05 ERROR POST /pay 1500ms card declined";
+
+fn level(line: &str) -> &str {
+    line.split_whitespace().nth(1).unwrap_or("")
+}
+
+fn duration(line: &str) -> u32 {
+    line.split_whitespace()
+        .nth(4)
+        .and_then(|d| d.trim_end_matches("ms").parse().ok())
+        .unwrap_or(0)
+}
+
+fn count_level(log: &str, wanted: &str) -> usize {
+    log.lines().filter(|line| level(line) == wanted).count()
+}
+
+fn error_messages(log: &str) -> Vec<String> {
+    log.lines()
+        .filter(|line| level(line) == "ERROR")
+        .map(|line| line.split_whitespace().skip(5).collect::<Vec<_>>().join(" "))
+        .collect()
+}
+
+fn slowest(log: &str) -> Option<&str> {
+    log.lines()
+        .max_by_key(|line| duration(line))
+        .and_then(|line| line.split_whitespace().nth(3))
+}
+
+fn average_ms(log: &str) -> f64 {
+    let count = log.lines().count();
+    if count == 0 {
+        return 0.0;
+    }
+    let total: u32 = log.lines().map(duration).sum();
+    total as f64 / count as f64
+}
+
+fn main() {
+    println!("{} errors", count_level(LOG, "ERROR"));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn counting() {
+        assert_eq!(count_level(LOG, "ERROR"), 2);
+        assert_eq!(count_level(LOG, "INFO"), 2);
+        assert_eq!(count_level(LOG, "WARN"), 1);
+        assert_eq!(count_level(LOG, "DEBUG"), 0);
+    }
+
+    #[test]
+    fn messages() {
+        assert_eq!(error_messages(LOG), vec!["disk full", "card declined"]);
+        assert!(error_messages("12:00:01 INFO  GET /home 120ms").is_empty());
+    }
+
+    #[test]
+    fn slowest_request() {
+        assert_eq!(slowest(LOG), Some("/pay"));
+        assert_eq!(slowest(""), None);
+    }
+
+    #[test]
+    fn averages() {
+        assert_eq!(average_ms(LOG), 654.0);
+        assert_eq!(average_ms("1 INFO GET / 5ms\n2 INFO GET / 6ms"), 5.5);
+        assert_eq!(average_ms(""), 0.0);
+    }
+}
+'''
+hints = [
+    "Write two helpers first: `level(line)` (the 2nd word) and `duration(line)` (the 5th word without `ms`, parsed). Then each function is one chain over `log.lines()`.",
+    "count_level: `.filter(...).count()`. error_messages: filter ERROR lines, then `.map(|line| line.split_whitespace().skip(5).collect::<Vec<_>>().join(\" \"))`. slowest: `.max_by_key(|line| duration(line))`, then take the 4th word.",
+    "```rust\nfn duration(line: &str) -> u32 {\n    line.split_whitespace()\n        .nth(4)\n        .and_then(|d| d.trim_end_matches(\"ms\").parse().ok())\n        .unwrap_or(0)\n}\n\nfn slowest(log: &str) -> Option<&str> {\n    log.lines()\n        .max_by_key(|line| duration(line))\n        .and_then(|line| line.split_whitespace().nth(3))\n}\n```",
+]

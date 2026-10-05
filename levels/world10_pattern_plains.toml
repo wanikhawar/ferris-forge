@@ -2,34 +2,930 @@ id = 10
 name = "Pattern Plains"
 blurb = "Every shape a pattern can take."
 
-# Placeholder island: these levels are planned but not built yet.
-
-[[planned]]
+[[level]]
+id = "10.1"
 title = "Patterns everywhere"
 kind = "predict"
 book = ["19.1"]
-about = "Patterns hide in let, for, while let and function parameters."
+xp = 25
+goal = "What does this print?"
+lesson = '''
+You've used **patterns** since your first `match`, but they hide in many more places:
 
-[[planned]]
+```rust
+let (a, b) = (1, 2);                  // let takes a pattern, not just a name
+for (i, ch) in "ab".chars().enumerate() { }   // so does for
+while let Some(top) = stack.pop() { }  // loop while the pattern matches
+fn show(&(x, y): &(i32, i32)) { }      // and so do function parameters
+```
+
+Even a plain `let x = 5;` is a pattern: `x` is a pattern that matches anything and gives it a name.
+
+A pattern describes the **shape** of a value. If the value has that shape, the pattern's names get bound to its parts.
+'''
+c_compare = '''
+C has nothing like it: you'd write `int a = t.first; int b = t.second;` by hand. Patterns pull a value apart in one step, and the compiler checks the shape.
+'''
+py_compare = '''
+Like Python's unpacking (`a, b = 1, 2` and `for i, ch in enumerate("ab")`), but it works for structs and enums too, and the compiler checks the shape before the program runs.
+'''
+starter = '''
+fn print_point(&(x, y): &(i32, i32)) {
+    println!("({x}, {y})");
+}
+
+fn main() {
+    let (a, b, c) = (1, 2, 3);
+    println!("{a}{b}{c}");
+
+    let mut stack = vec![1, 2, 3];
+    while let Some(top) = stack.pop() {
+        print!("{top}");
+    }
+    println!();
+
+    for (i, ch) in "ab".chars().enumerate() {
+        println!("{i}:{ch}");
+    }
+
+    print_point(&(5, -1));
+}
+'''
+choices = [
+    "123 / 123 / 0:a / 1:b / (5, -1)",
+    "123 / 321 / 0:a / 1:b / (5, -1)",
+    "It doesn't compile: function parameters can't be patterns",
+    "123 / 321 / a:0 / b:1 / (5, -1)",
+]
+answer = 1
+expected_output = '''
+123
+321
+0:a
+1:b
+(5, -1)
+'''
+explanation = "`let (a, b, c)` unpacks the tuple. `pop` takes from the end, so `while let` sees 3, 2, 1 and stops at `None`. `enumerate` gives `(index, item)` pairs, and the parameter `&(x, y)` unpacks the borrowed tuple."
+
+[[level]]
+id = "10.2"
+title = "If it fits: if let and let...else"
+kind = "fill"
+book = ["19.1"]
+xp = 45
+goal = "Write background (an if let / else if chain) and parse_score (two let...else checks)."
+lesson = '''
+When you care about just **one** shape, a full `match` is long. `if let` checks one pattern:
+
+```rust
+if let Some(color) = favorite {
+    println!("using {color}");
+} else if is_tuesday {
+    println!("green day");
+} else if let Ok(age) = age {
+    println!("age {age}");
+} else {
+    println!("blue");
+}
+```
+
+You can mix `if let`, `else if` and `else if let` freely.
+
+**`let...else`** is the opposite: it says "this must match, otherwise leave":
+
+```rust
+let Some((name, score)) = line.split_once(':') else {
+    return None;   // the else block must leave: return, break, continue or panic
+};
+// name and score are usable from here on
+```
+'''
+c_compare = '''
+`let...else` is the early-return guard you'd write in C (`if (!p) return NULL;`), except it also unpacks the value for the rest of the function.
+'''
+py_compare = '''
+`if let Some(x) = value:` is like `if (x := value) is not None:`. `let...else` is a guard clause that also unpacks.
+'''
+check = "tests"
+starter = '''
+use std::num::ParseIntError;
+
+/// Pick a background color:
+/// - a favorite color, if there is one
+/// - otherwise "green" on Tuesdays
+/// - otherwise, if the age parsed: "purple" when over 30, else "orange"
+/// - otherwise "blue"
+fn background(favorite: Option<&str>, is_tuesday: bool, age: Result<u8, ParseIntError>) -> String {
+    todo!()
+}
+
+/// "Ferris:7" -> Some(("Ferris", 7)). No ':' or a bad number -> None.
+/// Use let...else for both checks.
+fn parse_score(line: &str) -> Option<(&str, u32)> {
+    todo!()
+}
+
+fn main() {
+    println!("{}", background(None, false, "34".parse()));
+    println!("{:?}", parse_score("Ferris:7"));
+}
+'''
+solution = '''
+use std::num::ParseIntError;
+
+/// Pick a background color:
+/// - a favorite color, if there is one
+/// - otherwise "green" on Tuesdays
+/// - otherwise, if the age parsed: "purple" when over 30, else "orange"
+/// - otherwise "blue"
+fn background(favorite: Option<&str>, is_tuesday: bool, age: Result<u8, ParseIntError>) -> String {
+    if let Some(color) = favorite {
+        color.to_string()
+    } else if is_tuesday {
+        "green".to_string()
+    } else if let Ok(age) = age {
+        if age > 30 { "purple".to_string() } else { "orange".to_string() }
+    } else {
+        "blue".to_string()
+    }
+}
+
+/// "Ferris:7" -> Some(("Ferris", 7)). No ':' or a bad number -> None.
+/// Use let...else for both checks.
+fn parse_score(line: &str) -> Option<(&str, u32)> {
+    let Some((name, score)) = line.split_once(':') else {
+        return None;
+    };
+    let Ok(score) = score.parse::<u32>() else {
+        return None;
+    };
+    Some((name, score))
+}
+
+fn main() {
+    println!("{}", background(None, false, "34".parse()));
+    println!("{:?}", parse_score("Ferris:7"));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn favorite_wins() {
+        assert_eq!(background(Some("red"), true, "40".parse()), "red");
+    }
+
+    #[test]
+    fn tuesday_then_age() {
+        assert_eq!(background(None, true, "40".parse()), "green");
+        assert_eq!(background(None, false, "34".parse()), "purple");
+        assert_eq!(background(None, false, "12".parse()), "orange");
+        assert_eq!(background(None, false, "old".parse()), "blue");
+    }
+
+    #[test]
+    fn scores() {
+        assert_eq!(parse_score("Ferris:7"), Some(("Ferris", 7)));
+        assert_eq!(parse_score("Corro:0"), Some(("Corro", 0)));
+        assert_eq!(parse_score("no colon"), None);
+        assert_eq!(parse_score("Ferris:lots"), None);
+    }
+}
+'''
+hints = [
+    "background is one `if let ... else if ... else if let ... else` chain. parse_score needs two `let ... else { return None; };` lines.",
+    "Start background with `if let Some(color) = favorite { color.to_string() }`. In parse_score, first `split_once(':')`, then `parse::<u32>()`, each with `let ... else`.",
+    "```rust\nlet Some((name, score)) = line.split_once(':') else {\n    return None;\n};\nlet Ok(score) = score.parse::<u32>() else {\n    return None;\n};\nSome((name, score))\n```",
+]
+
+[[level]]
+id = "10.3"
 title = "Might not match"
 kind = "fix"
 book = ["19.2"]
-about = "Some patterns can fail (refutable) and some can't."
+xp = 40
+goal = '''Some lines have no words. Handle that case, so it prints:
+first word: hello
+no words
+first word: crab'''
+lesson = '''
+Patterns come in two flavors:
 
-[[planned]]
+- **Irrefutable**: always matches. `x`, `(a, b)` for a pair, `Point { x, y }`.
+- **Refutable**: might not match. `Some(x)` fails on `None`, `Ok(v)` fails on `Err`.
+
+A plain `let` and a `for` loop need **irrefutable** patterns, because there's nothing sensible to do if the value doesn't fit:
+
+```rust
+let Some(word) = first_word(line);   // error[E0005]: refutable pattern in local binding
+```
+
+For a refutable pattern, say what happens when it fails, with `if let`, `let...else` or `match`. (The reverse, `if let x = 5`, compiles but warns: that `if` can never be false.)
+'''
+c_compare = '''
+In C, forgetting the `NULL` case compiles and crashes later. Rust refuses to compile a `let` that might not match.
+'''
+py_compare = '''
+Like `a, b = [1]` raising `ValueError` at runtime, except Rust catches it at compile time.
+'''
+check = "output"
+expected_output = '''
+first word: hello
+no words
+first word: crab
+'''
+starter = '''
+fn first_word(text: &str) -> Option<&str> {
+    text.split_whitespace().next()
+}
+
+fn main() {
+    let lines = ["hello world", "", "  crab  "];
+    for line in lines {
+        let Some(word) = first_word(line);
+        println!("first word: {word}");
+    }
+}
+'''
+solution = '''
+fn first_word(text: &str) -> Option<&str> {
+    text.split_whitespace().next()
+}
+
+fn main() {
+    let lines = ["hello world", "", "  crab  "];
+    for line in lines {
+        let Some(word) = first_word(line) else {
+            println!("no words");
+            continue;
+        };
+        println!("first word: {word}");
+    }
+}
+'''
+hints = [
+    "`Some(word)` doesn't match `None`, so a plain `let` can't use it. What should happen when the line is empty?",
+    "Add an `else` block to that `let`: print `no words`, then `continue` to the next line. (`if let` / `else` works too.)",
+    "```rust\nlet Some(word) = first_word(line) else {\n    println!(\"no words\");\n    continue;\n};\n```",
+]
+
+[[level]]
+id = "10.4"
 title = "The pattern toolkit"
 kind = "fill"
 book = ["19.3"]
-about = "Ranges, |, and taking apart structs, enums and nested values."
+xp = 45
+goal = "Sort rocks by weight and characters by kind, using literals, | and ranges in match arms."
+lesson = '''
+A `match` arm can match much more than one value:
 
-[[planned]]
+```rust
+match n {
+    0 => "zero",            // a literal
+    1 | 2 => "a couple",    // | means "or"
+    3..=9 => "a few",       // an inclusive range
+    _ => "lots",            // anything else
+}
+```
+
+Ranges work on numbers and on `char`s:
+
+```rust
+match c {
+    'a'..='j' => "early letter",
+    'k'..='z' => "late letter",
+    _ => "something else",
+}
+```
+
+Arms are tried **from top to bottom**, and the first that matches wins. That lets an early, specific arm (like the vowels) take priority over a later, wider one (all letters).
+'''
+c_compare = '''
+Like a `switch` with case ranges and fallthrough lists built in, but no `break` to forget, and the compiler checks that every value is covered.
+'''
+py_compare = '''
+Python's `match` has `|` (`case 1 | 2:`) but no ranges; you'd need a guard like `case n if 3 <= n <= 9:`.
+'''
+check = "tests"
+starter = '''
+/// 0 -> "dust", 1 or 2 -> "pebble", 3 to 9 -> "rock", anything bigger -> "boulder"
+fn sort_rock(weight: u32) -> &'static str {
+    todo!()
+}
+
+/// a e i o u -> "vowel", other lowercase letters -> "consonant",
+/// '0' to '9' -> "digit", anything else -> "other"
+fn kind_of(c: char) -> &'static str {
+    todo!()
+}
+
+fn main() {
+    println!("{} {}", sort_rock(5), kind_of('e'));
+}
+'''
+solution = '''
+/// 0 -> "dust", 1 or 2 -> "pebble", 3 to 9 -> "rock", anything bigger -> "boulder"
+fn sort_rock(weight: u32) -> &'static str {
+    match weight {
+        0 => "dust",
+        1 | 2 => "pebble",
+        3..=9 => "rock",
+        _ => "boulder",
+    }
+}
+
+/// a e i o u -> "vowel", other lowercase letters -> "consonant",
+/// '0' to '9' -> "digit", anything else -> "other"
+fn kind_of(c: char) -> &'static str {
+    match c {
+        'a' | 'e' | 'i' | 'o' | 'u' => "vowel",
+        'a'..='z' => "consonant",
+        '0'..='9' => "digit",
+        _ => "other",
+    }
+}
+
+fn main() {
+    println!("{} {}", sort_rock(5), kind_of('e'));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rocks() {
+        assert_eq!(sort_rock(0), "dust");
+        assert_eq!(sort_rock(1), "pebble");
+        assert_eq!(sort_rock(2), "pebble");
+        assert_eq!(sort_rock(3), "rock");
+        assert_eq!(sort_rock(9), "rock");
+        assert_eq!(sort_rock(10), "boulder");
+        assert_eq!(sort_rock(500), "boulder");
+    }
+
+    #[test]
+    fn characters() {
+        assert_eq!(kind_of('a'), "vowel");
+        assert_eq!(kind_of('u'), "vowel");
+        assert_eq!(kind_of('b'), "consonant");
+        assert_eq!(kind_of('z'), "consonant");
+        assert_eq!(kind_of('0'), "digit");
+        assert_eq!(kind_of('9'), "digit");
+        assert_eq!(kind_of('A'), "other");
+        assert_eq!(kind_of('?'), "other");
+    }
+}
+'''
+hints = [
+    "Both functions are a single `match`. Use `|` to list several values in one arm and `..=` for ranges.",
+    "Put the vowels arm (`'a' | 'e' | 'i' | 'o' | 'u'`) before the `'a'..='z'` arm, since the first matching arm wins.",
+    "```rust\nmatch weight {\n    0 => \"dust\",\n    1 | 2 => \"pebble\",\n    3..=9 => \"rock\",\n    _ => \"boulder\",\n}\n```",
+]
+
+[[level]]
+id = "10.5"
+title = "Taking things apart"
+kind = "fill"
+book = ["19.3"]
+xp = 50
+goal = "Use struct, enum and nested patterns to describe points and messages."
+lesson = '''
+Patterns can take apart structs and enums, and you can mix in literals:
+
+```rust
+match p {
+    Point { x: 0, y: 0 } => "the origin".to_string(),
+    Point { x, y: 0 } => format!("on the x axis at {x}"),   // `x` is short for `x: x`
+    Point { x, y } => format!("at ({x}, {y})"),
+}
+```
+
+They **nest** as deep as your data goes:
+
+```rust
+match msg {
+    Message::Move { x, y } => ...,
+    Message::ChangeColor(Color::Rgb(r, g, b)) => ...,   // an enum inside an enum
+    ...
+}
+```
+
+Matching on a reference (`&Point`) works with the same patterns; the names just become references to the parts.
+'''
+c_compare = '''
+Instead of checking a tag field and then reading the right union member by hand, one pattern checks the variant **and** pulls out its fields, safely.
+'''
+py_compare = '''
+Like Python's class patterns (`case Point(x=0, y=0):`), and they nest the same way.
+'''
+check = "tests"
+starter = '''
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+enum Color {
+    Rgb(u8, u8, u8),
+    Hsv(u16, u8, u8),
+}
+
+enum Message {
+    Quit,
+    Move { x: i32, y: i32 },
+    Write(String),
+    ChangeColor(Color),
+}
+
+/// "the origin", "on the x axis at 3", "on the y axis at -2", or "at (1, 2)"
+fn locate(p: &Point) -> String {
+    todo!()
+}
+
+/// "quit", "move to 3,4", "write: hi", "rgb 255 0 0" or "hsv 120 50 50"
+fn describe(msg: &Message) -> String {
+    todo!()
+}
+
+fn main() {
+    println!("{}", locate(&Point { x: 3, y: 0 }));
+    println!("{}", describe(&Message::Move { x: 3, y: 4 }));
+}
+'''
+solution = '''
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+enum Color {
+    Rgb(u8, u8, u8),
+    Hsv(u16, u8, u8),
+}
+
+enum Message {
+    Quit,
+    Move { x: i32, y: i32 },
+    Write(String),
+    ChangeColor(Color),
+}
+
+/// "the origin", "on the x axis at 3", "on the y axis at -2", or "at (1, 2)"
+fn locate(p: &Point) -> String {
+    match p {
+        Point { x: 0, y: 0 } => "the origin".to_string(),
+        Point { x, y: 0 } => format!("on the x axis at {x}"),
+        Point { x: 0, y } => format!("on the y axis at {y}"),
+        Point { x, y } => format!("at ({x}, {y})"),
+    }
+}
+
+/// "quit", "move to 3,4", "write: hi", "rgb 255 0 0" or "hsv 120 50 50"
+fn describe(msg: &Message) -> String {
+    match msg {
+        Message::Quit => "quit".to_string(),
+        Message::Move { x, y } => format!("move to {x},{y}"),
+        Message::Write(text) => format!("write: {text}"),
+        Message::ChangeColor(Color::Rgb(r, g, b)) => format!("rgb {r} {g} {b}"),
+        Message::ChangeColor(Color::Hsv(h, s, v)) => format!("hsv {h} {s} {v}"),
+    }
+}
+
+fn main() {
+    println!("{}", locate(&Point { x: 3, y: 0 }));
+    println!("{}", describe(&Message::Move { x: 3, y: 4 }));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn points() {
+        assert_eq!(locate(&Point { x: 0, y: 0 }), "the origin");
+        assert_eq!(locate(&Point { x: 3, y: 0 }), "on the x axis at 3");
+        assert_eq!(locate(&Point { x: 0, y: -2 }), "on the y axis at -2");
+        assert_eq!(locate(&Point { x: 1, y: 2 }), "at (1, 2)");
+    }
+
+    #[test]
+    fn messages() {
+        assert_eq!(describe(&Message::Quit), "quit");
+        assert_eq!(describe(&Message::Move { x: 3, y: 4 }), "move to 3,4");
+        assert_eq!(describe(&Message::Write("hi".to_string())), "write: hi");
+        assert_eq!(describe(&Message::ChangeColor(Color::Rgb(255, 0, 0))), "rgb 255 0 0");
+        assert_eq!(describe(&Message::ChangeColor(Color::Hsv(120, 50, 50))), "hsv 120 50 50");
+    }
+}
+'''
+hints = [
+    "locate needs four arms, from most specific (both 0) to most general. describe needs one arm per variant, and two for ChangeColor.",
+    "Mix literals and names in one pattern: `Point { x, y: 0 }` matches only when y is 0 and names x. Nest enums: `Message::ChangeColor(Color::Rgb(r, g, b))`.",
+    "```rust\nmatch p {\n    Point { x: 0, y: 0 } => \"the origin\".to_string(),\n    Point { x, y: 0 } => format!(\"on the x axis at {x}\"),\n    Point { x: 0, y } => format!(\"on the y axis at {y}\"),\n    Point { x, y } => format!(\"at ({x}, {y})\"),\n}\n```",
+]
+
+[[level]]
+id = "10.6"
 title = "Ignore it, guard it, name it"
 kind = "fill"
 book = ["19.3"]
-about = "_, .., match guards and @ bindings."
+xp = 50
+goal = "Use .., _, match guards and @ bindings to finish four small functions."
+lesson = '''
+Four more tools:
 
-[[planned]]
+**Ignore** parts you don't need: `_` skips one value, `..` skips all the rest.
+
+```rust
+let (first, .., last) = (1, 2, 3, 4, 5);   // first = 1, last = 5
+```
+
+**Guard** an arm with an extra condition:
+
+```rust
+match n {
+    Some(x) if x < 0 => "negative",
+    Some(_) => "zero or more",
+    None => "nothing",
+}
+```
+
+**Name** a value while testing it with `@`:
+
+```rust
+match age {
+    kid @ 0..=12 => format!("child ({kid})"),
+    ...
+}
+```
+
+Without `@` you could test the range *or* keep the value, but not both.
+'''
+c_compare = '''
+A guard is an `if` folded into a `case`. `@` saves you from repeating the value you just switched on.
+'''
+py_compare = '''
+Python has guards (`case x if x < 0:`), and `@` is like `case int(n) as age:` with the `as` name.
+'''
+check = "tests"
+starter = '''
+/// The first plus the last of five numbers. Use (first, .., last).
+fn ends(numbers: (i32, i32, i32, i32, i32)) -> i32 {
+    todo!()
+}
+
+/// 0-12 -> "child (7)", 13-19 -> "teen (15)", anything else -> "adult (40)". Use @.
+fn ticket(age: u32) -> String {
+    todo!()
+}
+
+/// None -> "nothing", negative -> "negative", even -> "even", odd -> "odd". Use guards.
+fn parity(n: Option<i32>) -> &'static str {
+    todo!()
+}
+
+/// A setting that is already set can't be overwritten: keep it.
+/// Otherwise the new value wins (even if it is None). Use _ in the patterns.
+fn update(current: Option<i32>, new: Option<i32>) -> Option<i32> {
+    todo!()
+}
+
+fn main() {
+    println!("{} {} {}", ends((1, 2, 3, 4, 5)), ticket(7), parity(Some(4)));
+    println!("{:?}", update(Some(3), Some(5)));
+}
+'''
+solution = '''
+/// The first plus the last of five numbers. Use (first, .., last).
+fn ends(numbers: (i32, i32, i32, i32, i32)) -> i32 {
+    let (first, .., last) = numbers;
+    first + last
+}
+
+/// 0-12 -> "child (7)", 13-19 -> "teen (15)", anything else -> "adult (40)". Use @.
+fn ticket(age: u32) -> String {
+    match age {
+        kid @ 0..=12 => format!("child ({kid})"),
+        teen @ 13..=19 => format!("teen ({teen})"),
+        adult => format!("adult ({adult})"),
+    }
+}
+
+/// None -> "nothing", negative -> "negative", even -> "even", odd -> "odd". Use guards.
+fn parity(n: Option<i32>) -> &'static str {
+    match n {
+        None => "nothing",
+        Some(x) if x < 0 => "negative",
+        Some(x) if x % 2 == 0 => "even",
+        Some(_) => "odd",
+    }
+}
+
+/// A setting that is already set can't be overwritten: keep it.
+/// Otherwise the new value wins (even if it is None). Use _ in the patterns.
+fn update(current: Option<i32>, new: Option<i32>) -> Option<i32> {
+    match (current, new) {
+        (Some(_), Some(_)) => current,
+        _ => new,
+    }
+}
+
+fn main() {
+    println!("{} {} {}", ends((1, 2, 3, 4, 5)), ticket(7), parity(Some(4)));
+    println!("{:?}", update(Some(3), Some(5)));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn first_and_last() {
+        assert_eq!(ends((1, 2, 3, 4, 5)), 6);
+        assert_eq!(ends((10, 0, 0, 0, -3)), 7);
+    }
+
+    #[test]
+    fn tickets() {
+        assert_eq!(ticket(0), "child (0)");
+        assert_eq!(ticket(12), "child (12)");
+        assert_eq!(ticket(15), "teen (15)");
+        assert_eq!(ticket(40), "adult (40)");
+    }
+
+    #[test]
+    fn guards() {
+        assert_eq!(parity(None), "nothing");
+        assert_eq!(parity(Some(-3)), "negative");
+        assert_eq!(parity(Some(4)), "even");
+        assert_eq!(parity(Some(0)), "even");
+        assert_eq!(parity(Some(7)), "odd");
+    }
+
+    #[test]
+    fn settings() {
+        assert_eq!(update(Some(3), Some(5)), Some(3));
+        assert_eq!(update(None, Some(5)), Some(5));
+        assert_eq!(update(Some(3), None), None);
+        assert_eq!(update(None, None), None);
+    }
+}
+'''
+hints = [
+    "ends is a one-line `let` pattern. ticket and parity are matches. update matches on the pair `(current, new)`.",
+    "ticket: `kid @ 0..=12 => ...`. parity: `Some(x) if x < 0 => ...`. update: `(Some(_), Some(_)) => current` and `_ => new`.",
+    "```rust\nlet (first, .., last) = numbers;\nfirst + last\n```\n```rust\nmatch (current, new) {\n    (Some(_), Some(_)) => current,\n    _ => new,\n}\n```",
+]
+
+[[level]]
+id = "10.7"
+title = "Who does the guard guard?"
+kind = "predict"
+book = ["19.3"]
+xp = 25
+goal = "What does this print?"
+lesson = '''
+When an arm has several patterns joined with `|`, a guard applies to **all** of them, not just the last:
+
+```rust
+4 | 5 | 6 if y => ...
+// means  (4 | 5 | 6) if y
+// not    4 | 5 | (6 if y)
+```
+
+And `n @ 5..=7` matches any value from 5 to 7 and names it `n`.
+'''
+c_compare = '''
+Think of it as `case 4: case 5: case 6: if (y) { ... }`, where the `if` covers all three cases.
+'''
+py_compare = '''
+The same rule as Python's `case 4 | 5 | 6 if y:`: the guard checks the whole pattern.
+'''
+starter = '''
+fn main() {
+    let y = false;
+    for x in [4, 5, 6, 7] {
+        match x {
+            4 | 5 | 6 if y => println!("{x}: yes"),
+            n @ 5..=7 => println!("{n}: in range"),
+            _ => println!("{x}: no"),
+        }
+    }
+}
+'''
+choices = [
+    "4: yes / 5: yes / 6: in range / 7: in range",
+    "4: no / 5: in range / 6: in range / 7: in range",
+    "It doesn't compile: 5 and 6 are matched by two arms",
+    "4: no / 5: no / 6: no / 7: in range",
+]
+answer = 1
+expected_output = '''
+4: no
+5: in range
+6: in range
+7: in range
+'''
+explanation = "The guard `if y` covers all of `4 | 5 | 6`, and `y` is false, so the first arm never runs. 5, 6 and 7 fall into `n @ 5..=7`; 4 falls through to `_`. Overlapping arms are fine: the first one that matches wins."
+
+[[level]]
+id = "10.8"
 title = "BOSS: The command parser"
 kind = "boss"
 book = ["19.1", "19.3"]
-about = "Turn typed commands into enums using patterns alone."
+xp = 120
+goal = '''Write parse: turn typed adventure commands like "go north" or "take 3 coins"
+into Command values, with a ParseError for anything that doesn't fit.'''
+lesson = '''
+**Boss fight!** A text adventure reads lines like these:
+
+| Typed | Result |
+|---|---|
+| `look` or `l` | `Command::Look` |
+| `go north` (or `n`, `south`/`s`, `east`/`e`, `west`/`w`) | `Command::Go(Dir::North)` |
+| `take lamp` | `Command::Take { item: "lamp", count: 1 }` |
+| `take 3 coins` | `Command::Take { item: "coins", count: 3 }` |
+| `drop lamp` | `Command::Drop("lamp")` |
+| `quit` or `q` | `Command::Quit` |
+
+Errors: an empty line is `Empty`; a bad direction is `BadDirection(word)`; a count that isn't a number of at least 1 is `BadCount(word)`; anything else is `UnknownVerb(first word)`. Upper and lower case both work.
+
+The new trick: **slice patterns**. Split the line into a `Vec<&str>` and match its shape:
+
+```rust
+let words: Vec<&str> = line.split_whitespace().collect();
+match words.as_slice() {
+    [] => ...,                       // no words
+    ["look" | "l"] => ...,           // exactly one word
+    ["go", dir] => ...,              // "go" plus one more word, named dir
+    [verb, ..] => ...,               // anything else; verb is the first word
+}
+```
+
+To check a count, match the parse result: `Ok(n @ 1..)` matches any number from 1 up.
+'''
+c_compare = '''
+In C this is a pile of `strtok` and `strcmp` calls. Here the shape of the command *is* the code.
+'''
+py_compare = '''
+Python 3.10 can do this too: `match line.split(): case ["go", direction]: ...`. Rust also checks that you handled every shape.
+'''
+check = "tests"
+starter = '''
+#[derive(Debug, PartialEq)]
+enum Dir {
+    North,
+    South,
+    East,
+    West,
+}
+
+#[derive(Debug, PartialEq)]
+enum Command {
+    Look,
+    Go(Dir),
+    Take { item: String, count: u32 },
+    Drop(String),
+    Quit,
+}
+
+#[derive(Debug, PartialEq)]
+enum ParseError {
+    Empty,
+    UnknownVerb(String),
+    BadDirection(String),
+    BadCount(String),
+}
+
+/// "north" or "n" -> Dir::North, and so on. Anything else is BadDirection.
+fn direction(word: &str) -> Result<Dir, ParseError> {
+    todo!()
+}
+
+fn parse(line: &str) -> Result<Command, ParseError> {
+    todo!()
+}
+
+fn main() {
+    for line in ["look", "go north", "take 3 coins", "dance"] {
+        println!("{line:>12} -> {:?}", parse(line));
+    }
+}
+'''
+solution = '''
+#[derive(Debug, PartialEq)]
+enum Dir {
+    North,
+    South,
+    East,
+    West,
+}
+
+#[derive(Debug, PartialEq)]
+enum Command {
+    Look,
+    Go(Dir),
+    Take { item: String, count: u32 },
+    Drop(String),
+    Quit,
+}
+
+#[derive(Debug, PartialEq)]
+enum ParseError {
+    Empty,
+    UnknownVerb(String),
+    BadDirection(String),
+    BadCount(String),
+}
+
+/// "north" or "n" -> Dir::North, and so on. Anything else is BadDirection.
+fn direction(word: &str) -> Result<Dir, ParseError> {
+    match word {
+        "north" | "n" => Ok(Dir::North),
+        "south" | "s" => Ok(Dir::South),
+        "east" | "e" => Ok(Dir::East),
+        "west" | "w" => Ok(Dir::West),
+        other => Err(ParseError::BadDirection(other.to_string())),
+    }
+}
+
+fn parse(line: &str) -> Result<Command, ParseError> {
+    let line = line.to_lowercase();
+    let words: Vec<&str> = line.split_whitespace().collect();
+    match words.as_slice() {
+        [] => Err(ParseError::Empty),
+        ["look" | "l"] => Ok(Command::Look),
+        ["go", dir] => Ok(Command::Go(direction(dir)?)),
+        ["take", item] => Ok(Command::Take { item: item.to_string(), count: 1 }),
+        ["take", count, item] => match count.parse::<u32>() {
+            Ok(n @ 1..) => Ok(Command::Take { item: item.to_string(), count: n }),
+            _ => Err(ParseError::BadCount(count.to_string())),
+        },
+        ["drop", item] => Ok(Command::Drop(item.to_string())),
+        ["quit" | "q"] => Ok(Command::Quit),
+        [verb, ..] => Err(ParseError::UnknownVerb(verb.to_string())),
+    }
+}
+
+fn main() {
+    for line in ["look", "go north", "take 3 coins", "dance"] {
+        println!("{line:>12} -> {:?}", parse(line));
+    }
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn take(item: &str, count: u32) -> Result<Command, ParseError> {
+        Ok(Command::Take { item: item.to_string(), count })
+    }
+
+    #[test]
+    fn simple_commands() {
+        assert_eq!(parse("look"), Ok(Command::Look));
+        assert_eq!(parse("l"), Ok(Command::Look));
+        assert_eq!(parse("quit"), Ok(Command::Quit));
+        assert_eq!(parse("q"), Ok(Command::Quit));
+        assert_eq!(parse("  LOOK  "), Ok(Command::Look));
+    }
+
+    #[test]
+    fn going_places() {
+        assert_eq!(parse("go north"), Ok(Command::Go(Dir::North)));
+        assert_eq!(parse("Go S"), Ok(Command::Go(Dir::South)));
+        assert_eq!(parse("go e"), Ok(Command::Go(Dir::East)));
+        assert_eq!(parse("go west"), Ok(Command::Go(Dir::West)));
+        assert_eq!(parse("go up"), Err(ParseError::BadDirection("up".to_string())));
+    }
+
+    #[test]
+    fn items() {
+        assert_eq!(parse("take lamp"), take("lamp", 1));
+        assert_eq!(parse("take 3 coins"), take("coins", 3));
+        assert_eq!(parse("take 0 coins"), Err(ParseError::BadCount("0".to_string())));
+        assert_eq!(parse("take many coins"), Err(ParseError::BadCount("many".to_string())));
+        assert_eq!(parse("drop lamp"), Ok(Command::Drop("lamp".to_string())));
+    }
+
+    #[test]
+    fn nonsense() {
+        assert_eq!(parse(""), Err(ParseError::Empty));
+        assert_eq!(parse("   "), Err(ParseError::Empty));
+        assert_eq!(parse("dance wildly"), Err(ParseError::UnknownVerb("dance".to_string())));
+        assert_eq!(parse("look around please"), Err(ParseError::UnknownVerb("look".to_string())));
+    }
+}
+'''
+hints = [
+    "Lowercase the line, split it into `words: Vec<&str>`, then `match words.as_slice()` with one arm per command shape. Finish with `[verb, ..]` for everything else.",
+    "`[\"go\", dir] => Ok(Command::Go(direction(dir)?))` uses `?` to pass a BadDirection up. For `[\"take\", count, item]`, match `count.parse::<u32>()` with an `Ok(n @ 1..)` arm and a `_` arm.",
+    "```rust\nlet line = line.to_lowercase();\nlet words: Vec<&str> = line.split_whitespace().collect();\nmatch words.as_slice() {\n    [] => Err(ParseError::Empty),\n    [\"look\" | \"l\"] => Ok(Command::Look),\n    [\"go\", dir] => Ok(Command::Go(direction(dir)?)),\n    [\"take\", item] => Ok(Command::Take { item: item.to_string(), count: 1 }),\n    [\"take\", count, item] => match count.parse::<u32>() {\n        Ok(n @ 1..) => Ok(Command::Take { item: item.to_string(), count: n }),\n        _ => Err(ParseError::BadCount(count.to_string())),\n    },\n    [\"drop\", item] => Ok(Command::Drop(item.to_string())),\n    [\"quit\" | \"q\"] => Ok(Command::Quit),\n    [verb, ..] => Err(ParseError::UnknownVerb(verb.to_string())),\n}\n```",
+]

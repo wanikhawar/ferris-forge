@@ -2,46 +2,613 @@ id = 14
 name = "Lifetime Labyrinth"
 blurb = "How long does a reference live?"
 
-# Placeholder island: these levels are planned but not built yet.
-
-[[planned]]
+[[level]]
+id = "14.1"
 title = "How long does it live?"
 kind = "predict"
 book = ["10.3"]
-about = "The borrow checker compares how long values live."
+xp = 25
+goal = "Does this compile? If so, what does it print?"
+lesson = '''
+Every reference has a **lifetime**: the stretch of code where it's valid. A reference must never outlive the value it points to.
 
-[[planned]]
+The **borrow checker** compares lifetimes. Think of them as bars beside the code:
+
+```text
+let r;                 // ---------+-- 'a (r)
+{                      //          |
+    let x = 5;         // -+-- 'b  |  (x)
+    r = &x;            //  |       |
+}                      // -+       |   x is dropped here
+println!("{r}");       //          |   r is used here
+                       // ---------+
+```
+
+`r` lives in `'a`, but it points at `x`, which only lives in the shorter `'b`. Using `r` after `x` is gone would read freed memory.
+'''
+c_compare = '''
+In C, returning or keeping a pointer to a dead local compiles fine and becomes a dangling pointer. Rust catches it at compile time.
+'''
+py_compare = '''
+Python keeps objects alive as long as anything refers to them (garbage collection). Rust has no GC, so it proves at compile time that references stay valid.
+'''
+starter = '''
+fn main() {
+    let r;
+    {
+        let x = 5;
+        r = &x;
+    }
+    println!("r: {r}");
+}
+'''
+choices = [
+    "r: 5",
+    "It doesn't compile: x doesn't live long enough",
+    "r: followed by whatever garbage is in that memory",
+    "It compiles, then panics: x was already freed",
+]
+answer = 1
+compile_fails = true
+explanation = "`x` is dropped at the inner `}`, but `r` is used after that. Error E0597: `x` does not live long enough. Rust never lets a reference outlive its value, so dangling pointers can't happen."
+
+[[level]]
+id = "14.2"
 title = "The longest string"
 kind = "fix"
 book = ["10.3"]
-about = "Your first lifetime annotation: 'a."
+xp = 45
+goal = '''Add the lifetime annotation longest needs, so it prints:
+The longest string is abcd'''
+lesson = '''
+This function returns one of its two references, but which one depends on the values:
 
-[[planned]]
+```rust
+fn longest(x: &str, y: &str) -> &str {
+    if x.len() > y.len() { x } else { y }
+}
+```
+
+The compiler can't tell whether the result borrows from `x` or `y`, so it can't check how long the result is valid. You tell it with a **lifetime parameter**:
+
+```rust
+fn longest<'a>(x: &'a str, y: &'a str) -> &'a str
+```
+
+Read it as: "for some lifetime `'a`, both inputs live at least that long, and so does the result." In practice the result is valid as long as the **shorter** of the two inputs.
+
+Lifetime annotations don't change how long anything lives. They only describe how the references relate, so the compiler can check every caller.
+'''
+c_compare = '''
+A C function returning one of two pointers relies on a comment ("valid while both inputs are"). `'a` is that comment, checked by the compiler.
+'''
+py_compare = '''
+Python has nothing like this, since the garbage collector keeps both strings alive. Rust needs to know the relationship to free memory safely.
+'''
+check = "output"
+expected_output = "The longest string is abcd"
+starter = '''
+fn longest(x: &str, y: &str) -> &str {
+    if x.len() > y.len() { x } else { y }
+}
+
+fn main() {
+    let string1 = String::from("abcd");
+    let string2 = "xyz";
+    let result = longest(string1.as_str(), string2);
+    println!("The longest string is {result}");
+}
+'''
+solution = '''
+fn longest<'a>(x: &'a str, y: &'a str) -> &'a str {
+    if x.len() > y.len() { x } else { y }
+}
+
+fn main() {
+    let string1 = String::from("abcd");
+    let string2 = "xyz";
+    let result = longest(string1.as_str(), string2);
+    println!("The longest string is {result}");
+}
+'''
+hints = [
+    "Error E0106: missing lifetime specifier. The compiler even suggests the fix.",
+    "Declare a lifetime after the name, `longest<'a>`, and put `'a` on both inputs and the output.",
+    "```rust\nfn longest<'a>(x: &'a str, y: &'a str) -> &'a str {\n```",
+]
+
+[[level]]
+id = "14.3"
+title = "The shorter one wins"
+kind = "fix"
+book = ["10.3"]
+xp = 45
+goal = '''longest's signature is right; the caller is wrong. Fix main so it prints:
+The longest string is long string is long'''
+lesson = '''
+With `fn longest<'a>(x: &'a str, y: &'a str) -> &'a str`, the result is only valid while **both** inputs are. The compiler uses the **shorter** lifetime:
+
+```rust
+let string1 = String::from("long string is long");
+let result;
+{
+    let string2 = String::from("xyz");
+    result = longest(string1.as_str(), string2.as_str());
+}                                   // string2 is dropped here
+println!("{result}");               // error[E0597]
+```
+
+You can see that `result` is `string1` here, but the compiler goes by the **signature**, not by the values: `result` might be `string2`, which is gone.
+
+Fixes: use the result while both strings are alive, or make `string2` live as long as `string1`.
+'''
+c_compare = '''
+In C this would compile, and it would even work, until someone changed the strings so the shorter-lived one won.
+'''
+py_compare = '''
+Python would keep `string2` alive because `result` refers to it. Rust doesn't do that; it asks you to arrange the scopes.
+'''
+check = "output"
+expected_output = "The longest string is long string is long"
+starter = '''
+fn longest<'a>(x: &'a str, y: &'a str) -> &'a str {
+    if x.len() > y.len() { x } else { y }
+}
+
+fn main() {
+    let string1 = String::from("long string is long");
+    let result;
+    {
+        let string2 = String::from("xyz");
+        result = longest(string1.as_str(), string2.as_str());
+    }
+    println!("The longest string is {result}");
+}
+'''
+solution = '''
+fn longest<'a>(x: &'a str, y: &'a str) -> &'a str {
+    if x.len() > y.len() { x } else { y }
+}
+
+fn main() {
+    let string1 = String::from("long string is long");
+    {
+        let string2 = String::from("xyz");
+        let result = longest(string1.as_str(), string2.as_str());
+        println!("The longest string is {result}");
+    }
+}
+'''
+hints = [
+    "`result` is used after `string2` is dropped, and `result` might point into `string2`.",
+    "Move the `println!` inside the inner block, so it runs while `string2` is still alive. (Or move `string2` out of the block.)",
+    "```rust\n{\n    let string2 = String::from(\"xyz\");\n    let result = longest(string1.as_str(), string2.as_str());\n    println!(\"The longest string is {result}\");\n}\n```",
+]
+
+[[level]]
+id = "14.4"
 title = "Structs that borrow"
 kind = "fill"
 book = ["10.3"]
-about = "Put references inside structs."
+xp = 50
+goal = "Finish Highlight, a struct that holds a slice of someone else's text, plus first_sentence and its methods."
+lesson = '''
+A struct can hold references, but then it needs a lifetime parameter:
 
-[[planned]]
+```rust
+struct Highlight<'a> {
+    part: &'a str,
+}
+```
+
+This says: "a `Highlight` can't outlive the text its `part` points into". The compiler then stops you from keeping a highlight after the book is gone.
+
+Methods need the lifetime declared after `impl`, like generics:
+
+```rust
+impl<'a> Highlight<'a> {
+    fn part(&self) -> &'a str {
+        self.part
+    }
+}
+```
+
+Returning `&'a str` (not just `&str`) means the slice can live as long as the original text, even after the `Highlight` itself is gone.
+'''
+c_compare = '''
+A C struct holding a `char*` into another buffer is a common source of bugs. The `'a` makes that dependency part of the type.
+'''
+py_compare = '''
+Like storing a slice of a string in an object, except Rust never copies the text, and still guarantees it's valid.
+'''
+check = "tests"
+starter = '''
+// TODO: add a lifetime parameter so Highlight can hold a &str
+struct Highlight {
+    part: &str,
+}
+
+// TODO: methods
+//   fn part(&self) -> &'a str          the highlighted text
+//   fn words(&self) -> usize           how many words it has
+
+/// The text up to and including the first '.', or the whole text if there is none.
+fn first_sentence(text: &str) -> Highlight {
+    todo!()
+}
+
+fn main() {
+    let novel = String::from("Call me Ferris. Some years ago...");
+    let h = first_sentence(&novel);
+    println!("{}", h.part);
+}
+'''
+solution = '''
+struct Highlight<'a> {
+    part: &'a str,
+}
+
+impl<'a> Highlight<'a> {
+    fn part(&self) -> &'a str {
+        self.part
+    }
+
+    fn words(&self) -> usize {
+        self.part.split_whitespace().count()
+    }
+}
+
+/// The text up to and including the first '.', or the whole text if there is none.
+fn first_sentence(text: &str) -> Highlight<'_> {
+    match text.find('.') {
+        Some(i) => Highlight { part: &text[..=i] },
+        None => Highlight { part: text },
+    }
+}
+
+fn main() {
+    let novel = String::from("Call me Ferris. Some years ago...");
+    let h = first_sentence(&novel);
+    println!("{}", h.part);
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn finds_the_first_sentence() {
+        let novel = String::from("Call me Ferris. Some years ago...");
+        let h = first_sentence(&novel);
+        assert_eq!(h.part(), "Call me Ferris.");
+        assert_eq!(h.words(), 3);
+    }
+
+    #[test]
+    fn no_full_stop() {
+        assert_eq!(first_sentence("just words").part(), "just words");
+    }
+
+    #[test]
+    fn the_part_outlives_the_highlight() {
+        let text = String::from("Short. Long sentence here.");
+        let part;
+        {
+            let h = first_sentence(&text);
+            part = h.part();
+        }
+        assert_eq!(part, "Short.");
+        assert_eq!(part.as_ptr(), text.as_ptr(), "the part is borrowed, not copied");
+    }
+}
+'''
+hints = [
+    "Write `struct Highlight<'a> { part: &'a str }` and an `impl<'a> Highlight<'a> { ... }` block with the two methods.",
+    "`part` returns `self.part`; `words` counts `self.part.split_whitespace()`. In first_sentence, `text.find('.')` gives the index of the dot: slice `&text[..=i]`.",
+    "```rust\nfn first_sentence(text: &str) -> Highlight<'_> {\n    match text.find('.') {\n        Some(i) => Highlight { part: &text[..=i] },\n        None => Highlight { part: text },\n    }\n}\n```\n(`'_` means \"the lifetime of the input\".)",
+]
+
+[[level]]
+id = "14.5"
 title = "Lifetimes you can skip"
-kind = "predict"
+kind = "quiz"
 book = ["10.3"]
-about = "Elision: when Rust works lifetimes out for you."
+xp = 20
+goal = "Which of these signatures won't compile without an explicit lifetime?"
+lesson = '''
+You've written many functions with references and no `'a`. That's **lifetime elision**: three rules the compiler applies to fill them in.
 
-[[planned]]
+1. Each reference parameter gets its own lifetime.
+2. If there's exactly **one** input lifetime, the output gets it.
+3. If one of the inputs is `&self` or `&mut self`, the output gets `self`'s lifetime.
+
+```rust
+fn first_word(s: &str) -> &str              // rule 2: the output borrows from s
+fn part(&self, announcement: &str) -> &str  // rule 3: the output borrows from self
+fn len(s: &str) -> usize                    // nothing to work out: no output reference
+```
+
+If the rules still leave an output reference without a lifetime, the compiler asks you to write it.
+'''
+c_compare = '''
+These rules are the conventions C programmers follow by habit ("the returned pointer points into the argument"), written down and checked.
+'''
+py_compare = '''
+No Python equivalent: these rules exist so you rarely have to write lifetimes at all.
+'''
+choices = [
+    "fn first_word(s: &str) -> &str",
+    "fn longest(x: &str, y: &str) -> &str",
+    "fn len(s: &str) -> usize",
+    "fn part(&self, other: &str) -> &str (a method)",
+]
+answer = 1
+explanation = "`longest` has two input references and no `self`, so none of the rules says which one the output borrows from. `first_word` has one input (rule 2), `part` has `&self` (rule 3), and `len` returns no reference."
+
+[[level]]
+id = "14.6"
 title = "Forever: 'static"
 kind = "predict"
 book = ["10.3"]
-about = "The longest lifetime, and why it's rarely the fix."
+xp = 25
+goal = "Does this compile? If so, what does it print?"
+lesson = '''
+One lifetime is special: **`'static`**, "valid for the whole program".
 
-[[planned]]
+Every string literal is a `&'static str`. The text is stored inside the program file itself, so it's never freed:
+
+```rust
+let s: &'static str = "I have a static lifetime.";
+```
+
+When the compiler complains that something doesn't live long enough, it may suggest `'static`. That's rarely the fix: most of the time the problem is a dangling reference, or a lifetime that needs to be connected to an input. Reach for `'static` only for data that really lives forever.
+'''
+c_compare = '''
+Like a pointer to a string literal or a `static` variable in C: it points into the program's own data, which never goes away.
+'''
+py_compare = '''
+Like a module-level constant string: it exists as long as the program runs.
+'''
+starter = '''
+fn pick(n: u32) -> &'static str {
+    match n {
+        1 => "one",
+        _ => "many",
+    }
+}
+
+fn main() {
+    let word;
+    {
+        let n = 1;
+        word = pick(n);
+    }
+    println!("{word}");
+}
+'''
+choices = [
+    "It doesn't compile: n doesn't live long enough",
+    "one",
+    "many",
+    "It doesn't compile: a function can't return a 'static reference",
+]
+answer = 1
+expected_output = "one"
+explanation = "`pick` returns a string literal, which lives for the whole program (`'static`). It doesn't borrow from `n` at all, so using `word` after `n` is gone is fine."
+
+[[level]]
+id = "14.7"
 title = "Ownership Inventory #3"
 kind = "predict"
 book = ["10.4"]
-about = "Checkpoint quiz: generics, traits and lifetimes."
+xp = 30
+goal = "Does this compile? If so, what does it print?"
+lesson = '''
+**Ownership Inventory #3**: a checkpoint from the Brown edition of the Rust Book, mixing references, lifetimes and collections.
 
-[[planned]]
+Remember: a function's signature tells the borrow checker everything. If the output has the same lifetime as an input, the output keeps that input **borrowed** for as long as the output is used.
+'''
+c_compare = '''
+In C, `best` would point into the vector's buffer, and `push` might move that buffer (realloc), leaving `best` dangling.
+'''
+py_compare = '''
+In Python this would just work, since `best` keeps the string object alive. Rust has to rule out the reallocation problem instead.
+'''
+starter = '''
+fn longest_name<'a>(names: &'a [String]) -> &'a String {
+    let mut best = &names[0];
+    for name in names {
+        if name.len() > best.len() {
+            best = name;
+        }
+    }
+    best
+}
+
+fn main() {
+    let mut names = vec![String::from("Ann"), String::from("Ferris")];
+    let best = longest_name(&names);
+    names.push(String::from("Bo"));
+    println!("{best}");
+}
+'''
+choices = [
+    "Ferris",
+    "It doesn't compile: names can't be changed while best still borrows it",
+    "Bo",
+    "It doesn't compile: longest_name needs 'static",
+]
+answer = 1
+compile_fails = true
+explanation = "`best` has lifetime `'a`, tied to the borrow of `names`, and it's used after `push`. So `names` is still borrowed when `push` needs to change it: error E0502. Pushing could reallocate the vector and leave `best` dangling."
+
+[[level]]
+id = "14.8"
 title = "BOSS: The text splitter"
 kind = "boss"
 book = ["10.3"]
-about = "Split text into pieces without copying it."
+xp = 120
+goal = '''Write a Splitter that hands out pieces of a text one at a time,
+plus longest_word and key_value, all without copying any text.'''
+lesson = '''
+**Boss fight!** Every function here returns slices that point into the **original** text, never copies. The tests check that.
+
+```rust
+struct Splitter<'a> {
+    rest: &'a str,     // the part not handed out yet
+    delim: char,
+}
+```
+
+1. **`Splitter::new(text, delim)`**.
+2. **`next_piece(&mut self) -> Option<&'a str>`**: the text up to the next `delim`, then move `rest` past it. Return `None` when nothing is left. `"a,b,,c"` gives `a`, `b`, an empty piece, then `c`.
+3. **`longest_word(text) -> Option<&str>`**: the longest word (split on whitespace; the first one wins a tie), `None` if there are no words.
+4. **`key_value(line) -> Option<(&str, &str)>`**: `"name = Ferris"` gives `("name", "Ferris")`, trimmed. No `=` gives `None`.
+
+Tips: `split_once(delim)` splits a `&str` at the first match. To know when the splitter is finished, keep `rest` as an `Option<&'a str>`, or add a `done: bool` field.
+'''
+c_compare = '''
+This is `strtok`, but safe: no writing `\0` into the buffer, no hidden static state, and the pieces can't outlive the text.
+'''
+py_compare = '''
+Like `str.split`, except no new strings are made: every piece is a view into the original.
+'''
+check = "tests"
+starter = '''
+struct Splitter<'a> {
+    rest: Option<&'a str>,
+    delim: char,
+}
+
+impl<'a> Splitter<'a> {
+    fn new(text: &'a str, delim: char) -> Splitter<'a> {
+        todo!()
+    }
+
+    fn next_piece(&mut self) -> Option<&'a str> {
+        todo!()
+    }
+}
+
+fn longest_word(text: &str) -> Option<&str> {
+    todo!()
+}
+
+fn key_value(line: &str) -> Option<(&str, &str)> {
+    todo!()
+}
+
+fn main() {
+    let mut s = Splitter::new("a,b,c", ',');
+    println!("{:?}", s.next_piece());
+}
+'''
+solution = '''
+struct Splitter<'a> {
+    rest: Option<&'a str>,
+    delim: char,
+}
+
+impl<'a> Splitter<'a> {
+    fn new(text: &'a str, delim: char) -> Splitter<'a> {
+        Splitter { rest: Some(text), delim }
+    }
+
+    fn next_piece(&mut self) -> Option<&'a str> {
+        let rest = self.rest?;
+        match rest.split_once(self.delim) {
+            Some((piece, after)) => {
+                self.rest = Some(after);
+                Some(piece)
+            }
+            None => {
+                self.rest = None;
+                Some(rest)
+            }
+        }
+    }
+}
+
+fn longest_word(text: &str) -> Option<&str> {
+    let mut best: Option<&str> = None;
+    for word in text.split_whitespace() {
+        match best {
+            Some(b) if b.len() >= word.len() => {}
+            _ => best = Some(word),
+        }
+    }
+    best
+}
+
+fn key_value(line: &str) -> Option<(&str, &str)> {
+    let (key, value) = line.split_once('=')?;
+    Some((key.trim(), value.trim()))
+}
+
+fn main() {
+    let mut s = Splitter::new("a,b,c", ',');
+    println!("{:?}", s.next_piece());
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn inside(text: &str, piece: &str) -> bool {
+        let start = text.as_ptr() as usize;
+        let p = piece.as_ptr() as usize;
+        p >= start && p + piece.len() <= start + text.len()
+    }
+
+    #[test]
+    fn splitting() {
+        let text = String::from("a,b,,c");
+        let mut s = Splitter::new(&text, ',');
+        assert_eq!(s.next_piece(), Some("a"));
+        assert_eq!(s.next_piece(), Some("b"));
+        assert_eq!(s.next_piece(), Some(""));
+        let last = s.next_piece().unwrap();
+        assert_eq!(last, "c");
+        assert!(inside(&text, last), "pieces must point into the text");
+        assert_eq!(s.next_piece(), None);
+        assert_eq!(s.next_piece(), None);
+    }
+
+    #[test]
+    fn pieces_outlive_the_splitter() {
+        let text = String::from("one two");
+        let first;
+        {
+            let mut s = Splitter::new(&text, ' ');
+            first = s.next_piece().unwrap();
+        }
+        assert_eq!(first, "one");
+    }
+
+    #[test]
+    fn longest() {
+        let text = String::from("the quick brown fox jumps");
+        let w = longest_word(&text).unwrap();
+        assert_eq!(w, "quick");
+        assert!(inside(&text, w));
+        assert_eq!(longest_word("   "), None);
+    }
+
+    #[test]
+    fn keys_and_values() {
+        let line = String::from(" name = Ferris ");
+        let (k, v) = key_value(&line).unwrap();
+        assert_eq!((k, v), ("name", "Ferris"));
+        assert!(inside(&line, v));
+        assert_eq!(key_value("no equals here"), None);
+        assert_eq!(key_value("a=b=c"), Some(("a", "b=c")));
+    }
+}
+'''
+hints = [
+    "`new` stores `Some(text)`. In `next_piece`, start with `let rest = self.rest?;` so a finished splitter returns None, then use `rest.split_once(self.delim)`.",
+    "If split_once finds the delimiter, keep `after` as the new rest and return the piece. If not, this is the last piece: set `self.rest = None` and return all of `rest`. key_value is `split_once('=')?` plus two `trim()`s.",
+    "```rust\nfn next_piece(&mut self) -> Option<&'a str> {\n    let rest = self.rest?;\n    match rest.split_once(self.delim) {\n        Some((piece, after)) => {\n            self.rest = Some(after);\n            Some(piece)\n        }\n        None => {\n            self.rest = None;\n            Some(rest)\n        }\n    }\n}\n```",
+]

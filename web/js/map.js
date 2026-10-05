@@ -199,7 +199,7 @@ export class WorldMap {
       btn.style.top = `${(y / H) * 100}%`;
       btn.style.width = `${(70 / W) * 100}%`;
       btn.style.height = `${(46 / H) * 100}%`;
-      btn.title = !w.available ? `${w.name} — coming soon: ${w.blurb}` : w.unlocked ? `${w.name} — ${w.blurb} (${w.done}/${levelCount(w)} cleared)` : `${w.name} — locked: clear the previous island first`;
+      btn.title = !w.available ? `${w.name} — coming soon: ${w.blurb}` : w.unlocked ? `${w.name} — ${w.blurb} (${w.done}/${levelCount(w)} cleared)` : `${w.name} — locked: clear the previous island first (you can read its lessons)`;
       btn.setAttribute("aria-label", btn.title);
       btn.addEventListener("click", () => this.onSelect(w));
       this.overlay.appendChild(btn);

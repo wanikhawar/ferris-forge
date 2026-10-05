@@ -8,13 +8,22 @@ async function request(method, url, body) {
   });
   if (res.status === 204) return null;
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  if (!res.ok) {
+    // No error message means the server doesn't know this request at all: usually a game
+    // server started before an update, serving pages that are newer than it is.
+    const err = new Error(data.error || (res.status === 404
+      ? "The game server is out of date. Restart it (Ctrl+C in its terminal, then cargo run) and reload this page."
+      : `Something went wrong on the game server (error ${res.status}).`));
+    err.status = res.status;
+    throw err;
+  }
   return data;
 }
 
 export const api = {
   state: () => request("GET", "/api/state"),
   level: id => request("GET", `/api/level/${encodeURIComponent(id)}`),
+  lesson: id => request("GET", `/api/lesson/${encodeURIComponent(id)}`),
   run: (id, code) => request("POST", "/api/run", { id, code }),
   play: (code, id) => request("POST", "/api/play", { code, id }),
   quiz: (id, choice) => request("POST", "/api/quiz", { id, choice }),
@@ -25,6 +34,7 @@ export const api = {
   saveSettings: s => request("POST", "/api/settings", s),
   models: () => request("GET", "/api/models"),
   testModel: (model, effort) => request("POST", "/api/models/test", { model, effort }),
+  refreshModels: () => request("POST", "/api/models/refresh"),
   explain: code => request("GET", `/api/explain/${encodeURIComponent(code)}`),
 
   /** Stream Ferris' reply; calls onEvent for each JSON event. */

@@ -2,58 +2,1043 @@ id = 13
 name = "Trait Tower"
 blurb = "Write code once, for many types."
 
-# Placeholder island: these levels are planned but not built yet.
-
-[[planned]]
+[[level]]
+id = "13.1"
 title = "One function, many types"
 kind = "fill"
 book = ["10.1"]
-about = "Generic functions with <T>."
+xp = 45
+goal = "Replace the two copy-pasted functions with one generic largest that works for numbers, chars and words."
+lesson = '''
+These two functions are the same apart from the type:
 
-[[planned]]
+```rust
+fn largest_i32(list: &[i32]) -> &i32 { ... }
+fn largest_char(list: &[char]) -> &char { ... }
+```
+
+A **generic** function takes a type parameter, written in angle brackets, and works for any type:
+
+```rust
+fn largest<T>(list: &[T]) -> &T { ... }
+```
+
+But "any type" is too much: comparing with `>` only works for types that **can be compared**. The compiler will tell you to add a **bound**:
+
+```rust
+fn largest<T: PartialOrd>(list: &[T]) -> &T { ... }
+```
+
+`T: PartialOrd` means "any type T that supports `<` and `>`". (You'll meet bounds properly in a few levels.)
+'''
+c_compare = '''
+Instead of a macro or `void*` with a comparison callback (like `qsort`), the compiler type-checks one generic function and builds a version per type.
+'''
+py_compare = '''
+Python functions already accept any type, and fail at runtime if `>` doesn't work. Rust checks at compile time that `T` supports `>`.
+'''
+check = "tests"
+starter = '''
+fn largest_i32(list: &[i32]) -> &i32 {
+    let mut largest = &list[0];
+    for item in list {
+        if item > largest {
+            largest = item;
+        }
+    }
+    largest
+}
+
+fn largest_char(list: &[char]) -> &char {
+    let mut largest = &list[0];
+    for item in list {
+        if item > largest {
+            largest = item;
+        }
+    }
+    largest
+}
+
+// TODO: one generic function that replaces both.
+fn largest<T>(list: &[T]) -> &T {
+    todo!()
+}
+
+fn main() {
+    println!("{} {}", largest_i32(&[34, 50, 25]), largest_char(&['y', 'm', 'a']));
+}
+'''
+solution = '''
+fn largest<T: PartialOrd>(list: &[T]) -> &T {
+    let mut largest = &list[0];
+    for item in list {
+        if item > largest {
+            largest = item;
+        }
+    }
+    largest
+}
+
+fn main() {
+    println!("{} {}", largest(&[34, 50, 25]), largest(&['y', 'm', 'a']));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn numbers() {
+        assert_eq!(*largest(&[34, 50, 25, 100, 65]), 100);
+        assert_eq!(*largest(&[-3, -1, -7]), -1);
+        assert_eq!(*largest(&[1.5, 0.5]), 1.5);
+    }
+
+    #[test]
+    fn chars_and_words() {
+        assert_eq!(*largest(&['y', 'm', 'a', 'q']), 'y');
+        assert_eq!(*largest(&["apple", "pear", "fig"]), "pear");
+    }
+}
+'''
+hints = [
+    "Copy the body of either function into `largest`. Then read the compiler's suggestion.",
+    "Comparing `item > largest` needs `T` to be comparable: write `fn largest<T: PartialOrd>(list: &[T]) -> &T`. You can delete the two old functions.",
+    "```rust\nfn largest<T: PartialOrd>(list: &[T]) -> &T {\n    let mut largest = &list[0];\n    for item in list {\n        if item > largest {\n            largest = item;\n        }\n    }\n    largest\n}\n```",
+]
+
+[[level]]
+id = "13.2"
 title = "Boxes for anything"
-kind = "fill"
+kind = "fix"
 book = ["10.1"]
-about = "Generic structs and enums like Point<T> and Option<T>."
+xp = 40
+goal = '''Make Point generic, and add a Pair whose two fields may have different types, so it prints:
+int point: (5, 10)
+float point: (1.5, 4)
+pair: (5, c)'''
+lesson = '''
+Structs can be generic too:
 
-[[planned]]
+```rust
+struct Point<T> {
+    x: T,
+    y: T,
+}
+
+let ints = Point { x: 5, y: 10 };       // Point<i32>
+let floats = Point { x: 1.0, y: 4.0 };  // Point<f64>
+```
+
+Both fields share **one** type `T`, so `Point { x: 5, y: 4.0 }` won't compile. For different types, use two parameters:
+
+```rust
+struct Pair<T, U> {
+    first: T,
+    second: U,
+}
+```
+
+You've used generic enums all along: `Option<T>` and `Result<T, E>` are defined exactly like this.
+'''
+c_compare = '''
+Without generics you'd write `PointInt` and `PointFloat`, or use a `union`. Here one definition makes a correctly typed struct for each use.
+'''
+py_compare = '''
+Like `class Point(Generic[T])` with type hints, except Rust enforces the types.
+'''
+check = "output"
+expected_output = '''
+int point: (5, 10)
+float point: (1.5, 4)
+pair: (5, c)
+'''
+starter = '''
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn main() {
+    let ints = Point { x: 5, y: 10 };
+    let floats = Point { x: 1.5, y: 4.0 };
+    let pair = Pair { first: 5, second: 'c' };
+    println!("int point: ({}, {})", ints.x, ints.y);
+    println!("float point: ({}, {})", floats.x, floats.y);
+    println!("pair: ({}, {})", pair.first, pair.second);
+}
+'''
+solution = '''
+struct Point<T> {
+    x: T,
+    y: T,
+}
+
+struct Pair<T, U> {
+    first: T,
+    second: U,
+}
+
+fn main() {
+    let ints = Point { x: 5, y: 10 };
+    let floats = Point { x: 1.5, y: 4.0 };
+    let pair = Pair { first: 5, second: 'c' };
+    println!("int point: ({}, {})", ints.x, ints.y);
+    println!("float point: ({}, {})", floats.x, floats.y);
+    println!("pair: ({}, {})", pair.first, pair.second);
+}
+'''
+hints = [
+    "`Point` only holds `i32`s. Give it a type parameter. `Pair` doesn't exist yet: it needs two.",
+    "Write `struct Point<T> { x: T, y: T }` and `struct Pair<T, U> { first: T, second: U }`.",
+    "```rust\nstruct Point<T> {\n    x: T,\n    y: T,\n}\n\nstruct Pair<T, U> {\n    first: T,\n    second: U,\n}\n```",
+]
+
+[[level]]
+id = "13.3"
 title = "Methods for everyone"
 kind = "fill"
 book = ["10.1"]
-about = "impl<T> blocks, and methods just for one type."
+xp = 45
+goal = "Add a method for every Point<T>, one only for Point<f64>, and a mixup that combines two points."
+lesson = '''
+To write methods for a generic struct, declare `T` after `impl` too:
 
-[[planned]]
+```rust
+impl<T> Point<T> {
+    fn x(&self) -> &T {
+        &self.x
+    }
+}
+```
+
+`impl<T>` means "for every `T`". You can also write methods for **one** concrete type only:
+
+```rust
+impl Point<f64> {
+    fn distance_from_origin(&self) -> f64 {
+        (self.x.powi(2) + self.y.powi(2)).sqrt()
+    }
+}
+```
+
+`Point<f64>` gets this method; `Point<i32>` doesn't.
+
+A method can even have its **own** type parameters, separate from the struct's:
+
+```rust
+impl<X1, Y1> Point2<X1, Y1> {
+    fn mixup<X2, Y2>(self, other: Point2<X2, Y2>) -> Point2<X1, Y2> { ... }
+}
+```
+'''
+c_compare = '''
+There's no direct C equivalent. Specializing `impl Point<f64>` is a bit like a function that only accepts the float version of a struct.
+'''
+py_compare = '''
+A method only for `Point[float]` has no real Python equivalent: there, every instance has every method.
+'''
+check = "tests"
+starter = '''
+struct Point<T> {
+    x: T,
+    y: T,
+}
+
+// TODO: for every Point<T>: fn x(&self) -> &T and fn y(&self) -> &T
+
+// TODO: only for Point<f64>: fn distance_from_origin(&self) -> f64
+
+struct Point2<X, Y> {
+    x: X,
+    y: Y,
+}
+
+impl<X1, Y1> Point2<X1, Y1> {
+    /// A new point with self's x and other's y.
+    fn mixup<X2, Y2>(self, other: Point2<X2, Y2>) -> Point2<X1, Y2> {
+        todo!()
+    }
+}
+
+fn main() {
+    let p = Point { x: 3.0, y: 4.0 };
+    println!("{}", p.x);
+}
+'''
+solution = '''
+struct Point<T> {
+    x: T,
+    y: T,
+}
+
+impl<T> Point<T> {
+    fn x(&self) -> &T {
+        &self.x
+    }
+
+    fn y(&self) -> &T {
+        &self.y
+    }
+}
+
+impl Point<f64> {
+    fn distance_from_origin(&self) -> f64 {
+        (self.x.powi(2) + self.y.powi(2)).sqrt()
+    }
+}
+
+struct Point2<X, Y> {
+    x: X,
+    y: Y,
+}
+
+impl<X1, Y1> Point2<X1, Y1> {
+    /// A new point with self's x and other's y.
+    fn mixup<X2, Y2>(self, other: Point2<X2, Y2>) -> Point2<X1, Y2> {
+        Point2 { x: self.x, y: other.y }
+    }
+}
+
+fn main() {
+    let p = Point { x: 3.0, y: 4.0 };
+    println!("{}", p.x);
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn getters_work_for_any_type() {
+        let p = Point { x: 5, y: 10 };
+        assert_eq!(*p.x(), 5);
+        assert_eq!(*p.y(), 10);
+        let words = Point { x: "left", y: "right" };
+        assert_eq!(*words.y(), "right");
+    }
+
+    #[test]
+    fn distance_for_floats() {
+        assert_eq!(Point { x: 3.0, y: 4.0 }.distance_from_origin(), 5.0);
+    }
+
+    #[test]
+    fn mixing() {
+        let a = Point2 { x: 5, y: 10.4 };
+        let b = Point2 { x: "Hello", y: 'c' };
+        let c = a.mixup(b);
+        assert_eq!(c.x, 5);
+        assert_eq!(c.y, 'c');
+    }
+}
+'''
+hints = [
+    "Write two impl blocks: `impl<T> Point<T> { ... }` with x and y, and `impl Point<f64> { ... }` with distance_from_origin.",
+    "The getters return `&self.x` and `&self.y`. The distance is `(self.x.powi(2) + self.y.powi(2)).sqrt()`. mixup builds `Point2 { x: self.x, y: other.y }`.",
+    "```rust\nimpl<T> Point<T> {\n    fn x(&self) -> &T {\n        &self.x\n    }\n\n    fn y(&self) -> &T {\n        &self.y\n    }\n}\n\nimpl Point<f64> {\n    fn distance_from_origin(&self) -> f64 {\n        (self.x.powi(2) + self.y.powi(2)).sqrt()\n    }\n}\n```",
+]
+
+[[level]]
+id = "13.4"
 title = "Generics are free"
 kind = "predict"
 book = ["10.1"]
-about = "The compiler makes a copy per type, so there's no slowdown."
+xp = 25
+goal = "One generic function, called with three types. What does this print?"
+lesson = '''
+Is generic code slower? **No.** When you compile, Rust looks at every type a generic is used with and writes a separate, specialized copy for each. This is called **monomorphization**.
 
-[[planned]]
+```rust
+fn describe<T: std::fmt::Debug>(item: T) -> String { ... }
+
+describe(5);        // the compiler writes describe_i32
+describe("five");   // ...and describe_str
+```
+
+The program runs exactly as if you had written each version by hand. You pay a little in compile time and program size, never in speed.
+
+`{:?}` (Debug formatting) shows values the way a programmer would write them, so strings appear **with quotes**.
+'''
+c_compare = '''
+Like C++ templates: one copy per type, no runtime cost. Unlike a `void*` API, nothing is looked up while the program runs.
+'''
+py_compare = '''
+Python checks types while running, for every call. Rust settles everything at compile time, so generic code is as fast as specific code.
+'''
+starter = '''
+fn describe<T: std::fmt::Debug>(item: T) -> String {
+    format!("<{:?}>", item)
+}
+
+fn main() {
+    println!("{}", describe(5));
+    println!("{}", describe("five"));
+    println!("{}", describe(Some(5.0)));
+}
+'''
+choices = [
+    "<5> / <five> / <5>",
+    "<5> / <\"five\"> / <Some(5.0)>",
+    "It doesn't compile: describe can only be used with one type",
+    "<5> / <\"five\"> / <Some(5)>",
+]
+answer = 1
+expected_output = '''
+<5>
+<"five">
+<Some(5.0)>
+'''
+explanation = "The compiler makes three versions of `describe`, one per type. Debug formatting puts quotes around strings and shows `Some(...)` and the `.0` of a float."
+
+[[level]]
+id = "13.5"
 title = "Teaching skills: traits"
 kind = "fill"
 book = ["10.2"]
-about = "Shared behavior many types can have, with default methods."
+xp = 50
+goal = "Implement the Summary trait for Tweet and NewsArticle; the article overrides the default summarize."
+lesson = '''
+A **trait** describes behavior that many types can share, like an interface:
 
-[[planned]]
+```rust
+pub trait Summary {
+    fn summarize_author(&self) -> String;   // each type must write this
+
+    fn summarize(&self) -> String {         // a default, written once
+        format!("(Read more from {}...)", self.summarize_author())
+    }
+}
+```
+
+Give a type that behavior with `impl Trait for Type`:
+
+```rust
+impl Summary for Tweet {
+    fn summarize_author(&self) -> String {
+        format!("@{}", self.username)
+    }
+}
+```
+
+`Tweet` now has `summarize()` too, from the default. A type can also **override** a default by writing its own version.
+'''
+c_compare = '''
+Like a struct of function pointers (a vtable) you fill in per type, but checked by the compiler, with defaults, and usually with no pointer calls at all.
+'''
+py_compare = '''
+Like an abstract base class with `@abstractmethod`s and some regular methods. Rust checks at compile time that every required method is written.
+'''
+check = "tests"
+starter = '''
+pub trait Summary {
+    fn summarize_author(&self) -> String;
+
+    fn summarize(&self) -> String {
+        format!("(Read more from {}...)", self.summarize_author())
+    }
+}
+
+pub struct Tweet {
+    pub username: String,
+    pub content: String,
+}
+
+pub struct NewsArticle {
+    pub headline: String,
+    pub author: String,
+}
+
+// TODO: Tweet's author is "@" + username. Keep the default summarize.
+
+// TODO: NewsArticle's author is its author field, and it overrides summarize:
+//       "headline, by author", e.g. "Crab wins race, by Ferris"
+
+fn main() {
+    let t = Tweet { username: "ferris".to_string(), content: "hi".to_string() };
+    println!("{}", t.summarize());
+}
+'''
+solution = '''
+pub trait Summary {
+    fn summarize_author(&self) -> String;
+
+    fn summarize(&self) -> String {
+        format!("(Read more from {}...)", self.summarize_author())
+    }
+}
+
+pub struct Tweet {
+    pub username: String,
+    pub content: String,
+}
+
+pub struct NewsArticle {
+    pub headline: String,
+    pub author: String,
+}
+
+impl Summary for Tweet {
+    fn summarize_author(&self) -> String {
+        format!("@{}", self.username)
+    }
+}
+
+impl Summary for NewsArticle {
+    fn summarize_author(&self) -> String {
+        self.author.clone()
+    }
+
+    fn summarize(&self) -> String {
+        format!("{}, by {}", self.headline, self.author)
+    }
+}
+
+fn main() {
+    let t = Tweet { username: "ferris".to_string(), content: "hi".to_string() };
+    println!("{}", t.summarize());
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tweets_use_the_default() {
+        let t = Tweet { username: "ferris".to_string(), content: "hello".to_string() };
+        assert_eq!(t.summarize_author(), "@ferris");
+        assert_eq!(t.summarize(), "(Read more from @ferris...)");
+    }
+
+    #[test]
+    fn articles_override_it() {
+        let a = NewsArticle { headline: "Crab wins race".to_string(), author: "Ferris".to_string() };
+        assert_eq!(a.summarize_author(), "Ferris");
+        assert_eq!(a.summarize(), "Crab wins race, by Ferris");
+    }
+}
+'''
+hints = [
+    "Write `impl Summary for Tweet { ... }` with just `summarize_author`, and `impl Summary for NewsArticle { ... }` with both methods.",
+    "Tweet: `format!(\"@{}\", self.username)`. Article: `self.author.clone()`, and `summarize` returns `format!(\"{}, by {}\", self.headline, self.author)`.",
+    "```rust\nimpl Summary for Tweet {\n    fn summarize_author(&self) -> String {\n        format!(\"@{}\", self.username)\n    }\n}\n\nimpl Summary for NewsArticle {\n    fn summarize_author(&self) -> String {\n        self.author.clone()\n    }\n\n    fn summarize(&self) -> String {\n        format!(\"{}, by {}\", self.headline, self.author)\n    }\n}\n```",
+]
+
+[[level]]
+id = "13.6"
 title = "Only skilled helpers allowed"
 kind = "fix"
 book = ["10.2"]
-about = "Trait bounds: impl Trait, T: Trait and where."
+xp = 45
+goal = '''Add the trait bounds these generic functions need, so it prints:
+Breaking news! Ferris learns traits
+bigger: 9
+pair: 7 & Some("seven")
+loud: (Read more from @ferris...)'''
+lesson = '''
+Inside a generic function, you can only do what the **bounds** promise. Three ways to write them:
 
-[[planned]]
+```rust
+fn notify(item: &impl Summary) { ... }           // short: any type with Summary
+
+fn notify<T: Summary>(item: &T) { ... }          // the same, as a trait bound
+
+fn some_function<T, U>(t: &T, u: &U) -> i32
+where
+    T: Display + Clone,                           // + means "both traits"
+    U: Clone + Debug,
+{ ... }
+```
+
+Common traits to ask for:
+
+| Bound | Lets you |
+|---|---|
+| `Display` | print with `{}` |
+| `Debug` | print with `{:?}` |
+| `PartialOrd` | compare with `<` `>` |
+| `Clone` | call `.clone()` |
+'''
+c_compare = '''
+C has no way to say "any type that can be printed". Rust's bounds give you generic code that the compiler still fully checks.
+'''
+py_compare = '''
+Like a `Protocol` type hint (`def notify(item: Summarizable)`), but enforced: calling `notify(5)` won't compile.
+'''
+check = "output"
+expected_output = '''
+Breaking news! Ferris learns traits
+bigger: 9
+pair: 7 & Some("seven")
+loud: (Read more from @ferris...)
+'''
+starter = '''
+use std::fmt::{Debug, Display};
+
+trait Summary {
+    fn summarize(&self) -> String;
+}
+
+struct Tweet {
+    username: String,
+}
+
+impl Summary for Tweet {
+    fn summarize(&self) -> String {
+        format!("(Read more from @{}...)", self.username)
+    }
+}
+
+fn announce<T>(item: T) {
+    println!("Breaking news! {}", item);
+}
+
+fn bigger<T>(a: T, b: T) -> T {
+    if a > b { a } else { b }
+}
+
+fn show_pair<T, U>(a: T, b: U) -> String {
+    format!("{} & {:?}", a, b)
+}
+
+fn notify(item: &T) {
+    println!("loud: {}", item.summarize());
+}
+
+fn main() {
+    announce("Ferris learns traits");
+    println!("bigger: {}", bigger(4, 9));
+    println!("pair: {}", show_pair(7, Some("seven")));
+    notify(&Tweet { username: "ferris".to_string() });
+}
+'''
+solution = '''
+use std::fmt::{Debug, Display};
+
+trait Summary {
+    fn summarize(&self) -> String;
+}
+
+struct Tweet {
+    username: String,
+}
+
+impl Summary for Tweet {
+    fn summarize(&self) -> String {
+        format!("(Read more from @{}...)", self.username)
+    }
+}
+
+fn announce<T: Display>(item: T) {
+    println!("Breaking news! {}", item);
+}
+
+fn bigger<T: PartialOrd>(a: T, b: T) -> T {
+    if a > b { a } else { b }
+}
+
+fn show_pair<T, U>(a: T, b: U) -> String
+where
+    T: Display,
+    U: Debug,
+{
+    format!("{} & {:?}", a, b)
+}
+
+fn notify(item: &impl Summary) {
+    println!("loud: {}", item.summarize());
+}
+
+fn main() {
+    announce("Ferris learns traits");
+    println!("bigger: {}", bigger(4, 9));
+    println!("pair: {}", show_pair(7, Some("seven")));
+    notify(&Tweet { username: "ferris".to_string() });
+}
+'''
+hints = [
+    "For each function, ask what it does with its values: print with `{}`? print with `{:?}`? compare? call a trait method? Each needs a matching bound.",
+    "`announce` needs `T: Display`, `bigger` needs `T: PartialOrd`, `show_pair` needs `T: Display` and `U: Debug`, and `notify` takes `&impl Summary`.",
+    "```rust\nfn announce<T: Display>(item: T) { ... }\nfn bigger<T: PartialOrd>(a: T, b: T) -> T { ... }\nfn show_pair<T, U>(a: T, b: U) -> String\nwhere\n    T: Display,\n    U: Debug,\n{ ... }\nfn notify(item: &impl Summary) { ... }\n```",
+]
+
+[[level]]
+id = "13.7"
 title = "Mystery boxes"
 kind = "predict"
 book = ["10.2"]
-about = "Return impl Trait, and implement a trait for many types at once."
+xp = 25
+goal = "One impl gives a trait to many types at once. What does this print?"
+lesson = '''
+Two more trait tricks:
 
-[[planned]]
+**Return `impl Trait`**: promise "some type with this trait" without naming it:
+
+```rust
+fn make() -> impl Greet {
+    42      // the caller only knows it can call Greet's methods
+}
+```
+
+**Blanket implementations**: implement a trait for **every** type that has another trait:
+
+```rust
+impl<T: Display> Greet for T {
+    fn hi(&self) -> String { ... }
+}
+```
+
+Now every type you can print with `{}` (numbers, `&str`, `String`, ...) has `.hi()`. The standard library does this: every `Display` type gets `.to_string()` this way.
+'''
+c_compare = '''
+There's no C equivalent: one `impl` adds a method to every printable type, including types defined elsewhere.
+'''
+py_compare = '''
+Like adding a method to every class that has `__str__`, something Python can't do safely. Rust can because it checks it all at compile time.
+'''
+starter = '''
+use std::fmt::Display;
+
+trait Greet {
+    fn hi(&self) -> String;
+}
+
+impl<T: Display> Greet for T {
+    fn hi(&self) -> String {
+        format!("hi, {self}")
+    }
+}
+
+fn make() -> impl Greet {
+    42
+}
+
+fn main() {
+    println!("{}", "Ferris".hi());
+    println!("{}", make().hi());
+    println!("{}", 3.5_f64.hi());
+}
+'''
+choices = [
+    "It doesn't compile: Greet is never implemented for i32",
+    "hi, Ferris / hi, 42 / hi, 3.5",
+    "It doesn't compile: make() must name its exact return type",
+    "hi, \"Ferris\" / hi, 42 / hi, 3.5",
+]
+answer = 1
+expected_output = '''
+hi, Ferris
+hi, 42
+hi, 3.5
+'''
+explanation = "The blanket impl gives `Greet` to every `Display` type, so `&str`, `i32` and `f64` all have `.hi()`. `make()` returns an `i32`, but callers only know it's \"some Greet\". `{self}` uses Display, so no quotes."
+
+[[level]]
+id = "13.8"
 title = "Free skills with derive"
-kind = "fill"
+kind = "fix"
 book = ["C"]
-about = "Get Debug, Clone, PartialEq and friends for free."
+xp = 40
+goal = "Ferris' tests print, copy, compare, sort, count and default Cards. Derive the traits they need."
+lesson = '''
+Some traits are so common that Rust can write them for you. Put **`#[derive(...)]`** above a struct or enum:
 
-[[planned]]
+```rust
+#[derive(Debug, Clone, PartialEq)]
+struct Card { ... }
+```
+
+| Derive | Gives you |
+|---|---|
+| `Debug` | `{:?}` printing |
+| `Clone` | `.clone()` |
+| `Copy` | copies instead of moves (needs `Clone`; only for small, simple types) |
+| `PartialEq`, `Eq` | `==` and `!=` |
+| `PartialOrd`, `Ord` | `<`, `>` and `.sort()`; fields are compared in order, top to bottom |
+| `Hash` | use as a `HashMap` key or in a `HashSet` (needs `Eq`) |
+| `Default` | `Card::default()`: every field's default (0, empty, false) |
+
+Derive only works when every field already has that trait.
+'''
+c_compare = '''
+In C you'd hand-write `card_equals`, `card_compare` and `card_hash`. Derive generates correct versions from the field list.
+'''
+py_compare = '''
+Like `@dataclass(eq=True, order=True, frozen=True)`, which generates `__eq__`, `__lt__` and `__hash__` from the fields.
+'''
+check = "tests"
+starter = '''
+use std::collections::HashSet;
+
+// Ferris' tests need: Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default
+struct Card {
+    rank: u8,
+    suit: char,
+}
+
+fn main() {
+    let ace = Card { rank: 14, suit: 'S' };
+    println!("{:?}", ace);
+}
+'''
+solution = '''
+use std::collections::HashSet;
+
+// Ferris' tests need: Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+struct Card {
+    rank: u8,
+    suit: char,
+}
+
+fn main() {
+    let ace = Card { rank: 14, suit: 'S' };
+    println!("{:?}", ace);
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn print_copy_compare() {
+        let ace = Card { rank: 14, suit: 'S' };
+        let copy = ace;
+        assert_eq!(format!("{:?}", ace), "Card { rank: 14, suit: 'S' }");
+        assert_eq!(copy, ace.clone());
+        assert!(Card { rank: 2, suit: 'H' } < ace);
+    }
+
+    #[test]
+    fn sort_count_default() {
+        let mut hand = vec![Card { rank: 9, suit: 'H' }, Card { rank: 3, suit: 'C' }, Card { rank: 9, suit: 'D' }];
+        hand.sort();
+        assert_eq!(hand[0].rank, 3);
+        assert_eq!(hand[1].suit, 'D');
+        let unique: HashSet<Card> = [hand[0], hand[0], hand[2]].into_iter().collect();
+        assert_eq!(unique.len(), 2);
+        assert_eq!(Card::default(), Card { rank: 0, suit: '\0' });
+    }
+}
+'''
+hints = [
+    "One line above the struct does it all: `#[derive(...)]` with the traits listed in the comment.",
+    "List all nine: Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default.",
+    "```rust\n#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]\nstruct Card {\n```",
+]
+
+[[level]]
+id = "13.9"
 title = "BOSS: The shape zoo"
 kind = "boss"
 book = ["10.1", "10.2"]
-about = "Many shapes, one trait."
+xp = 120
+goal = '''Give Circle, Rect and Triangle the Shape trait, then write the generic
+largest and compare functions that work with any shape.'''
+lesson = '''
+**Boss fight!** The `Shape` trait:
+
+```rust
+trait Shape {
+    fn area(&self) -> f64;
+    fn name(&self) -> String;
+    fn describe(&self) -> String {        // default: "circle with area 12.6"
+        format!("{} with area {:.1}", self.name(), self.area())
+    }
+}
+```
+
+Your jobs:
+
+1. **Implement `Shape`** for the three structs. Areas: circle `PI * r * r` (use `std::f64::consts::PI`), rectangle `w * h`, triangle `base * height / 2`. Names: `"circle"`, `"rect"`, `"triangle"`.
+2. **Override `describe`** for `Rect` only, when it's a square: `"square with area 4.0"` (otherwise use the same wording as the default).
+3. **`largest<T: Shape>(shapes: &[T]) -> Option<&T>`**: the shape with the biggest area, or `None` for an empty list.
+4. **`compare(a: &impl Shape, b: &impl Shape) -> String`**: `"circle is bigger than rect"`, or `"... is smaller than ..."`, or `"... is the same size as ..."`.
+
+Note that `compare` can take two **different** shape types: each `impl Shape` is its own type parameter.
+'''
+c_compare = '''
+In C this is a struct with a type tag and a `switch` in every function. Here each shape carries its own behavior, and generic functions work for all of them.
+'''
+py_compare = '''
+Like an abstract `Shape` class with subclasses, except the generic functions are compiled once per shape type.
+'''
+check = "tests"
+starter = '''
+use std::f64::consts::PI;
+
+trait Shape {
+    fn area(&self) -> f64;
+    fn name(&self) -> String;
+    fn describe(&self) -> String {
+        format!("{} with area {:.1}", self.name(), self.area())
+    }
+}
+
+struct Circle {
+    radius: f64,
+}
+
+struct Rect {
+    width: f64,
+    height: f64,
+}
+
+struct Triangle {
+    base: f64,
+    height: f64,
+}
+
+// TODO: impl Shape for Circle, Rect and Triangle
+
+fn largest<T: Shape>(shapes: &[T]) -> Option<&T> {
+    todo!()
+}
+
+fn compare(a: &impl Shape, b: &impl Shape) -> String {
+    todo!()
+}
+
+fn main() {
+    println!("{}", PI);
+}
+'''
+solution = '''
+use std::f64::consts::PI;
+
+trait Shape {
+    fn area(&self) -> f64;
+    fn name(&self) -> String;
+    fn describe(&self) -> String {
+        format!("{} with area {:.1}", self.name(), self.area())
+    }
+}
+
+struct Circle {
+    radius: f64,
+}
+
+struct Rect {
+    width: f64,
+    height: f64,
+}
+
+struct Triangle {
+    base: f64,
+    height: f64,
+}
+
+impl Shape for Circle {
+    fn area(&self) -> f64 {
+        PI * self.radius * self.radius
+    }
+
+    fn name(&self) -> String {
+        "circle".to_string()
+    }
+}
+
+impl Shape for Rect {
+    fn area(&self) -> f64 {
+        self.width * self.height
+    }
+
+    fn name(&self) -> String {
+        "rect".to_string()
+    }
+
+    fn describe(&self) -> String {
+        let name = if self.width == self.height { "square".to_string() } else { self.name() };
+        format!("{} with area {:.1}", name, self.area())
+    }
+}
+
+impl Shape for Triangle {
+    fn area(&self) -> f64 {
+        self.base * self.height / 2.0
+    }
+
+    fn name(&self) -> String {
+        "triangle".to_string()
+    }
+}
+
+fn largest<T: Shape>(shapes: &[T]) -> Option<&T> {
+    let mut best: Option<&T> = None;
+    for shape in shapes {
+        match best {
+            Some(b) if b.area() >= shape.area() => {}
+            _ => best = Some(shape),
+        }
+    }
+    best
+}
+
+fn compare(a: &impl Shape, b: &impl Shape) -> String {
+    let how = if a.area() > b.area() {
+        "is bigger than"
+    } else if a.area() < b.area() {
+        "is smaller than"
+    } else {
+        "is the same size as"
+    };
+    format!("{} {} {}", a.name(), how, b.name())
+}
+
+fn main() {
+    let c = Circle { radius: 2.0 };
+    let r = Rect { width: 2.0, height: 2.0 };
+    println!("{}", c.describe());
+    println!("{}", r.describe());
+    println!("{}", compare(&c, &r));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn areas_and_names() {
+        assert!((Circle { radius: 2.0 }.area() - 12.566).abs() < 0.001);
+        assert_eq!(Rect { width: 3.0, height: 4.0 }.area(), 12.0);
+        assert_eq!(Triangle { base: 3.0, height: 4.0 }.area(), 6.0);
+        assert_eq!(Triangle { base: 1.0, height: 1.0 }.name(), "triangle");
+    }
+
+    #[test]
+    fn descriptions() {
+        assert_eq!(Circle { radius: 2.0 }.describe(), "circle with area 12.6");
+        assert_eq!(Rect { width: 2.0, height: 2.0 }.describe(), "square with area 4.0");
+        assert_eq!(Rect { width: 2.0, height: 3.0 }.describe(), "rect with area 6.0");
+        assert_eq!(Triangle { base: 3.0, height: 4.0 }.describe(), "triangle with area 6.0");
+    }
+
+    #[test]
+    fn largest_shape() {
+        let circles = vec![Circle { radius: 1.0 }, Circle { radius: 3.0 }, Circle { radius: 2.0 }];
+        assert_eq!(largest(&circles).unwrap().radius, 3.0);
+        let none: Vec<Rect> = Vec::new();
+        assert!(largest(&none).is_none());
+    }
+
+    #[test]
+    fn comparing_different_shapes() {
+        let c = Circle { radius: 1.0 };
+        let r = Rect { width: 1.0, height: 1.0 };
+        let t = Triangle { base: 2.0, height: 1.0 };
+        assert_eq!(compare(&c, &r), "circle is bigger than rect");
+        assert_eq!(compare(&t, &c), "triangle is smaller than circle");
+        assert_eq!(compare(&r, &t), "rect is the same size as triangle");
+    }
+}
+'''
+hints = [
+    "Start with the three `impl Shape for ...` blocks (area and name). Then override `describe` inside `impl Shape for Rect`. Last, write the two generic functions.",
+    "largest: loop over the slice, keeping `best: Option<&T>` and replacing it when a shape has a bigger area. compare: compare `a.area()` with `b.area()` and build the sentence with `format!`.",
+    "```rust\nfn largest<T: Shape>(shapes: &[T]) -> Option<&T> {\n    let mut best: Option<&T> = None;\n    for shape in shapes {\n        match best {\n            Some(b) if b.area() >= shape.area() => {}\n            _ => best = Some(shape),\n        }\n    }\n    best\n}\n```",
+]

@@ -2,34 +2,588 @@ id = 12
 name = "Testing Grounds"
 blurb = "Prove your code works, automatically."
 
-# Placeholder island: these levels are planned but not built yet.
-
-[[planned]]
+[[level]]
+id = "12.1"
 title = "Did it work?"
 kind = "fill"
 book = ["11.1"]
-about = "Write tests with #[test], assert! and assert_eq!."
+xp = 45
+min_tests = 3
+goal = "The functions already work. Write at least three tests of your own that prove it."
+lesson = '''
+A **test** is a function that checks your code, marked with `#[test]`:
 
-[[planned]]
-title = "Tests that expect a crash"
-kind = "fill"
+```rust
+#[cfg(test)]           // only compile this module when testing
+mod tests {
+    use super::*;      // bring in everything from the code above
+
+    #[test]
+    fn adds_two() {
+        assert_eq!(add_two(2), 4);
+    }
+}
+```
+
+The checking tools:
+
+| Macro | Fails when |
+|---|---|
+| `assert!(cond)` | `cond` is false |
+| `assert_eq!(a, b)` | `a != b` |
+| `assert_ne!(a, b)` | `a == b` |
+
+A test **passes** if it finishes, and **fails** if it panics. `cargo test` runs every test and reports each one. Here, ▶ Run does the same: your tests run together with Ferris' own.
+'''
+c_compare = '''
+No framework to install: tests are built into the language and Cargo, and `assert_eq!` prints both values when it fails (unlike C's `assert`).
+'''
+py_compare = '''
+Like pytest: write functions, use asserts. `assert_eq!(a, b)` is `assert a == b`, with both sides shown on failure.
+'''
+check = "tests"
+starter = '''
+pub fn add_two(a: u64) -> u64 {
+    a + 2
+}
+
+pub fn is_even(n: i32) -> bool {
+    n % 2 == 0
+}
+
+pub fn shout(text: &str) -> String {
+    format!("{}!", text.to_uppercase())
+}
+
+fn main() {
+    println!("{} {} {}", add_two(2), is_even(7), shout("hi"));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Write your tests here: each one is a function with the test attribute above it.
+}
+'''
+solution = '''
+pub fn add_two(a: u64) -> u64 {
+    a + 2
+}
+
+pub fn is_even(n: i32) -> bool {
+    n % 2 == 0
+}
+
+pub fn shout(text: &str) -> String {
+    format!("{}!", text.to_uppercase())
+}
+
+fn main() {
+    println!("{} {} {}", add_two(2), is_even(7), shout("hi"));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn adds_two() {
+        assert_eq!(add_two(2), 4);
+        assert_eq!(add_two(0), 2);
+    }
+
+    #[test]
+    fn evens_and_odds() {
+        assert!(is_even(4));
+        assert!(!is_even(7));
+        assert!(is_even(-2));
+    }
+
+    #[test]
+    fn shouting() {
+        assert_eq!(shout("hi"), "HI!");
+        assert_ne!(shout("hi"), "hi");
+    }
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use super::*;
+
+    #[test]
+    fn the_functions_still_work() {
+        assert_eq!(add_two(40), 42);
+        assert!(is_even(10));
+        assert_eq!(shout("crab"), "CRAB!");
+    }
+}
+'''
+hints = [
+    "Inside `mod tests`, write a function with `#[test]` on the line above it, and use `assert_eq!` or `assert!` inside.",
+    "Write one test per function: `add_two(2)` should be 4, `is_even(7)` should be false (`assert!(!is_even(7))`), `shout(\"hi\")` should be \"HI!\".",
+    "```rust\n#[test]\nfn adds_two() {\n    assert_eq!(add_two(2), 4);\n}\n\n#[test]\nfn evens() {\n    assert!(is_even(4));\n    assert!(!is_even(7));\n}\n\n#[test]\nfn shouting() {\n    assert_eq!(shout(\"hi\"), \"HI!\");\n}\n```",
+]
+
+[[level]]
+id = "12.2"
+title = "Reading a failed test"
+kind = "predict"
 book = ["11.1"]
-about = "#[should_panic], and tests that return Result."
+xp = 25
+goal = "This check fails. What does Rust print?"
+lesson = '''
+When `assert_eq!` fails it panics, and the message shows **both sides**, so you can see what went wrong without adding prints:
 
-[[planned]]
+```text
+assertion `left == right` failed
+  left: 4
+ right: 5
+```
+
+You can add your own message after the two values. It works like `format!`:
+
+```rust
+assert_eq!(total, 5, "the cart should hold 5, but holds {}", total);
+```
+
+The order of the two values doesn't matter to Rust, but a habit (actual first, expected second) makes failures easier to read.
+'''
+c_compare = '''
+C's `assert(a == b)` only tells you the expression was false. `assert_eq!` shows you both values.
+'''
+py_compare = '''
+Like pytest's assertion rewriting, which also shows both sides, but built into the language.
+'''
+starter = '''
+fn main() {
+    let total = 2 + 2;
+    println!("checking...");
+    assert_eq!(total, 5, "math is broken: got {}", total);
+    println!("all good");
+}
+'''
+choices = [
+    "checking... / all good",
+    "checking..., then a panic: assertion `left == right` failed: math is broken: got 4, with left: 4 and right: 5",
+    "checking..., then a panic that only says: assertion failed",
+    "It doesn't compile: assert_eq! only works inside tests",
+]
+answer = 1
+expected_output = "checking..."
+explanation = "`assert_eq!` works anywhere, not just in tests. `4 != 5`, so it panics with your message plus both values (`left: 4`, `right: 5`), and `all good` never prints."
+
+[[level]]
+id = "12.3"
+title = "Tests that expect a crash"
+kind = "fix"
+book = ["11.1"]
+xp = 45
+min_tests = 3
+goal = "Fix the three tests: one must expect a panic, one must return a Result, and one has the wrong expected message."
+lesson = '''
+Sometimes the right behavior **is** a panic. Mark that test with `#[should_panic]`:
+
+```rust
+#[test]
+#[should_panic(expected = "less than or equal to 100")]
+fn greater_than_100() {
+    Guess::new(200);
+}
+```
+
+With `expected = "..."`, the test only passes if the panic message **contains** that text, so it can't pass by panicking for the wrong reason.
+
+A test can also return a `Result`. Then it can use `?`, and it fails when it returns `Err`:
+
+```rust
+#[test]
+fn parses() -> Result<(), String> {
+    let n = parse_level("7")?;
+    assert_eq!(n, 7);
+    Ok(())
+}
+```
+'''
+c_compare = '''
+Testing that C code aborts usually means forking a process. In Rust, `#[should_panic]` does it in one line.
+'''
+py_compare = '''
+`#[should_panic(expected = "...")]` is like `with pytest.raises(ValueError, match="..."):`.
+'''
+check = "tests"
+starter = '''
+pub struct Pot {
+    liters: u32,
+}
+
+impl Pot {
+    pub fn new(liters: u32) -> Pot {
+        if liters > 10 {
+            panic!("a pot holds at most 10 liters, got {liters}");
+        }
+        Pot { liters }
+    }
+
+    pub fn liters(&self) -> u32 {
+        self.liters
+    }
+}
+
+pub fn parse_liters(text: &str) -> Result<u32, String> {
+    text.trim().parse::<u32>().map_err(|_| format!("'{text}' is not a number"))
+}
+
+fn main() {
+    println!("{}", Pot::new(4).liters());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn too_big_pot() {
+        Pot::new(11);
+    }
+
+    #[test]
+    fn reads_liters() {
+        let n = parse_liters(" 7 ")?;
+        assert_eq!(Pot::new(n).liters(), 7);
+    }
+
+    #[test]
+    #[should_panic(expected = "at most 5 liters")]
+    fn way_too_big() {
+        Pot::new(500);
+    }
+}
+'''
+solution = '''
+pub struct Pot {
+    liters: u32,
+}
+
+impl Pot {
+    pub fn new(liters: u32) -> Pot {
+        if liters > 10 {
+            panic!("a pot holds at most 10 liters, got {liters}");
+        }
+        Pot { liters }
+    }
+
+    pub fn liters(&self) -> u32 {
+        self.liters
+    }
+}
+
+pub fn parse_liters(text: &str) -> Result<u32, String> {
+    text.trim().parse::<u32>().map_err(|_| format!("'{text}' is not a number"))
+}
+
+fn main() {
+    println!("{}", Pot::new(4).liters());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[should_panic(expected = "at most 10 liters")]
+    fn too_big_pot() {
+        Pot::new(11);
+    }
+
+    #[test]
+    fn reads_liters() -> Result<(), String> {
+        let n = parse_liters(" 7 ")?;
+        assert_eq!(Pot::new(n).liters(), 7);
+        Ok(())
+    }
+
+    #[test]
+    #[should_panic(expected = "at most 10 liters")]
+    fn way_too_big() {
+        Pot::new(500);
+    }
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use super::*;
+
+    #[test]
+    fn pots_and_parsing() {
+        assert_eq!(Pot::new(10).liters(), 10);
+        assert_eq!(parse_liters("3"), Ok(3));
+        assert!(parse_liters("lots").is_err());
+    }
+}
+'''
+hints = [
+    "`too_big_pot` panics, which is correct, so it needs an attribute saying so. `reads_liters` uses `?`, so it must return a Result. And read the real panic message in `Pot::new`.",
+    "Add `#[should_panic(expected = \"at most 10 liters\")]` above `too_big_pot`, change `reads_liters` to return `Result<(), String>` and end it with `Ok(())`, and fix the expected text in `way_too_big`.",
+    "```rust\n#[test]\n#[should_panic(expected = \"at most 10 liters\")]\nfn too_big_pot() {\n    Pot::new(11);\n}\n\n#[test]\nfn reads_liters() -> Result<(), String> {\n    let n = parse_liters(\" 7 \")?;\n    assert_eq!(Pot::new(n).liters(), 7);\n    Ok(())\n}\n```",
+]
+
+[[level]]
+id = "12.4"
 title = "Choosing which tests run"
-kind = "predict"
+kind = "quiz"
 book = ["11.2"]
-about = "Filter, skip and show output with cargo test."
+xp = 20
+goal = "Your tests are add_two, add_three and multiply. You run `cargo test add`. Which tests run?"
+lesson = '''
+`cargo test` runs every test, but you can pick:
 
-[[planned]]
+| Command | Runs |
+|---|---|
+| `cargo test` | all tests (except ignored ones) |
+| `cargo test add_two` | tests whose name contains `add_two` |
+| `cargo test add` | tests whose name contains `add` |
+| `cargo test -- --ignored` | only tests marked `#[ignore]` |
+| `cargo test -- --include-ignored` | everything |
+
+Mark slow tests with `#[ignore]` so they only run when you ask.
+
+Arguments **after** `--` go to the test program rather than to Cargo:
+
+- `cargo test -- --test-threads=1` runs tests one at a time (they normally run in parallel, so they must not depend on each other)
+- `cargo test -- --show-output` shows what passing tests printed (normally hidden)
+'''
+c_compare = '''
+Like running a test binary with a filter argument, except the harness is generated for you.
+'''
+py_compare = '''
+`cargo test add` is like `pytest -k add`, and `#[ignore]` is like `@pytest.mark.skip`.
+'''
+choices = [
+    "None: there is no test named exactly add",
+    "add_two and add_three, because both names contain add",
+    "Only add_two, the first match",
+    "All three: the filter only sorts the tests",
+]
+answer = 1
+explanation = "The filter matches any test whose name **contains** the text, so `add` runs `add_two` and `add_three` and skips `multiply`. The summary line reports `1 filtered out`."
+
+[[level]]
+id = "12.5"
 title = "Where tests live"
-kind = "predict"
+kind = "quiz"
 book = ["11.3"]
-about = "Unit tests next to your code, integration tests in tests/."
+xp = 20
+goal = "Code in a crate's tests/ folder (an integration test) wants to call your library's functions. What can it call?"
+lesson = '''
+Rust has two kinds of tests:
 
-[[planned]]
+**Unit tests** live next to the code, in a `#[cfg(test)] mod tests` inside the same file. As a child module, they can test **private** functions too.
+
+**Integration tests** live in a `tests/` folder beside `src/`:
+
+```text
+adder
+├── Cargo.toml
+├── src
+│   └── lib.rs
+└── tests
+    └── integration_test.rs
+```
+
+```rust
+// tests/integration_test.rs
+use adder::add_two;
+
+#[test]
+fn it_adds_two() {
+    assert_eq!(add_two(2), 4);
+}
+```
+
+Each file in `tests/` is its own crate. It uses your library the way any other crate would: only through its **public** API. Shared helpers go in `tests/common/mod.rs`.
+
+A binary-only crate (just `src/main.rs`) can't have integration tests call into it. That's one reason to keep the logic in `src/lib.rs` and a thin `main.rs`.
+'''
+c_compare = '''
+Unit tests can see static functions because they live in the same file; integration tests link against the library like a separate program.
+'''
+py_compare = '''
+Integration tests are like a separate test package that can only `import` your package's public names.
+'''
+choices = [
+    "Everything, including private functions",
+    "Only the library's public items, like any other crate using it",
+    "Only functions marked #[test]",
+    "Nothing: integration tests can only run the binary",
+]
+answer = 1
+explanation = "Each file in `tests/` is a separate crate, so it sees only your library's public API, exactly like a user of your crate would. Private functions are tested by unit tests inside `src/`."
+
+[[level]]
+id = "12.6"
 title = "BOSS: Bug hunt"
 kind = "boss"
-book = ["11.1", "11.2", "11.3"]
-about = "Write tests that catch a hidden bug, then fix it."
+book = ["11.1", "11.3"]
+xp = 120
+min_tests = 3
+goal = '''The scoreboard has three hidden bugs. Write at least three tests of your own
+that catch them, then fix the code so every test passes.'''
+lesson = '''
+**Boss fight!** What each function should do:
+
+| Function | Should |
+|---|---|
+| `average(&[90, 85])` | `87.5` (keep the fraction!), and `0.0` for an empty list |
+| `top_three(&[50, 90, 70, 10])` | `[90, 70, 50]`, highest first (fewer if there are fewer scores) |
+| `grade(90)` | `'A'` for 90 and up, `'B'` for 80–89, `'C'` for 70–79, otherwise `'F'` |
+
+Each one has a bug. Write tests first: a good test checks the **edges** (exactly 90, an empty list, fewer than three scores). Once a test fails, you've found a bug. Then fix the code until it passes.
+
+This is how real bugs get fixed: first a test that shows the bug, then the fix. The test stays, so the bug can't sneak back.
+'''
+c_compare = '''
+Division of two integers truncates in Rust just like in C, so `175 / 2` is `87`. Convert to `f64` before dividing.
+'''
+py_compare = '''
+Python's `/` always gives a float; Rust's `/` on integers does floor-style division, like Python's `//` for positive numbers.
+'''
+check = "tests"
+starter = '''
+pub fn average(scores: &[u32]) -> f64 {
+    let mut sum = 0;
+    for s in scores {
+        sum += s;
+    }
+    (sum / scores.len() as u32) as f64
+}
+
+pub fn top_three(scores: &[u32]) -> Vec<u32> {
+    let mut sorted = scores.to_vec();
+    sorted.sort();
+    sorted.truncate(3);
+    sorted
+}
+
+pub fn grade(score: u32) -> char {
+    if score > 90 {
+        'A'
+    } else if score >= 80 {
+        'B'
+    } else if score >= 70 {
+        'C'
+    } else {
+        'F'
+    }
+}
+
+fn main() {
+    println!("{} {:?} {}", average(&[90, 85]), top_three(&[50, 90, 70, 10]), grade(90));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Hunt the bugs here.
+}
+'''
+solution = '''
+pub fn average(scores: &[u32]) -> f64 {
+    if scores.is_empty() {
+        return 0.0;
+    }
+    let mut sum = 0;
+    for s in scores {
+        sum += s;
+    }
+    sum as f64 / scores.len() as f64
+}
+
+pub fn top_three(scores: &[u32]) -> Vec<u32> {
+    let mut sorted = scores.to_vec();
+    sorted.sort();
+    sorted.reverse();
+    sorted.truncate(3);
+    sorted
+}
+
+pub fn grade(score: u32) -> char {
+    if score >= 90 {
+        'A'
+    } else if score >= 80 {
+        'B'
+    } else if score >= 70 {
+        'C'
+    } else {
+        'F'
+    }
+}
+
+fn main() {
+    println!("{} {:?} {}", average(&[90, 85]), top_three(&[50, 90, 70, 10]), grade(90));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn average_keeps_the_fraction() {
+        assert_eq!(average(&[90, 85]), 87.5);
+        assert_eq!(average(&[]), 0.0);
+    }
+
+    #[test]
+    fn top_three_is_highest_first() {
+        assert_eq!(top_three(&[50, 90, 70, 10]), vec![90, 70, 50]);
+        assert_eq!(top_three(&[5]), vec![5]);
+    }
+
+    #[test]
+    fn grade_edges() {
+        assert_eq!(grade(90), 'A');
+        assert_eq!(grade(89), 'B');
+        assert_eq!(grade(70), 'C');
+        assert_eq!(grade(69), 'F');
+    }
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use super::*;
+
+    #[test]
+    fn averages() {
+        assert_eq!(average(&[90, 85]), 87.5);
+        assert_eq!(average(&[1, 2]), 1.5);
+        assert_eq!(average(&[]), 0.0);
+    }
+
+    #[test]
+    fn top_scores() {
+        assert_eq!(top_three(&[50, 90, 70, 10]), vec![90, 70, 50]);
+        assert_eq!(top_three(&[3, 1]), vec![3, 1]);
+        assert_eq!(top_three(&[]), Vec::<u32>::new());
+    }
+
+    #[test]
+    fn grades() {
+        assert_eq!(grade(100), 'A');
+        assert_eq!(grade(90), 'A');
+        assert_eq!(grade(89), 'B');
+        assert_eq!(grade(80), 'B');
+        assert_eq!(grade(79), 'C');
+        assert_eq!(grade(70), 'C');
+        assert_eq!(grade(0), 'F');
+    }
+}
+'''
+hints = [
+    "Write one test per function using the examples in the lesson, including the edges: `grade(90)`, `average(&[])`, and a list with fewer than three scores.",
+    "The bugs: `average` divides integers (and crashes on an empty list), `top_three` keeps the *lowest* scores, and `grade` uses `>` where it needs `>=`.",
+    "```rust\n// average\nif scores.is_empty() {\n    return 0.0;\n}\n// ... sum as before ...\nsum as f64 / scores.len() as f64\n\n// top_three: after sort()\nsorted.reverse();\n\n// grade\nif score >= 90 {\n```",
+]

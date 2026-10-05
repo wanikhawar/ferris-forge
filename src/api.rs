@@ -1,7 +1,7 @@
 //! HTTP API used by the browser UI.
 
 use crate::levels::{Book, Kind, Level, World};
-use crate::progress::{Completion, Progress, Settings, today};
+use crate::progress::{Completion, Progress, RANKS, Settings, today};
 use crate::runner;
 use crate::teacher::{self, Mode};
 use axum::body::Body;
@@ -128,6 +128,7 @@ impl AppState {
             "xp": p.xp,
             "rank": rank,
             "next_rank": next.map(|(xp, name)| json!({"xp": xp, "name": name})),
+            "ranks": RANKS.iter().map(|(xp, name)| json!({"xp": xp, "name": name})).collect::<Vec<_>>(),
             "streak": p.streak(),
             "days": p.days_played.len(),
             "completed": p.completed.len(),
@@ -149,6 +150,7 @@ pub fn router(state: Shared) -> Router {
     Router::new()
         .route("/api/state", get(get_state))
         .route("/api/level/{id}", get(get_level))
+        .route("/api/lesson/{id}", get(get_lesson))
         .route("/api/run", post(run_level))
         .route("/api/play", post(play))
         .route("/api/quiz", post(quiz))
@@ -159,6 +161,7 @@ pub fn router(state: Shared) -> Router {
         .route("/api/settings", post(set_settings))
         .route("/api/models", get(models))
         .route("/api/models/test", post(test_model))
+        .route("/api/models/refresh", post(refresh_models))
         .route("/api/explain/{code}", get(explain))
         .route("/api/ferris", post(ferris))
         .route("/api/vim", get(crate::nvim::vim_ws))
@@ -281,6 +284,20 @@ async fn get_level(
     })))
 }
 
+/// The reading material for any level, even a locked one: no code, tests or answers.
+async fn get_lesson(
+    State(s): State<Shared>,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let (world, li, level) = s.level(&id)?;
+    Ok(Json(json!({
+        "id": level.id, "num": format!("{}.{}", world.id, li + 1),
+        "title": level.title, "kind": level.kind, "goal": level.goal,
+        "lesson": level.lesson, "c_compare": level.c_compare, "py_compare": level.py_compare,
+        "book": book_links(&s.book, &level.book),
+    })))
+}
+
 #[derive(Deserialize)]
 struct CodeReq {
     id: String,
@@ -300,14 +317,23 @@ async fn run_level(
     }
     // Save the submitted code *before* compiling. Edits the player makes while it compiles
     // are autosaved afterwards and must win, so the result below never touches the draft.
-    {
+    let generation = {
         let mut p = s.progress.lock().unwrap();
         p.drafts.insert(req.id.clone(), req.code.clone());
         s.save(&p);
-    }
+        p.replays.get(&req.id).copied().unwrap_or(0)
+    };
     let result = runner::check_level(level, &req.code, &s.work_dir()).await;
 
     let mut p = s.progress.lock().unwrap();
+    // The level was replayed while this compiled: the run belongs to the old attempt,
+    // so it must not clear (or count against) the fresh one.
+    if p.replays.get(&req.id).copied().unwrap_or(0) != generation {
+        return Ok(Json(json!({
+            "result": result, "xp_gained": 0, "first_clear": false, "world_cleared": false,
+            "stale": true, "player": s.player(&p), "next_id": s.level_after(&req.id),
+        })));
+    }
     p.days_played.insert(today());
     p.record_errors(&req.id, &result.error_codes);
     let first_clear = result.passed && !p.completed.contains_key(&req.id);
@@ -492,13 +518,86 @@ async fn set_settings(
     Ok(Json(p.settings.clone()))
 }
 
-async fn models() -> Json<Value> {
-    Json(json!([
-        {"id": "fable", "name": "Claude Fable 5.1", "tag": "Wizard", "blurb": "The most capable model. Deepest explanations, slowest replies, uses the most of your plan's limits."},
-        {"id": "opus", "name": "Claude Opus 5.5", "tag": "Sage", "blurb": "Excellent teacher. Thoughtful and clear — the recommended default."},
-        {"id": "sonnet", "name": "Claude Sonnet 5.5", "tag": "Ranger", "blurb": "Fast and smart. A great everyday choice that's lighter on your limits."},
-        {"id": "haiku", "name": "Claude Haiku 4.5", "tag": "Sprite", "blurb": "The quickest replies and the lightest on your limits. Best for quick hints."},
-    ]))
+/// The model cards. Each card is a Claude Code alias, which always means the newest model
+/// in that family. The fallback name is only shown until Claude Code has told us which
+/// model the alias really is (after a reply, a test, or "Check for new versions").
+const MODEL_CARDS: &[(&str, &str, &str, &str)] = &[
+    ("fable", "Claude Fable", "Wizard", "The most capable model. Deepest explanations, slowest replies, uses the most of your plan's limits."),
+    ("opus", "Claude Opus", "Sage", "Excellent teacher. Thoughtful and clear — the recommended default."),
+    ("sonnet", "Claude Sonnet", "Ranger", "Fast and smart. A great everyday choice that's lighter on your limits."),
+    ("haiku", "Claude Haiku", "Sprite", "The quickest replies and the lightest on your limits. Best for quick hints."),
+];
+
+/// "claude-opus-5-5" -> "Claude Opus 5.5", "claude-haiku-4-5-20251001" -> "Claude Haiku 4.5".
+fn model_name(id: &str) -> String {
+    let (mut words, mut version) = (Vec::new(), Vec::new());
+    for part in id.split(['-', '_']) {
+        if part.chars().all(|c| c.is_ascii_digit()) {
+            // Long numbers are release dates, not versions.
+            if part.len() < 6 {
+                version.push(part);
+            }
+        } else {
+            let mut chars = part.chars();
+            let first = chars.next().map(|c| c.to_ascii_uppercase());
+            words.push(first.into_iter().chain(chars).collect::<String>());
+        }
+    }
+    let name = words.join(" ");
+    if version.is_empty() { name } else { format!("{name} {}", version.join(".")) }
+}
+
+impl AppState {
+    fn model_cards(&self) -> Value {
+        let p = self.progress.lock().unwrap();
+        MODEL_CARDS
+            .iter()
+            .map(|(alias, family, tag, blurb)| {
+                let resolved = p.models.get(*alias);
+                json!({
+                    "id": alias, "tag": tag, "blurb": blurb,
+                    "name": resolved.map(|m| model_name(m)).unwrap_or_else(|| family.to_string()),
+                    "resolved": resolved,
+                })
+            })
+            .collect()
+    }
+
+    /// Remember which model an alias turned out to be.
+    fn note_model(&self, alias: &str, model: &str) {
+        if !MODEL_CARDS.iter().any(|(a, ..)| *a == alias) || !model.starts_with("claude-") {
+            return;
+        }
+        let mut p = self.progress.lock().unwrap();
+        if p.models.get(alias).map(String::as_str) != Some(model) {
+            p.models.insert(alias.to_string(), model.to_string());
+            self.save(&p);
+        }
+    }
+}
+
+async fn models(State(s): State<Shared>) -> Json<Value> {
+    Json(s.model_cards())
+}
+
+/// Ask every alias once (a tiny prompt each) to learn the newest model behind it.
+async fn refresh_models(State(s): State<Shared>) -> Json<Value> {
+    let mut checks = tokio::task::JoinSet::new();
+    for (alias, ..) in MODEL_CARDS {
+        let s = s.clone();
+        checks.spawn(async move {
+            let result = teacher::test_model(alias, "low", &s.ferris_dir(), &s.usage).await;
+            (*alias, result)
+        });
+    }
+    let mut errors = Vec::new();
+    while let Some(Ok((alias, result))) = checks.join_next().await {
+        match result {
+            Ok((model, _)) => s.note_model(alias, &model),
+            Err(e) => errors.push(json!({"id": alias, "error": e})),
+        }
+    }
+    Json(json!({ "models": s.model_cards(), "errors": errors }))
 }
 
 #[derive(Deserialize)]
@@ -514,7 +613,10 @@ async fn test_model(State(s): State<Shared>, Json(req): Json<TestReq>) -> Json<V
         "low"
     };
     match teacher::test_model(&req.model, effort, &s.ferris_dir(), &s.usage).await {
-        Ok((model, reply)) => Json(json!({"ok": true, "model": model, "reply": reply})),
+        Ok((model, reply)) => {
+            s.note_model(&req.model, &model);
+            Json(json!({"ok": true, "model": model, "reply": reply}))
+        }
         Err(e) => Json(json!({"ok": false, "error": e})),
     }
 }
@@ -595,7 +697,10 @@ async fn ferris(State(s): State<Shared>, Json(req): Json<FerrisReq>) -> Result<R
         };
 
         match reply {
-            Ok(text) => {
+            Ok(teacher::Reply { text, model }) => {
+                if let Some(m) = &model {
+                    state.note_model(&settings.model, m);
+                }
                 if mode == Mode::Review
                     && verdict_is_idiomatic(&text)
                     && state.award_review_bonus(&level.id)
@@ -726,6 +831,16 @@ fn explain_offline(output: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::model_name;
+
+    #[test]
+    fn model_names_come_from_ids() {
+        assert_eq!(model_name("claude-opus-5-5"), "Claude Opus 5.5");
+        assert_eq!(model_name("claude-fable-5-1"), "Claude Fable 5.1");
+        assert_eq!(model_name("claude-haiku-4-5-20251001"), "Claude Haiku 4.5");
+        assert_eq!(model_name("claude-sonnet-6"), "Claude Sonnet 6");
+    }
+
     use super::verdict_is_idiomatic;
 
     #[test]

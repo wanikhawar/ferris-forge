@@ -320,6 +320,19 @@ export class Editor {
   /** Where the character at `idx` is drawn: { left, width } relative to the code area. */
   charBox(idx) {
     const base = this.pre.parentElement.getBoundingClientRect();
+    const value = this.ta.value;
+    if (value[idx] === undefined || value[idx] === "\n") {
+      // No character to measure. A caret right after a newline is reported at the end of
+      // the line above, so an empty line starts at the left edge, and the end of a line
+      // comes right after its last character.
+      if (idx === 0 || value[idx - 1] === "\n") {
+        const pre = this.pre.getBoundingClientRect();
+        const pad = parseFloat(getComputedStyle(this.pre).paddingLeft) || 0;
+        return { left: pre.left + pad - base.left, width: this.charWidth() };
+      }
+      const prev = this.charBox(idx - (/[\udc00-\udfff]/.test(value[idx - 1]) && idx > 1 ? 2 : 1));
+      return { left: prev.left + prev.width, width: this.charWidth() };
+    }
     const walker = document.createTreeWalker(this.pre, NodeFilter.SHOW_TEXT);
     let node, rest = idx, last = null;
     while ((node = walker.nextNode())) {
