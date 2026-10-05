@@ -34,7 +34,14 @@ async fn main() {
     });
 
     if std::env::args().nth(1).as_deref() == Some("verify") {
-        let ok = verify(&root, &worlds).await & check_coverage(&book, &worlds);
+        // `verify 5` checks only world 5 (coverage is always checked).
+        let only: Option<u32> = std::env::args().nth(2).and_then(|a| a.parse().ok());
+        let selected: Vec<levels::World> = worlds
+            .iter()
+            .filter(|w| only.is_none_or(|id| w.id == id))
+            .cloned()
+            .collect();
+        let ok = verify(&root, &selected).await & check_coverage(&book, &worlds);
         std::process::exit(if ok { 0 } else { 1 });
     }
 
@@ -97,7 +104,12 @@ async fn local_only(State(port): State<u16>, req: Request, next: Next) -> Respon
         host_ok && origin_ok
     };
     if allowed {
-        next.run(req).await
+        let mut res = next.run(req).await;
+        // Always re-check files with the server. The game's scripts are separate modules,
+        // and a cached old copy of one mixed with a new copy of another breaks the page.
+        res.headers_mut()
+            .insert(header::CACHE_CONTROL, header::HeaderValue::from_static("no-cache"));
+        res
     } else {
         (
             StatusCode::FORBIDDEN,
@@ -141,7 +153,12 @@ async fn verify(root: &Path, worlds: &[levels::World]) -> bool {
     for world in worlds {
         println!("World {}: {}", world.id, world.name);
         for level in &world.levels {
-            let problem = if level.kind == Kind::Predict {
+            let problem = if level.kind == Kind::Quiz {
+                level
+                    .answer
+                    .is_none_or(|a| a >= level.choices.len())
+                    .then(|| "answer index missing or out of range".to_string())
+            } else if level.kind == Kind::Predict {
                 verify_predict(level, &work).await
             } else {
                 let starter = runner::check_level(level, &level.starter, &work).await;
@@ -182,7 +199,7 @@ async fn verify_predict(level: &levels::Level, work: &Path) -> Option<String> {
     if level.answer.is_none_or(|a| a >= level.choices.len()) {
         return Some("answer index missing or out of range".into());
     }
-    let ran = runner::play(&level.starter, work).await;
+    let ran = runner::play(&level.starter, &runner::Setup::from_level(level), work).await;
     if level.compile_fails {
         return ran
             .compiled

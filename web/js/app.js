@@ -17,11 +17,24 @@ const el = (tag, cls, html) => {
   return e;
 };
 
+/** The number a level is shown with (its position), from its internal id. */
+function levelNum(id) {
+  for (const w of S.game?.worlds || []) {
+    const l = w.levels.find(x => x.id === id);
+    if (l) return l.num;
+  }
+  return id;
+}
+
+/** Levels you answer (predict the output, or a concept quiz) instead of coding. */
+const answers = kind => kind === "predict" || kind === "quiz";
+
 const KIND_INFO = {
   fix: { icon: "🔧", label: "Fix it" },
   fill: { icon: "✍️", label: "Fill it" },
   predict: { icon: "🔮", label: "Predict it" },
   boss: { icon: "👹", label: "Boss fight" },
+  quiz: { icon: "📖", label: "Quiz" },
 };
 const HINT_COST = ["", "−10% XP", "−30% XP", "−60% XP"];
 
@@ -259,7 +272,7 @@ function applyVimSetting() {
   const btn = $("#btn-vim");
   btn.classList.toggle("on", !!s.vim);
   btn.title = s.vim ? "Vim mode is ON (your Neovim). Click to turn it off." : "Vim mode is OFF. Click to edit with your own Neovim.";
-  const want = s.vim && S.level && S.level.kind !== "predict";
+  const want = s.vim && S.level && !answers(S.level.kind);
   if (want) editor.enableVim(s.nvim_config);
   else editor.disableVim();
 }
@@ -279,7 +292,7 @@ function show(screen) {
 let returnLevel = null;
 
 async function showMap() {
-  if (S.screen === "level" && S.level) returnLevel = { id: S.level.id, title: S.level.title };
+  if (S.screen === "level" && S.level) returnLevel = { id: S.level.id, num: S.level.num, title: S.level.title };
   await refreshState();
   const g = S.game;
   const nextId = g.next_level;
@@ -289,7 +302,7 @@ async function showMap() {
   show("map");
   const back = $("#btn-map-back");
   back.classList.toggle("hidden", !returnLevel);
-  if (returnLevel) back.innerHTML = `${pixelIcon("back", 2)}<span>Back to ${escapeHtml(returnLevel.id)} ${escapeHtml(returnLevel.title)}</span>`;
+  if (returnLevel) back.innerHTML = `${pixelIcon("back", 2)}<span>Back to ${escapeHtml(returnLevel.num)} ${escapeHtml(returnLevel.title)}</span>`;
   worldMap.setWorlds(g.worlds, current);
   requestAnimationFrame(() => worldMap.scrollToCurrent());
 }
@@ -328,7 +341,7 @@ function openWorldBoard(world) {
     else if (l.status === "skipped") status = `${sym("⏭")}skipped`;
     else if (l.status === "locked") status = "🔒";
     else status = `${l.xp} XP`;
-    b.innerHTML = `<span class="bi-icon">${pixelIcon(l.kind, 2)}</span><span class="bi-id">${l.id}</span><span class="bi-title">${escapeHtml(l.title)}</span><span class="bi-status">${status}</span>`;
+    b.innerHTML = `<span class="bi-icon">${pixelIcon(l.kind, 2)}</span><span class="bi-id">${l.num}</span><span class="bi-title">${escapeHtml(l.title)}</span><span class="bi-status">${status}</span>`;
     b.disabled = l.status === "locked";
     b.onclick = () => { m.close(); openLevel(l.id); };
     list.append(b);
@@ -357,7 +370,7 @@ async function openLevel(id) {
   show("level");
 
   $("#lv-world").textContent = `World ${lv.world.id}: ${lv.world.name} · Level ${lv.index}/${lv.count}`;
-  $("#lv-title").textContent = `${lv.id} ${lv.title}`;
+  $("#lv-title").textContent = `${lv.num} ${lv.title}`;
   const kind = $("#lv-kind");
   kind.className = `badge ${lv.kind}`;
   kind.innerHTML = `${pixelIcon(lv.kind, 1)}<span>${KIND_INFO[lv.kind].label}</span>`;
@@ -369,12 +382,16 @@ async function openLevel(id) {
   goalBox.textContent = lv.goal;
   goalBox.classList.remove("open");
   goalBox.title = "Click to show or hide the whole goal";
-  requestAnimationFrame(() => goalBox.classList.toggle("long", goalBox.scrollHeight > goalBox.clientHeight + 2));
-  $("#btn-lesson-c").classList.toggle("hidden", !lv.c_compare);
-  $("#btn-lesson-py").classList.toggle("hidden", !lv.py_compare);
+  // Only offer "more" when there's at least one whole extra line hidden.
+  requestAnimationFrame(() => {
+    const line = parseFloat(getComputedStyle(goalBox).lineHeight) || 22;
+    goalBox.classList.toggle("long", goalBox.scrollHeight - goalBox.clientHeight > line * 0.6);
+  });
 
-  const predict = lv.kind === "predict";
+  const predict = answers(lv.kind);
   document.querySelector(".left-col").classList.toggle("predict", predict);
+  // Quizzes with no code hide the editor; the question and answers fill the column.
+  document.querySelector(".left-col").classList.toggle("no-code", lv.kind === "quiz" && !lv.starter.trim());
   editor.value = lv.code;
   fitPredictCode();
   editor.setReadOnly(predict);
@@ -389,8 +406,7 @@ async function openLevel(id) {
   renderDialogue();
   renderQuickActions();
   ferris.setMood("idle");
-  if (lessonDocked()) renderLessonDock();
-  if (!lessonDocked() && !lv.done && lv.lesson && !seenLessons().has(lv.id)) setTimeout(() => openLesson(), 250);
+  if (!lv.done && lv.lesson && !seenLessons().has(lv.id)) setTimeout(() => openLesson(), 250);
   else if (!predict) setTimeout(() => editor.focus(), 50);
 }
 
@@ -407,7 +423,7 @@ function markLessonSeen(id) {
 /** The lesson as a parchment letter, with tabs for the C and Python comparisons. */
 /** Tabs (Lesson / In C / In Python), the goal, the text and the book links for a level. */
 function lessonContent(lv, tab, { goal = true } = {}) {
-  const tabs = [["lesson", "📜 Lesson", lv.lesson], ["c", "In C", lv.c_compare], ["py", "In Python", lv.py_compare]].filter(t => t[2]);
+  const tabs = [["lesson", "Rust", lv.lesson], ["c", "In C", lv.c_compare], ["py", "In Python", lv.py_compare]].filter(t => t[2]);
   const body = el("div", "lesson-content");
   const tabBar = el("div", "tabs");
   const text = el("div", "lesson-body md");
@@ -445,31 +461,9 @@ function lessonContent(lv, tab, { goal = true } = {}) {
   return body;
 }
 
-/** The lesson can sit in a panel beside the code (wide windows) or open as a popup. */
-const canDock = () => innerWidth >= 1100;
-const lessonDocked = () => document.body.classList.contains("lesson-docked");
-
-function setLessonDock(on, tab = "lesson") {
-  try { localStorage.setItem("ff-lesson-docked", on ? "1" : ""); } catch { /* ignore */ }
-  document.body.classList.toggle("lesson-docked", on && canDock());
-  if (on) renderLessonDock(tab);
-  if (editor?.vimActive) requestAnimationFrame(() => editor.drawVimCursor());
-}
-
-function renderLessonDock(tab = "lesson") {
-  const lv = S.level;
-  if (!lv || !lessonDocked()) return;
-  $("#dock-title").textContent = `${lv.id} ${lv.title}`;
-  const body = $("#dock-body");
-  body.innerHTML = "";
-  body.append(lessonContent(lv, tab, { goal: false }));
-  markLessonSeen(lv.id);
-}
-
-/** Lesson button / L key: toggle the docked panel, or open the popup on narrow windows. */
+/** Lesson button / L key: the lesson popup (with In C / In Python tabs inside). */
 function toggleLesson(tab = "lesson") {
-  if (canDock()) setLessonDock(!lessonDocked() || tab !== "lesson", tab);
-  else openLesson(tab);
+  openLesson(tab);
 }
 
 function openLesson(tab = "lesson") {
@@ -478,15 +472,10 @@ function openLesson(tab = "lesson") {
   const body = el("div", "lesson-popup");
   body.append(lessonContent(lv, tab));
   const foot = el("div", "modal-foot");
-  if (canDock()) {
-    const pin = el("button", "wood-btn small", "📌 Keep it beside the code");
-    pin.onclick = () => { m.close(); setLessonDock(true, tab); };
-    foot.append(pin);
-  }
-  const go = el("button", "wood-btn small green", lv.kind === "predict" ? "Got it, let me read the code ➜" : "Got it, let's code! ➜");
+  const go = el("button", "wood-btn small green", answers(lv.kind) ? "Got it, let me read the code ➜" : "Got it, let's code! ➜");
   foot.append(go);
   body.append(foot);
-  const m = openModal({ title: `${lv.id} ${lv.title}`, body, wide: true, onClose: () => { if (lv.kind !== "predict") editor.focus(); } });
+  const m = openModal({ title: `${lv.num} ${lv.title}`, body, wide: true, onClose: () => { if (!answers(lv.kind)) editor.focus(); } });
   go.onclick = () => m.close();
   markLessonSeen(lv.id);
 }
@@ -529,9 +518,9 @@ function outputDiff(expected, actual) {
 /** Which console tabs this level has. */
 function consoleTabs() {
   const lv = S.level;
-  const tabs = [["compiler", "Compiler"], ["output", lv.check === "tests" && lv.kind !== "predict" ? "Test results" : "Output"]];
-  if (lv.kind !== "predict" && lv.check === "tests") tabs.push(["tests", "Tests"]);
-  else if (lv.kind !== "predict" && lv.expected_output) tabs.push(["expected", "Expected"]);
+  const tabs = [["compiler", "Compiler"], ["output", lv.check === "tests" && !answers(lv.kind) ? "Test results" : "Output"]];
+  if (!answers(lv.kind) && lv.check === "tests") tabs.push(["tests", "Tests"]);
+  else if (!answers(lv.kind) && lv.expected_output) tabs.push(["expected", "Expected"]);
   return tabs;
 }
 
@@ -540,7 +529,7 @@ function consoleSummary() {
   const r = S.lastRun;
   if (!r) {
     const how = `Press <kbd>Ctrl</kbd>+<kbd>Enter</kbd> or ${sym("▶")}Run to compile.`;
-    return { cls: "", html: S.level?.kind === "predict" ? "Answer first, then run the code to see what it really does." : how };
+    return { cls: "", html: answers(S.level?.kind) ? "Answer first, then run the code to see what it really does." : how };
   }
   // The side-by-side comparison in the Output tab replaces the "Expected: ..." text.
   const text = S.level?.expected_output ? r.summary.split("\nExpected:")[0] : r.summary;
@@ -552,13 +541,17 @@ function consoleTabHTML(tab) {
   const r = S.lastRun;
   const lv = S.level;
   const pre = t => `<pre class="console-text">${t}</pre>`;
-  if (tab === "expected") return pre(escapeHtml(lv.expected_output?.trim() || ""));
+  if (tab === "expected") {
+    // Levels with keyboard input: show what the game types for you, then the expected output.
+    const typed = lv.stdin ? `<div class="console-label">The game types this for you:</div>${pre(escapeHtml(lv.stdin.trimEnd()))}<div class="console-label">Expected output:</div>` : "";
+    return typed + pre(escapeHtml(lv.expected_output?.trim() || ""));
+  }
   if (tab === "tests") return renderMarkdown("These are the tests Ferris runs on your code:\n```rust\n" + (lv.tests || "").trim() + "\n```");
   if (!r) return `<p class="console-empty">Nothing here yet. Run your code first.</p>`;
   if (tab === "compiler") return pre(r.compiler.trim() ? colorizeCompiler(r.compiler) : '<span class="c-ok">No compiler messages. Clean build! ✨</span>');
   if (!r.compiled) return `<p class="console-empty">The program didn't run because it doesn't compile yet. Check the Compiler tab.</p>`;
-  if (lv.check === "tests" && lv.kind !== "predict") return pre(colorizeCompiler((r.stdout || "") + (r.stderr ? `\n${r.stderr}` : "")) || "(no test output)");
-  if (lv.check === "output" && lv.kind !== "predict" && lv.expected_output) {
+  if (lv.check === "tests" && !answers(lv.kind)) return pre(colorizeCompiler((r.stdout || "") + (r.stderr ? `\n${r.stderr}` : "")) || "(no test output)");
+  if (lv.check === "output" && !answers(lv.kind) && lv.expected_output) {
     return outputDiff(lv.expected_output, r.stdout || "") + (r.stderr ? pre(`<span class="c-err">${escapeHtml(r.stderr)}</span>`) : "");
   }
   return pre(escapeHtml((r.stdout || "") + (r.stderr ? `\n${r.stderr}` : "")) || "(the program printed nothing)");
@@ -592,7 +585,7 @@ function openConsole(tab = "compiler") {
   wrap.append(bar, sum, body);
   const outer = el("div");
   outer.append(wrap);
-  if (S.lastRun && !S.lastRun.passed && lv.kind !== "predict") {
+  if (S.lastRun && !S.lastRun.passed && !answers(lv.kind)) {
     const foot = el("div", "modal-foot");
     const ask = el("button", "wood-btn small purple", "🔍 Explain this to me");
     ask.onclick = () => { m.close(); askFerris("explain"); };
@@ -642,7 +635,8 @@ function showRunResult(r) {
 async function runCode() {
   const lv = S.level;
   if (!lv || S.running) return;
-  if (lv.kind === "predict") return runPredict();
+  if (lv.kind === "quiz") return;
+  if (answers(lv.kind)) return runPredict();
   S.running = true;
   setSlotBusy("run", true);
   sound.compile();
@@ -653,7 +647,7 @@ async function runCode() {
     updateHUD();
     // The player may have switched levels while this was compiling: then only report it.
     if (S.level !== lv) {
-      if (res.first_clear) toast("⭐", `Level ${lv.id} cleared! +${res.xp_gained} XP`);
+      if (res.first_clear) toast("⭐", `Level ${lv.num} cleared! +${res.xp_gained} XP`);
       return;
     }
     showRunResult(res.result);
@@ -676,7 +670,7 @@ async function runPredict() {
   setSlotBusy("run", true);
   sound.compile();
   try {
-    const r = await api.play(editor.value);
+    const r = await api.play(editor.value, lv.id);
     if (S.level !== lv) return;
     showRunResult({ ...r, summary: r.compiled ? (r.passed ? "This is what it really prints:" : r.summary) : "The real compiler says no:" });
     openConsole(r.compiled ? "output" : "compiler");
@@ -738,8 +732,8 @@ function onFail(r) {
 function renderChoices() {
   const lv = S.level;
   const box = $("#choices");
-  box.classList.toggle("show", lv.kind === "predict");
-  if (lv.kind !== "predict") { box.innerHTML = ""; return; }
+  box.classList.toggle("show", answers(lv.kind));
+  if (!answers(lv.kind)) { box.innerHTML = ""; return; }
   box.innerHTML = "";
   // On predict levels the goal is the question, so it lives here (the goal strip is hidden).
   const q = el("div", "choice-q");
@@ -755,7 +749,7 @@ function renderChoices() {
     b.onclick = () => answerQuiz(i, b);
     box.append(b);
   });
-  if (S.quizSolved) box.append(el("div", "muted", `${sym("✔")}Solved. Press ${sym("▶")}Run it to see the real output.`));
+  if (S.quizSolved) box.append(el("div", "muted", lv.kind === "quiz" ? `${sym("✔")}Solved.` : `${sym("✔")}Solved. Press ${sym("▶")}Run it to see the real output.`));
 }
 
 async function answerQuiz(i, btn) {
@@ -783,9 +777,9 @@ async function answerQuiz(i, btn) {
     if (res.world_cleared) setTimeout(() => { sound.fanfare(); banner(`${lv.world.name} cleared!`, "A new island appears on the map…"); }, 700);
     lv.next_id = res.next_id;
     buildHotbar();
-    const actions = [{ label: `${sym("▶")}Run it to see`, fn: runPredict }];
+    const actions = lv.kind === "quiz" ? [] : [{ label: `${sym("▶")}Run it to see`, fn: runPredict }];
     if (res.next_id) actions.unshift({ label: "Next level ➜", cls: "green", fn: goNext });
-    addStaticFerris(`**Correct!** 🔮 ${res.explanation}`, actions);
+    addStaticFerris(`**Correct!** ${lv.kind === "quiz" ? "📖" : "🔮"} ${res.explanation}`, actions);
   } else {
     btn.classList.add("wrong");
     btn.disabled = true;
@@ -820,7 +814,7 @@ function resetCode() {
     b.onclick = () => { m.close(); fn(); };
     body.append(b);
   };
-  if (lv.kind !== "predict") {
+  if (!answers(lv.kind)) {
     option("reset", "Reset code", "Throw away your changes and start again from the original code. Your progress on this level is kept.", "", () => {
       if (S.level !== lv) return;
       cancelDraft();
@@ -848,7 +842,7 @@ async function replayLevel(lv) {
       localStorage.setItem("ff-seen-lessons", JSON.stringify([...seen]));
     } catch { /* ignore */ }
     updateHUD();
-    toast(pixelIcon("replay", 2), res.xp_returned ? `Level ${lv.id} reset. ${res.xp_returned} XP returned; earn it again!` : `Level ${lv.id} reset. Fresh start!`);
+    toast(pixelIcon("replay", 2), res.xp_returned ? `Level ${lv.num} reset. ${res.xp_returned} XP returned; earn it again!` : `Level ${lv.num} reset. Fresh start!`);
     await openLevel(lv.id);
   } catch (e) {
     toast("⚠", escapeHtml(e.message));
@@ -926,8 +920,8 @@ function buildHotbar() {
     if (s.console) b.dataset.console = s.console;
     let label = s.label;
     if (s.id === "hint") label = `Hint ${lv.hint_tier}/3`;
-    if (s.id === "run" && lv.kind === "predict") label = "Run it";
-    if (s.id === "output" && lv.check === "tests" && lv.kind !== "predict") label = "Results";
+    if (s.id === "run" && answers(lv.kind)) label = "Run it";
+    if (s.id === "output" && lv.check === "tests" && !answers(lv.kind)) label = "Results";
     if (s.id === "extra" && lv.check === "tests") label = "Tests";
     b.innerHTML = `<span class="slot-key">${s.key}</span><span class="slot-icon">${pixelIcon(s.icon, 2)}</span><span class="slot-label">${label}</span>`;
     b.title = slotTitle(s.id);
@@ -943,9 +937,9 @@ function slotTitle(id) {
   const lv = S.level;
   switch (id) {
     case "compiler": return "Compiler messages: errors and warnings (2)";
-    case "output": return lv.check === "tests" && lv.kind !== "predict" ? "Test results (3)" : "What your program printed, next to what's expected (3)";
+    case "output": return lv.check === "tests" && !answers(lv.kind) ? "Test results (3)" : "What your program printed, next to what's expected (3)";
     case "extra": return lv.check === "tests" ? "The tests Ferris runs on your code (4)" : "The output the goal expects (4)";
-    case "run": return lv.kind === "predict" ? "Compile and run the code (after you've answered)" : "Compile and check your code (Ctrl+Enter)";
+    case "run": return answers(lv.kind) ? "Compile and run the code (after you've answered)" : "Compile and check your code (Ctrl+Enter)";
     case "hint": return lv.hint_tier >= 3 ? "You've seen all 3 hints. Ask again for more help." : `Get hint ${lv.hint_tier + 1} of 3 (${HINT_COST[lv.hint_tier + 1]} on this level${lv.done ? ", but you've already cleared it" : ""})`;
     case "explain": return "Ask Ferris to explain the last error";
     case "review": return "Ask Ferris to review your passing code (+15 bonus XP if it's idiomatic)";
@@ -959,11 +953,11 @@ function slotTitle(id) {
 
 function slotEnabled(id) {
   const lv = S.level;
-  const predict = lv.kind === "predict";
+  const predict = answers(lv.kind);
   if (S.talking && ["hint", "explain", "review"].includes(id)) return false;
   switch (id) {
-    case "run": return !predict || S.quizSolved;
-    case "compiler": case "output": return !predict || S.quizSolved;
+    case "run": return lv.kind !== "quiz" && (!predict || S.quizSolved);
+    case "compiler": case "output": return lv.kind !== "quiz" && (!predict || S.quizSolved);
     case "extra": return !predict && (lv.check === "tests" || !!lv.expected_output);
     case "explain": return !predict && !!S.lastRun && !S.lastRun.passed;
     case "review": return !predict && lv.done && !lv.skipped;
@@ -994,6 +988,7 @@ function greeting(lv) {
   const title = lv.title.replace(/[!.?]+$/, "");
   if (lv.done) return `Welcome back to **${title}**! You've already cleared it. Feel free to experiment, or ask me anything.`;
   switch (lv.kind) {
+    case "quiz": return `📖 **Quiz time!** No code to write here. Read the question, think it through, and pick an answer.`;
     case "predict": return `🔮 **Predict time!** Read the code carefully. Don't run it in your head too fast. Then pick an answer below.`;
     case "boss": return `👹 **Boss fight: ${lv.title.replace(/^BOSS:\s*/, "")}!** This one uses everything from ${lv.world.name}. Read the scroll, take it step by step, and remember: I'm right here.`;
     case "fill": return `✍️ **${title}**: some code is missing. Read the 📜 lesson, then fill in the blanks and press ▶ Run.`;
@@ -1046,15 +1041,15 @@ function addStaticFerris(text, actions = []) {
 function quickActions() {
   const lv = S.level;
   const items = [];
-  if (lv.kind !== "predict" && S.lastRun && !S.lastRun.passed) items.push(["🔍", "Explain the error", "", () => askFerris("explain")]);
-  if (lv.kind !== "predict") {
+  if (!answers(lv.kind) && S.lastRun && !S.lastRun.passed) items.push(["🔍", "Explain the error", "", () => askFerris("explain")]);
+  if (!answers(lv.kind)) {
     const tier = Math.min(lv.hint_tier + 1, 3);
     items.push(["💡", `Hint ${tier}/3`, lv.done ? "" : HINT_COST[tier], () => askFerris("hint")]);
   }
   items.push(["❓", "What do I do here?", "", () => askFerris("chat", { message: "What exactly do I need to do in this level? Explain the goal simply." })]);
-  if (lv.kind !== "predict") items.push(["🐍", "Compare with Python", "", () => askFerris("chat", { message: "How would this code look in Python, and what's different in Rust?" })]);
+  if (!answers(lv.kind)) items.push(["🐍", "Compare with Python", "", () => askFerris("chat", { message: "How would this code look in Python, and what's different in Rust?" })]);
   items.push(["⚙️", "Compare with C", "", () => askFerris("chat", { message: "How does this level's idea compare to how C does it?" })]);
-  if (lv.done && lv.kind !== "predict") items.push(["⭐", "Review my code", "", () => askFerris("review")]);
+  if (lv.done && !answers(lv.kind)) items.push(["⭐", "Review my code", "", () => askFerris("review")]);
   return items;
 }
 
@@ -1338,7 +1333,7 @@ function openCodex() {
     }
   };
   for (const entry of [...codex].sort((a, b) => b.count - a.count)) {
-    const b = el("button", "codex-item", `<span class="ci-code">${entry.code}</span><span class="ci-count">×${entry.count}</span><div class="muted">first met in ${entry.first_level}</div>`);
+    const b = el("button", "codex-item", `<span class="ci-code">${entry.code}</span><span class="ci-count">×${entry.count}</span><div class="muted">first met in ${escapeHtml(levelNum(entry.first_level))}</div>`);
     b.onclick = () => showCode(entry, b);
     list.append(b);
   }
@@ -1389,21 +1384,34 @@ function openWorkshop() {
 
 // ---------------------------------------------------------------- title screen
 
-function drawTitleBackground() {
+// ---- Title screen: an animated beach scene with music notes rising from dancing Ferris ----
+const NOTE = ["..#..", "..##.", "..#.#", "..#..", "###..", "###.."];
+const title = { notes: [], lastNote: 0, last: 0 };
+
+function pixelBlob(ctx, cx, cy, r) {
+  for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++) if (x * x + y * y <= r * r) ctx.fillRect(Math.floor(cx + x), Math.floor(cy + y), 1, 1);
+}
+
+function drawTitle(t) {
   const c = $("#title-bg");
   const w = Math.ceil(innerWidth / 4), h = Math.ceil(innerHeight / 4);
-  c.width = w; c.height = h;
+  if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
   const ctx = c.getContext("2d");
+  const sec = t / 1000;
   const bands = ["#6fc3f0", "#7fcbf2", "#8fd3f5", "#a2dcf7", "#b6e5f9"];
   const skyH = Math.floor(h * 0.62);
   bands.forEach((col, i) => { ctx.fillStyle = col; ctx.fillRect(0, Math.floor((skyH / bands.length) * i), w, Math.ceil(skyH / bands.length) + 1); });
+  // A sun that slowly pulses
   ctx.fillStyle = "#fff4c2";
-  for (let y = -6; y <= 6; y++) for (let x = -6; x <= 6; x++) if (x * x + y * y <= 36) ctx.fillRect(w - 40 + x, 22 + y, 1, 1);
+  pixelBlob(ctx, w - 40, 22, 6 + (Math.floor(sec * 2) % 2));
+  // Clouds drifting across the sky
   ctx.fillStyle = "#ffffff";
-  for (const [cx, cy] of [[30, 26], [110, 16], [200, 34], [w - 110, 44]]) {
-    for (const [ox, r] of [[0, 5], [7, 7], [15, 5]]) for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++) if (x * x + y * y <= r * r) ctx.fillRect(cx + ox + x, cy + y, 1, 1);
-    ctx.fillRect(cx, cy, 16, 5);
-  }
+  [[30, 26, 2], [110, 16, 3], [200, 34, 1.5], [w - 110, 44, 2.5]].forEach(([x0, cy, speed]) => {
+    const cx = ((x0 + sec * speed) % (w + 40)) - 20;
+    for (const [ox, r] of [[0, 5], [7, 7], [15, 5]]) pixelBlob(ctx, cx + ox, cy, r);
+    ctx.fillRect(Math.floor(cx), cy, 16, 5);
+  });
+  // Hills
   const hill = (base, amp, freq, col, ph) => {
     ctx.fillStyle = col;
     for (let x = 0; x < w; x++) {
@@ -1413,14 +1421,48 @@ function drawTitleBackground() {
   };
   hill(skyH - 18, 8, 0.03, "#7fb86a", 1);
   hill(skyH - 6, 6, 0.045, "#5aa63a", 3);
+  // Sea with sparkling waves, sand with foam that comes and goes
   ctx.fillStyle = "#3f8fd2";
   ctx.fillRect(0, skyH + 10, w, h);
   ctx.fillStyle = "#f1d48a";
   ctx.fillRect(0, skyH + 2, w, 9);
   ctx.fillStyle = "#d4ad5e";
   ctx.fillRect(0, skyH + 9, w, 2);
-  ctx.fillStyle = "#7cc4ee";
-  for (let i = 0; i < 60; i++) ctx.fillRect((i * 37) % w, skyH + 14 + ((i * 13) % (h - skyH - 16)), 3, 1);
+  ctx.fillStyle = "#ffffff";
+  for (let x = 0; x < w; x += 6) if ((Math.floor(x / 6) + Math.floor(sec * 3)) % 3 === 0) ctx.fillRect(x, skyH + 10, 3, 1);
+  for (let i = 0; i < 60; i++) {
+    const x = ((i * 37) + Math.floor(sec * (2 + (i % 3)))) % w;
+    ctx.fillStyle = (i + Math.floor(sec * 2)) % 5 === 0 ? "#ffffff" : "#7cc4ee";
+    ctx.fillRect(x, skyH + 14 + ((i * 13) % (h - skyH - 16)), 3, 1);
+  }
+  // Music notes rising from Ferris
+  const f = $("#title-ferris").getBoundingClientRect();
+  if (t - title.lastNote > 550 && f.width) {
+    title.lastNote = t;
+    const side = title.notes.length % 2 ? 1 : -1;
+    title.notes.push({
+      x: (f.left + f.width / 2) / 4 + side * (6 + Math.random() * 10),
+      y: (f.top + f.height * 0.25) / 4,
+      born: t,
+      drift: side * (0.4 + Math.random() * 0.6),
+      color: ["#ffd54a", "#ff9fd0", "#ffffff", "#a6ec7c"][title.notes.length % 4],
+    });
+  }
+  title.notes = title.notes.filter(n => t - n.born < 2600);
+  for (const n of title.notes) {
+    const age = (t - n.born) / 1000;
+    const x = Math.round(n.x + n.drift * age * 8 + Math.sin(age * 5) * 2);
+    const y = Math.round(n.y - age * 14);
+    ctx.fillStyle = age > 2 ? "rgba(255,255,255,.5)" : n.color;
+    NOTE.forEach((row, j) => [...row].forEach((ch, i) => { if (ch === "#") ctx.fillRect(x + i, y + j, 1, 1); }));
+  }
+}
+
+function titleLoop(t) {
+  requestAnimationFrame(titleLoop);
+  if (S.screen !== "title" || t - title.last < 90) return;
+  title.last = t;
+  drawTitle(t);
 }
 
 async function startGame() {
@@ -1454,7 +1496,7 @@ async function startGame() {
 /** Predict levels: make the code panel just tall enough for the code. */
 function fitPredictCode() {
   const col = $(".left-col");
-  if (S.level?.kind !== "predict") { col.style.removeProperty("--code-h"); return; }
+  if (!answers(S.level?.kind)) { col.style.removeProperty("--code-h"); return; }
   const lines = editor.value.trimEnd().split("\n").length;
   const lh = editor.lineHeight();
   // Every code line, plus the "main.rs" label, the frame and the editor's padding.
@@ -1465,39 +1507,46 @@ function fitPredictCode() {
 
 // ---------------------------------------------------------------- boot
 
+// If something breaks, say so (instead of buttons silently doing nothing).
+let errorShown = false;
+addEventListener("error", e => {
+  if (errorShown) return;
+  errorShown = true;
+  toast("⚠", `Something went wrong (${escapeHtml(e.message || "script error")}). Try a hard refresh: Ctrl+Shift+R.`);
+});
+
 async function boot() {
+  // The title buttons first, so nothing below can leave them dead.
+  $("#btn-start").onclick = startGame;
+  $("#btn-title-settings").onclick = openSettings;
   applyIcons();
   for (const g of document.querySelectorAll("[data-glyph]")) g.innerHTML = pixelGlyph(g.dataset.glyph) || g.dataset.glyph;
   document.body.style.setProperty("--grass-tile", `url(${grassTileURL()})`);
   ferris = new Ferris($("#ferris-canvas"), { scale: 6 });
-  titleFerris = new Ferris($("#title-ferris"), { scale: 6 });
+  titleFerris = new Ferris($("#title-ferris"), { scale: 6, pad: 6 });
   titleFerris.setMood("happy");
+  titleFerris.setDance?.(true);
+  // Bounce the logo's letters in a wave
+  const logo = $(".logo-main");
+  logo.innerHTML = [...logo.textContent].map((ch, i) => ch === " " ? " " : `<span style="animation-delay:${i * 0.09}s">${escapeHtml(ch)}</span>`).join("");
   worldMap = new WorldMap($("#map-canvas"), $("#map-overlay"), { onSelect: openWorldBoard });
   editor = new Editor($("#editor"), {
     onRun: runCode,
     onVimError: m => toast("⌨️", m.message || "Neovim problem"),
     onChange: code => {
       const id = S.level?.id;
-      if (id && S.level.kind !== "predict") scheduleDraft(id, code);
+      if (id && !answers(S.level.kind)) scheduleDraft(id, code);
     },
   });
 
-  drawTitleBackground();
-  addEventListener("resize", drawTitleBackground);
+  requestAnimationFrame(titleLoop);
 
   $("#btn-lesson").onclick = () => toggleLesson("lesson");
-  $("#btn-lesson-c").onclick = () => toggleLesson("c");
-  $("#btn-lesson-py").onclick = () => toggleLesson("py");
-  $("#lv-goal").onclick = () => { const g = $("#lv-goal"); if (g.classList.contains("long")) g.classList.toggle("open"); };
-  $("#btn-dock-close").onclick = () => { sound.click(); setLessonDock(false); };
-  try { if (localStorage.getItem("ff-lesson-docked") === "1") document.body.classList.toggle("lesson-docked", canDock()); } catch { /* ignore */ }
-  addEventListener("resize", () => {
-    let want = false;
-    try { want = localStorage.getItem("ff-lesson-docked") === "1"; } catch { /* ignore */ }
-    const was = lessonDocked();
-    document.body.classList.toggle("lesson-docked", want && canDock());
-    if (!was && lessonDocked()) renderLessonDock();
-  });
+  // Click a long goal to show or hide the rest of it.
+  $("#lv-goal").onclick = () => {
+    const g = $("#lv-goal");
+    if (g.classList.contains("long")) g.classList.toggle("open");
+  };
   $("#btn-start").onclick = startGame;
   $("#btn-title-settings").onclick = openSettings;
   $("#btn-settings").onclick = openSettings;
@@ -1573,7 +1622,7 @@ async function boot() {
     // Ctrl+Enter runs the code wherever the focus is (the editor handles it itself when focused).
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
       e.preventDefault();
-      if (S.level?.kind !== "predict" || S.quizSolved) runCode();
+      if (!answers(S.level?.kind) || S.quizSolved) runCode();
       return;
     }
     const typing = ["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName) && !document.activeElement.readOnly;
@@ -1585,7 +1634,7 @@ async function boot() {
       const b = document.querySelector(`.slot[data-slot=${slot.id}]`);
       if (b && !b.disabled) { e.preventDefault(); b.click(); }
     }
-    if (S.level?.kind === "predict" && !S.quizSolved && /^[a-d]$/i.test(e.key)) {
+    if (answers(S.level?.kind) && !S.quizSolved && /^[a-d]$/i.test(e.key)) {
       const c = document.querySelectorAll(".choice")[e.key.toLowerCase().charCodeAt(0) - 97];
       if (c && !c.disabled) c.click();
     }

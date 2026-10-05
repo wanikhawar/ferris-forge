@@ -2,40 +2,542 @@ id = 8
 name = "Error Marsh"
 blurb = "When things go wrong, and what to do about it."
 
-# Placeholder island: these levels are planned but not built yet.
-
-[[planned]]
+[[level]]
+id = "8.1"
 title = "Abandon ship! panic!"
 kind = "predict"
 book = ["9.1"]
-about = "When a program gives up, and how to read the backtrace."
+xp = 25
+goal = "What happens when this runs?"
+lesson = '''
+Some errors can't be recovered from. Then a Rust program **panics**: it prints a message and stops, cleaning up memory on the way out (that's called *unwinding*).
 
-[[planned]]
+You can panic on purpose with `panic!("message")`. Some operations panic for you, like reading past the end of a Vec.
+
+Run with the environment variable `RUST_BACKTRACE=1` to see the chain of function calls that led to the panic.
+'''
+c_compare = '''
+Reading past the end of an array in C is undefined behaviour: maybe garbage, maybe a crash, maybe nothing. A Rust panic is a clean, guaranteed stop with a message.
+'''
+py_compare = '''
+Like an uncaught `IndexError`, except a panic isn't meant to be caught. For errors you expect, Rust uses `Result` (next level).
+'''
+starter = '''
+fn main() {
+    let v = vec![1, 2, 3];
+    let i = 10;
+    println!("start");
+    println!("{}", v[i]);
+    println!("end");
+}
+'''
+choices = [
+    "start / end",
+    "start, then it crashes with an index out of bounds panic",
+    "It doesn't compile: index 10 is too big",
+    "start / 0 / end",
+]
+answer = 1
+expected_output = "start"
+explanation = "The program compiles (the index is only checked while running). It prints `start`, then `v[10]` panics: 'index out of bounds: the len is 3 but the index is 10'. `end` is never printed."
+
+[[level]]
+id = "8.2"
 title = "Maybe it worked: Result"
 kind = "fix"
 book = ["9.2"]
-about = "Ok or Err: handle failure with match."
+xp = 45
+goal = '''Handle both results with match, so it prints:
+Level 8
+Error: 'seven' is not a number'''
+lesson = '''
+For errors you **expect** (bad input, a missing file), functions return a **`Result`**:
 
-[[planned]]
+```rust
+enum Result<T, E> {
+    Ok(T),    // it worked, here's the value
+    Err(E),   // it failed, here's why
+}
+```
+
+A `Result<u32, String>` isn't a number, so you must look inside first:
+
+```rust
+match parse_level("7") {
+    Ok(n) => println!("got {n}"),
+    Err(e) => println!("oops: {e}"),
+}
+```
+'''
+c_compare = '''
+Instead of returning `-1` and setting `errno`, a Rust function returns either the value or the error, never both, and you can't ignore it.
+'''
+py_compare = '''
+Instead of raising an exception, the error is returned as a value. `match` replaces `try` / `except`.
+'''
+check = "output"
+expected_output = '''
+Level 8
+Error: 'seven' is not a number
+'''
+starter = '''
+fn parse_level(text: &str) -> Result<u32, String> {
+    match text.trim().parse::<u32>() {
+        Ok(n) => Ok(n),
+        Err(_) => Err(format!("'{}' is not a number", text)),
+    }
+}
+
+fn main() {
+    let level = parse_level("7");
+    println!("Level {}", level + 1);
+
+    let bad = parse_level("seven");
+    println!("{}", bad);
+}
+'''
+solution = '''
+fn parse_level(text: &str) -> Result<u32, String> {
+    match text.trim().parse::<u32>() {
+        Ok(n) => Ok(n),
+        Err(_) => Err(format!("'{}' is not a number", text)),
+    }
+}
+
+fn main() {
+    match parse_level("7") {
+        Ok(n) => println!("Level {}", n + 1),
+        Err(e) => println!("Error: {}", e),
+    }
+
+    match parse_level("seven") {
+        Ok(n) => println!("Level {}", n + 1),
+        Err(e) => println!("Error: {}", e),
+    }
+}
+'''
+hints = [
+    "`parse_level` returns a Result, not a number. What do you use to look inside an enum?",
+    "Replace each `let` + `println!` pair with a `match` that has an `Ok(n)` arm and an `Err(e)` arm.",
+    "```rust\nmatch parse_level(\"7\") {\n    Ok(n) => println!(\"Level {}\", n + 1),\n    Err(e) => println!(\"Error: {}\", e),\n}\n```\nand the same for `\"seven\"`.",
+]
+
+[[level]]
+id = "8.3"
 title = "Living dangerously: unwrap"
 kind = "predict"
 book = ["9.2"]
-about = "unwrap and expect are quick, but they crash on errors."
+xp = 25
+goal = "What happens when this runs?"
+lesson = '''
+Shortcuts for `Result` (and `Option`):
 
-[[planned]]
+- `.unwrap()`: the value if `Ok`, otherwise **panic**
+- `.expect("message")`: the same, but panics with your message (better for debugging)
+- `.unwrap_or(default)`: the value, or a default. Never panics.
+
+`unwrap` and `expect` are fine in quick experiments, tests, or when you *know* it can't fail. In real code, prefer handling the error.
+'''
+c_compare = '''
+`expect` is like `assert(ptr != NULL && "ship needs fuel")`, but it's always checked.
+'''
+py_compare = '''
+`unwrap()` on an `Err` is like letting an exception crash the program.
+'''
+starter = '''
+fn main() {
+    let a: Result<u32, String> = Ok(3);
+    let b: Result<u32, String> = Err(String::from("no fuel"));
+    let c: Result<u32, String> = Err(String::from("no fuel"));
+    println!("{}", a.unwrap());
+    println!("{}", b.unwrap_or(0));
+    println!("{}", c.expect("ship needs fuel"));
+}
+'''
+choices = [
+    "3 / 0 / 0",
+    "3 / 0, then it crashes with the message: ship needs fuel: \"no fuel\"",
+    "It doesn't compile",
+    "3, then it crashes",
+]
+answer = 1
+expected_output = '''
+3
+0
+'''
+explanation = "`a.unwrap()` gives 3, `b.unwrap_or(0)` gives the default 0, and `c.expect(...)` panics with your message followed by the error: `ship needs fuel: \"no fuel\"`."
+
+[[level]]
+id = "8.4"
 title = "Pass it up with ?"
 kind = "fill"
 book = ["9.2"]
-about = "The ? operator hands errors back to the caller (Option too)."
+xp = 50
+goal = "Write parse_pair (\"3,4\" → (3, 4)) and first_upper, using ? to pass errors up."
+lesson = '''
+Writing `match` for every possible error gets long. The **`?` operator** does it for you:
 
-[[planned]]
+```rust
+fn read_number(text: &str) -> Result<i32, std::num::ParseIntError> {
+    let n = text.parse::<i32>()?;   // on Err, return that error right now
+    Ok(n * 2)
+}
+```
+
+`?` works on `Option` too: on `None`, the function returns `None` immediately.
+
+You can only use `?` in a function that returns a `Result` (or `Option`). Even `main` can: `fn main() -> Result<(), Box<dyn std::error::Error>>`.
+'''
+c_compare = '''
+Like the C pattern `if (err) return err;` after every call, written as one character.
+'''
+py_compare = '''
+Exceptions bubble up on their own in Python. `?` is the explicit, visible version of that.
+'''
+check = "tests"
+starter = '''
+use std::num::ParseIntError;
+
+fn parse_pair(text: &str) -> Result<(i32, i32), ParseIntError> {
+    // "3,4" -> Ok((3, 4)). Use ? on each parse.
+    let mut parts = text.split(',');
+    let left = parts.next().unwrap_or("").trim();
+    let right = parts.next().unwrap_or("").trim();
+    todo!()
+}
+
+fn first_upper(s: &str) -> Option<char> {
+    // The first char in uppercase, or None for an empty string. Use ?.
+    todo!()
+}
+
+fn main() {
+    println!("{:?} {:?}", parse_pair("3,4"), first_upper("rust"));
+}
+'''
+solution = '''
+use std::num::ParseIntError;
+
+fn parse_pair(text: &str) -> Result<(i32, i32), ParseIntError> {
+    // "3,4" -> Ok((3, 4)). Use ? on each parse.
+    let mut parts = text.split(',');
+    let left = parts.next().unwrap_or("").trim();
+    let right = parts.next().unwrap_or("").trim();
+    let a = left.parse::<i32>()?;
+    let b = right.parse::<i32>()?;
+    Ok((a, b))
+}
+
+fn first_upper(s: &str) -> Option<char> {
+    // The first char in uppercase, or None for an empty string. Use ?.
+    let c = s.chars().next()?;
+    Some(c.to_ascii_uppercase())
+}
+
+fn main() {
+    println!("{:?} {:?}", parse_pair("3,4"), first_upper("rust"));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn good_pair() {
+        assert_eq!(parse_pair("3,4"), Ok((3, 4)));
+        assert_eq!(parse_pair(" -1 , 20 "), Ok((-1, 20)));
+    }
+
+    #[test]
+    fn bad_pair() {
+        assert!(parse_pair("3,x").is_err());
+        assert!(parse_pair("only").is_err());
+    }
+
+    #[test]
+    fn first_letter() {
+        assert_eq!(first_upper("rust"), Some('R'));
+        assert_eq!(first_upper(""), None);
+    }
+}
+'''
+hints = [
+    "Parse `left` and `right` with `.parse::<i32>()` and put `?` after each, then wrap both numbers in Ok.",
+    "parse_pair ends with `Ok((a, b))`. first_upper: `let c = s.chars().next()?;` then return `Some(...)`.",
+    "```rust\nlet a = left.parse::<i32>()?;\nlet b = right.parse::<i32>()?;\nOk((a, b))\n```\nand\n```rust\nlet c = s.chars().next()?;\nSome(c.to_ascii_uppercase())\n```",
+]
+
+[[level]]
+id = "8.5"
 title = "Crash or cope?"
-kind = "fix"
+kind = "fill"
 book = ["9.3"]
-about = "When to panic, and when to return an error."
+xp = 50
+goal = "Guess::new panics on numbers outside 1 to 100; Guess::try_new returns an Err instead."
+lesson = '''
+When should code **panic**, and when should it return a **`Result`**?
 
-[[planned]]
+- **Return a `Result`** when failure is a normal possibility the caller can handle: bad user input, a missing file.
+- **Panic** when continuing would be a bug: a broken promise inside your own program.
+
+A great trick is a **validated type**: a `Guess` that can only ever hold 1 to 100. Check once when it's created, and every function that receives a `Guess` can trust it.
+
+```rust
+if value < 1 || value > 100 {
+    panic!("Guess must be between 1 and 100, got {value}");
+}
+```
+'''
+c_compare = '''
+Like checking a value once in a constructor and using `assert` to catch your own bugs, but the checks can't be compiled out.
+'''
+py_compare = '''
+Like raising `ValueError` in `__init__`. Rust gives you both styles: panic (`new`) or a `Result` (`try_new`).
+'''
+check = "tests"
+starter = '''
+pub struct Guess {
+    value: i32,
+}
+
+impl Guess {
+    pub fn new(value: i32) -> Guess {
+        // TODO: panic!("Guess must be between 1 and 100, got {value}") when value is outside 1..=100
+        Guess { value }
+    }
+
+    pub fn try_new(value: i32) -> Result<Guess, String> {
+        // TODO: Err("out of range".to_string()) when value is outside 1..=100
+        todo!()
+    }
+
+    pub fn value(&self) -> i32 {
+        self.value
+    }
+}
+
+fn main() {
+    println!("{}", Guess::new(42).value());
+}
+'''
+solution = '''
+pub struct Guess {
+    value: i32,
+}
+
+impl Guess {
+    pub fn new(value: i32) -> Guess {
+        if value < 1 || value > 100 {
+            panic!("Guess must be between 1 and 100, got {value}");
+        }
+        Guess { value }
+    }
+
+    pub fn try_new(value: i32) -> Result<Guess, String> {
+        if value < 1 || value > 100 {
+            return Err("out of range".to_string());
+        }
+        Ok(Guess { value })
+    }
+
+    pub fn value(&self) -> i32 {
+        self.value
+    }
+}
+
+fn main() {
+    println!("{}", Guess::new(42).value());
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn in_range() {
+        assert_eq!(Guess::new(50).value(), 50);
+        assert_eq!(Guess::new(1).value(), 1);
+        assert_eq!(Guess::new(100).value(), 100);
+    }
+
+    #[test]
+    #[should_panic(expected = "between 1 and 100")]
+    fn too_big_panics() {
+        Guess::new(200);
+    }
+
+    #[test]
+    #[should_panic(expected = "between 1 and 100")]
+    fn zero_panics() {
+        Guess::new(0);
+    }
+
+    #[test]
+    fn try_new_copes() {
+        assert_eq!(Guess::try_new(7).map(|g| g.value()), Ok(7));
+        assert!(Guess::try_new(101).is_err());
+    }
+}
+'''
+hints = [
+    "Both functions do the same range check. One panics, the other returns an Err.",
+    "Check `if value < 1 || value > 100`. In new, call `panic!(...)`; in try_new, `return Err(...)`, and finish with `Ok(Guess { value })`.",
+    "```rust\nif value < 1 || value > 100 {\n    panic!(\"Guess must be between 1 and 100, got {value}\");\n}\n```",
+]
+
+[[level]]
+id = "8.6"
 title = "BOSS: The config parser"
 kind = "boss"
 book = ["9.2", "9.3"]
-about = "Read settings and explain every mistake kindly."
+xp = 120
+goal = '''Write parse_config: read "key = value" lines into a Config,
+and return a helpful ConfigError when something is wrong.'''
+lesson = '''
+**Boss fight!** A settings file looks like this:
+
+```text
+# my game
+name = Crab Quest
+players = 4
+music = on
+```
+
+Rules:
+- Blank lines and lines starting with `#` are skipped.
+- A line without `=` is `BadLine(line_number)` (counting from 1).
+- `players` must be a number, or it's `BadNumber(value)`.
+- `music` must be `on` or `off`, or it's `BadBool(value)`. If it's missing, it's `false`.
+- `name` and `players` are required: `MissingKey("name")` / `MissingKey("players")`.
+- Unknown keys are ignored.
+
+Useful tools: `text.lines()`, `line.split_once('=')`, `.trim()`, `.parse::<u32>()`, and `opt.ok_or(error)?` to turn a missing `Option` into an error. To turn one error into another, use `.map_err(|_| ConfigError::BadNumber(value.to_string()))?`.
+'''
+c_compare = '''
+Writing this in C means careful `strchr`, `strtol` and error codes for every case. Here each error is a typed enum variant the caller can match on.
+'''
+py_compare = '''
+Like `configparser`, but with your own error types instead of exceptions.
+'''
+check = "tests"
+starter = '''
+#[derive(Debug, PartialEq)]
+struct Config {
+    name: String,
+    players: u32,
+    music: bool,
+}
+
+#[derive(Debug, PartialEq)]
+enum ConfigError {
+    BadLine(usize),
+    MissingKey(String),
+    BadNumber(String),
+    BadBool(String),
+}
+
+fn parse_config(text: &str) -> Result<Config, ConfigError> {
+    todo!()
+}
+
+fn main() {
+    let text = "name = Crab Quest\nplayers = 4\nmusic = on";
+    println!("{:?}", parse_config(text));
+}
+'''
+solution = '''
+#[derive(Debug, PartialEq)]
+struct Config {
+    name: String,
+    players: u32,
+    music: bool,
+}
+
+#[derive(Debug, PartialEq)]
+enum ConfigError {
+    BadLine(usize),
+    MissingKey(String),
+    BadNumber(String),
+    BadBool(String),
+}
+
+fn parse_config(text: &str) -> Result<Config, ConfigError> {
+    let mut name = None;
+    let mut players = None;
+    let mut music = None;
+    for (i, line) in text.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            return Err(ConfigError::BadLine(i + 1));
+        };
+        let (key, value) = (key.trim(), value.trim());
+        match key {
+            "name" => name = Some(value.to_string()),
+            "players" => {
+                let n = value
+                    .parse::<u32>()
+                    .map_err(|_| ConfigError::BadNumber(value.to_string()))?;
+                players = Some(n);
+            }
+            "music" => {
+                music = Some(match value {
+                    "on" => true,
+                    "off" => false,
+                    _ => return Err(ConfigError::BadBool(value.to_string())),
+                });
+            }
+            _ => {}
+        }
+    }
+    Ok(Config {
+        name: name.ok_or(ConfigError::MissingKey("name".to_string()))?,
+        players: players.ok_or(ConfigError::MissingKey("players".to_string()))?,
+        music: music.unwrap_or(false),
+    })
+}
+
+fn main() {
+    let text = "name = Crab Quest\nplayers = 4\nmusic = on";
+    println!("{:?}", parse_config(text));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_good_config() {
+        let text = "# my game\n\nname = Crab Quest\nplayers = 4\nmusic = on\ncolor = red";
+        assert_eq!(
+            parse_config(text),
+            Ok(Config { name: "Crab Quest".to_string(), players: 4, music: true })
+        );
+    }
+
+    #[test]
+    fn music_defaults_to_off() {
+        let c = parse_config("name = A\nplayers = 1").unwrap();
+        assert!(!c.music);
+    }
+
+    #[test]
+    fn helpful_errors() {
+        assert_eq!(parse_config("players = 2"), Err(ConfigError::MissingKey("name".to_string())));
+        assert_eq!(parse_config("name = A"), Err(ConfigError::MissingKey("players".to_string())));
+        assert_eq!(parse_config("name = A\nplayers = lots"), Err(ConfigError::BadNumber("lots".to_string())));
+        assert_eq!(parse_config("name = A\nplayers = 2\nmusic = maybe"), Err(ConfigError::BadBool("maybe".to_string())));
+        assert_eq!(parse_config("name = A\noops"), Err(ConfigError::BadLine(2)));
+    }
+}
+'''
+hints = [
+    "Keep three `Option`s (name, players, music), fill them while looping over `text.lines().enumerate()`, then build the Config at the end.",
+    "For each line: skip blanks/comments, `split_once('=')` (BadLine if None), trim both halves, then `match key`. At the end use `name.ok_or(ConfigError::MissingKey(\"name\".to_string()))?`.",
+    "```rust\nlet Some((key, value)) = line.split_once('=') else {\n    return Err(ConfigError::BadLine(i + 1));\n};\nlet (key, value) = (key.trim(), value.trim());\nmatch key {\n    \"name\" => name = Some(value.to_string()),\n    \"players\" => players = Some(value.parse::<u32>().map_err(|_| ConfigError::BadNumber(value.to_string()))?),\n    \"music\" => music = Some(match value { \"on\" => true, \"off\" => false, _ => return Err(ConfigError::BadBool(value.to_string())) }),\n    _ => {}\n}\n```",
+]

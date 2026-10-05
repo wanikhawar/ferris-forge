@@ -14,6 +14,7 @@
   <!-- Title screen -->
   <section id="title-screen" class="screen active">
     <canvas id="title-bg" class="pixel-bg"></canvas>
+    <button class="icon-btn title-gear" id="btn-title-settings" title="Settings" aria-label="Settings" data-icon="gear"></button>
     <div class="title-content">
       <div class="logo-sign">
         <div class="logo-main">Ferris' Forge</div>
@@ -22,7 +23,6 @@
       <canvas id="title-ferris" class="sprite"></canvas>
       <div class="title-buttons">
         <button id="btn-start" class="wood-btn big">Start</button>
-        <button id="btn-title-settings" class="wood-btn">Settings</button>
       </div>
       <div class="title-foot">Real compiler. Real Rust. A crab who believes in you.</div>
     </div>
@@ -41,21 +41,12 @@
   <section id="level-screen" class="screen">
     <div class="level-grid">
 
-      <aside class="lesson-dock frame-parchment" id="lesson-dock" aria-label="Lesson">
-        <div class="dock-head">
-          <span class="dock-title" id="dock-title">📜 Lesson</span>
-          <button class="mini-icon" id="btn-dock-close" title="Close the lesson panel (L)" aria-label="Close the lesson panel" data-icon="arrowLeft"></button>
-        </div>
-        <div class="dock-body" id="dock-body"></div>
-      </aside>
 
       <div class="left-col">
         <div class="lesson-strip frame-parchment">
           <div class="goal" id="lv-goal"></div>
           <div class="lesson-buttons">
             <button class="wood-btn small" id="btn-lesson" title="Read the lesson (L)">📜 Lesson</button>
-            <button class="wood-btn small" id="btn-lesson-c" title="How C does it">In C</button>
-            <button class="wood-btn small" id="btn-lesson-py" title="How Python does it">In Python</button>
           </div>
         </div>
 

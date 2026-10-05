@@ -2,64 +2,651 @@ id = 4
 name = "Borrow Bridge"
 blurb = "Lend things out without giving them away."
 
-# Placeholder island: these levels are planned but not built yet.
-
-[[planned]]
+[[level]]
+id = "4.1"
 title = "Just looking, thanks!"
-kind = "fill"
+kind = "fix"
 book = ["4.2"]
-about = "Lend a value with & so its owner gets it back."
+xp = 40
+goal = "Make it print: ferris has 6 letters"
+lesson = '''
+Moving a value into a function every time is a pain. Instead, you can **lend** it with `&`:
 
-[[planned]]
+```rust
+fn count(word: &String) -> usize {   // borrows, doesn't own
+    word.len()
+}
+
+let w = String::from("crab");
+let n = count(&w);   // lend w...
+println!("{w}");     // ...and it's still ours!
+```
+
+`&w` is a **reference**: a pointer that is guaranteed to be valid. The function can look, but the owner keeps the value.
+'''
+c_compare = '''
+Like passing `const char *` instead of handing over the buffer. But Rust *proves* the pointer stays valid for as long as it's used.
+'''
+py_compare = '''
+Python passes references all the time without telling you. In Rust you write `&` on purpose, and the type says "borrowed".
+'''
+check = "output"
+expected_output = "ferris has 6 letters"
+starter = '''
+fn count_letters(word: String) -> usize {
+    word.len()
+}
+
+fn main() {
+    let word = String::from("ferris");
+    let n = count_letters(word);
+    println!("{} has {} letters", word, n);
+}
+'''
+solution = '''
+fn count_letters(word: &String) -> usize {
+    word.len()
+}
+
+fn main() {
+    let word = String::from("ferris");
+    let n = count_letters(&word);
+    println!("{} has {} letters", word, n);
+}
+'''
+hints = [
+    "The function takes ownership of the word, so main can't print it afterwards. Could the function just borrow it?",
+    "Change the parameter type to a reference, and pass a reference at the call site.",
+    "`fn count_letters(word: &String)` and call it with `count_letters(&word)`.",
+]
+
+[[level]]
+id = "4.2"
 title = "The three keys: Read, Write, Own"
 kind = "predict"
 book = ["4.2"]
-about = "Track what each variable is allowed to do, line by line."
+xp = 25
+goal = "Does this compile? If so, what does it print?"
+lesson = '''
+The Brown edition of the Rust Book explains borrowing with **permissions**. Every variable holds up to three keys:
 
-[[planned]]
+- **R**ead: you can look at it
+- **W**rite: you can change it
+- **O**wn: you can move or drop it
+
+`let mut v = vec![1, 2, 3];` gives `v` all three: **R W O**.
+
+When you borrow with `let first = &v[0];`, `v` **lends out its W and O keys** until the last time `first` is used. While the borrow is alive, `v` can only be read.
+'''
+c_compare = '''
+In C, `int *first = &v[0];` and then growing the array could move it to new memory, leaving `first` dangling. Rust's permissions catch that before the program runs.
+'''
+py_compare = '''
+Python lists can change while you hold a reference to an item, and nothing stops you. Rust's permission check is about memory safety, not just style.
+'''
+starter = '''
+fn main() {
+    let mut v = vec![1, 2, 3];
+    let first = &v[0];
+    v.push(4);
+    println!("{}", first);
+}
+'''
+choices = [
+    "1",
+    "It doesn't compile: v can't be changed while first is still borrowing it",
+    "It crashes: first points to freed memory",
+    "4",
+]
+answer = 1
+compile_fails = true
+explanation = "`first` borrows from `v`, so `v` loses its Write permission until `first`'s last use on line 5. `v.push(4)` needs Write, so it's error E0502. Pushing could reallocate the vector and leave `first` dangling, which is exactly the bug Rust prevents."
+
+[[level]]
+id = "4.3"
 title = "Borrowing the paintbrush"
 kind = "fix"
 book = ["4.2"]
-about = "Use &mut to let a function change your value."
+xp = 40
+goal = "Make it print: Ferris★"
+lesson = '''
+A plain `&` borrow is **read-only**. To let a function change your value, lend it with **`&mut`**:
 
-[[planned]]
+```rust
+fn paint(wall: &mut String) {
+    wall.push_str(" (painted)");
+}
+
+let mut wall = String::from("fence");
+paint(&mut wall);
+```
+
+Three things must line up:
+1. the variable is declared `mut`
+2. the parameter type is `&mut T`
+3. the call passes `&mut value`
+'''
+c_compare = '''
+`&mut String` is like a non-const pointer `char *`. A plain `&String` is like `const char *`.
+'''
+py_compare = '''
+In Python any function can change a list you pass in. In Rust you must say `&mut`, so changes are never a surprise.
+'''
+check = "output"
+expected_output = "Ferris★"
+starter = '''
+fn add_star(name: &String) {
+    name.push_str("★");
+}
+
+fn main() {
+    let name = String::from("Ferris");
+    add_star(&name);
+    println!("{}", name);
+}
+'''
+solution = '''
+fn add_star(name: &mut String) {
+    name.push_str("★");
+}
+
+fn main() {
+    let mut name = String::from("Ferris");
+    add_star(&mut name);
+    println!("{}", name);
+}
+'''
+hints = [
+    "The function wants to change the String, but it only got a read-only borrow.",
+    "You need `&mut` in two places, and `mut` on the variable itself.",
+    "`fn add_star(name: &mut String)`, `let mut name = ...`, and `add_star(&mut name)`.",
+]
+
+[[level]]
+id = "4.4"
 title = "One painter at a time"
 kind = "fix"
 book = ["4.2"]
-about = "Many readers or one writer, never both at once."
+xp = 40
+goal = "Make it print: Score: 20"
+lesson = '''
+Rust's golden rule of borrowing:
 
-[[planned]]
+> At any moment you can have **either** many readers (`&`) **or** one writer (`&mut`), never both.
+
+Two `&mut` borrows of the same value at the same time is error **E0499**.
+
+But a borrow only lasts until its **last use**. So use the first one, and *then* make the second:
+
+```rust
+let a = &mut x;
+*a += 1;         // last use of a
+let b = &mut x;  // fine now!
+*b += 1;
+```
+
+`*a` means "the value `a` points to".
+'''
+c_compare = '''
+Two pointers changing the same data at once is how data races and aliasing bugs happen in C. Rust simply doesn't allow it.
+'''
+py_compare = '''
+Two names changing the same object is normal in Python. Rust requires the changes to take turns.
+'''
+check = "output"
+expected_output = "Score: 20"
+starter = '''
+fn main() {
+    let mut score = 10;
+    let a = &mut score;
+    let b = &mut score;
+    *a += 5;
+    *b += 5;
+    println!("Score: {}", score);
+}
+'''
+solution = '''
+fn main() {
+    let mut score = 10;
+    let a = &mut score;
+    *a += 5;
+    let b = &mut score;
+    *b += 5;
+    println!("Score: {}", score);
+}
+'''
+hints = [
+    "Two mutable borrows are alive at the same time. Can you finish with the first before making the second?",
+    "Move `*a += 5;` up, so `a` is done before `b` is created.",
+    "Order the lines: `let a = &mut score;` `*a += 5;` `let b = &mut score;` `*b += 5;`",
+]
+
+[[level]]
+id = "4.5"
 title = "The bridge to nowhere"
 kind = "predict"
 book = ["4.2", "4.3"]
-about = "A reference can't outlive the thing it points to."
+xp = 25
+goal = "Does this compile? If so, what does it print?"
+lesson = '''
+A reference must never outlive the value it points to. A reference to something that's gone is called a **dangling reference**.
 
-[[planned]]
+What happens when a function returns a reference to its own local variable?
+'''
+c_compare = '''
+Returning `&local` from a C function compiles (maybe with a warning) and returns a pointer to dead stack memory. Undefined behaviour!
+'''
+py_compare = '''
+Python's garbage collector keeps the object alive as long as anything refers to it. Rust has no GC, so it checks at compile time instead.
+'''
+starter = '''
+fn make_sign() -> &String {
+    let s = String::from("Bridge closed");
+    &s
+}
+
+fn main() {
+    println!("{}", make_sign());
+}
+'''
+choices = [
+    "Bridge closed",
+    "Garbage text, like in C",
+    "It doesn't compile: s is dropped when make_sign ends, so the reference would dangle",
+    "It panics at runtime",
+]
+answer = 2
+compile_fails = true
+explanation = "`s` is dropped at the end of `make_sign`, so `&s` would point at freed memory. Rust refuses to compile it. The fix is to return the `String` itself, which moves ownership out instead."
+
+[[level]]
+id = "4.6"
 title = "The troll under the bridge"
 kind = "fix"
 book = ["4.3"]
-about = "Fix a parade of real borrow-checker errors, one by one."
+xp = 50
+goal = '''Fix every borrow-checker error so it prints:
+Hello, Ferris!
+left right!
+Biggest was 3'''
+lesson = '''
+The troll asks riddles from the Brown book's chapter **"Fixing Ownership Errors"**. Real errors you'll meet:
 
-[[planned]]
+1. **Moving out of a collection.** `let x = v[0];` tries to take a `String` out of a Vec. Borrow it instead: `&v[0]`.
+2. **Aliasing + mutation.** Holding a reference into a Vec while pushing to it. Copy the value out first (for numbers, `*` copies).
+3. **Not actually an error!** Borrowing one tuple field while changing a *different* field is fine. Rust tracks fields separately.
+
+Fix the errors one at a time, starting from the first.
+'''
+c_compare = '''
+Each of these would be a real memory bug in C: a double free, a dangling pointer into a reallocated array.
+'''
+py_compare = '''
+In Python these all "just work" because everything is reference-counted. Rust gets the same safety without a garbage collector.
+'''
+check = "output"
+expected_output = '''
+Hello, Ferris!
+left right!
+Biggest was 3
+'''
+starter = '''
+fn main() {
+    let names = vec![String::from("Ferris"), String::from("Corro")];
+    let first = names[0];
+    println!("Hello, {}!", first);
+
+    let mut pair = (String::from("left"), String::from("right"));
+    let l = &pair.0;
+    pair.1.push_str("!");
+    println!("{} {}", l, pair.1);
+
+    let mut scores = vec![1, 2, 3];
+    let biggest = scores.iter().max().unwrap();
+    scores.push(4);
+    println!("Biggest was {}", biggest);
+}
+'''
+solution = '''
+fn main() {
+    let names = vec![String::from("Ferris"), String::from("Corro")];
+    let first = &names[0];
+    println!("Hello, {}!", first);
+
+    let mut pair = (String::from("left"), String::from("right"));
+    let l = &pair.0;
+    pair.1.push_str("!");
+    println!("{} {}", l, pair.1);
+
+    let mut scores = vec![1, 2, 3];
+    let biggest = *scores.iter().max().unwrap();
+    scores.push(4);
+    println!("Biggest was {}", biggest);
+}
+'''
+hints = [
+    "There are two real errors (and one thing that looks wrong but is fine). Start with E0507 on line 3.",
+    "Line 3: borrow the name instead of moving it. Line 12: `biggest` is a reference into `scores`; copy the number out so `scores` is free to change.",
+    "`let first = &names[0];` and `let biggest = *scores.iter().max().unwrap();`",
+]
+
+[[level]]
+id = "4.7"
 title = "A slice of pie"
 kind = "fill"
 book = ["4.4"]
-about = "Borrow part of a String as a &str."
+xp = 45
+goal = "Write first_word: return the first word of a string (everything before the first space)."
+lesson = '''
+A **slice** borrows *part* of something. A string slice has type **`&str`**:
 
-[[planned]]
+```rust
+let s = String::from("hello world");
+let hello = &s[0..5];   // bytes 0 up to (not including) 5
+let world = &s[6..];    // from 6 to the end
+```
+
+String literals like `"hi"` are `&str` too. A `&String` automatically works where a `&str` is wanted, so `&str` parameters accept both.
+
+To find a space, you can walk the bytes:
+
+```rust
+for (i, b) in s.bytes().enumerate() {
+    if b == b' ' { /* found a space at index i */ }
+}
+```
+'''
+c_compare = '''
+A `&str` is a pointer plus a length, like a `(const char *, size_t)` pair. No null terminator, and no copying.
+'''
+py_compare = '''
+Like `s[0:5]` in Python, but Rust's slice doesn't copy the text. It borrows a window into the original.
+'''
+check = "tests"
+starter = '''
+fn first_word(s: &str) -> &str {
+    todo!()
+}
+
+fn main() {
+    println!("{}", first_word("hello world"));
+}
+'''
+solution = '''
+fn first_word(s: &str) -> &str {
+    for (i, b) in s.bytes().enumerate() {
+        if b == b' ' {
+            return &s[..i];
+        }
+    }
+    s
+}
+
+fn main() {
+    println!("{}", first_word("hello world"));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn two_words() {
+        assert_eq!(first_word("hello world"), "hello");
+    }
+
+    #[test]
+    fn one_word() {
+        assert_eq!(first_word("crab"), "crab");
+    }
+
+    #[test]
+    fn works_with_a_string_too() {
+        let s = String::from("rusty bridge");
+        assert_eq!(first_word(&s), "rusty");
+    }
+
+    #[test]
+    fn empty() {
+        assert_eq!(first_word(""), "");
+    }
+}
+'''
+hints = [
+    "Look at each byte until you find a space. What do you return then, and what if there's no space at all?",
+    "Use `for (i, b) in s.bytes().enumerate()`. If `b == b' '`, return the slice before it. After the loop, the whole string is one word.",
+    "```rust\nfor (i, b) in s.bytes().enumerate() {\n    if b == b' ' {\n        return &s[..i];\n    }\n}\ns\n```",
+]
+
+[[level]]
+id = "4.8"
 title = "Slicing the bread"
 kind = "fill"
 book = ["4.4"]
-about = "Borrow part of an array or Vec as a &[T]."
+xp = 45
+goal = "Write middle: return everything except the first and last item (empty if there are fewer than two)."
+lesson = '''
+Arrays and Vecs can be sliced too. A slice of `i32`s has type **`&[i32]`**:
 
-[[planned]]
+```rust
+let v = vec![10, 20, 30, 40];
+let some = &v[1..3];   // [20, 30]
+```
+
+Taking `&[i32]` as a parameter is flexible: it accepts a borrowed array *and* a borrowed Vec.
+
+An empty slice is written `&[]`.
+'''
+c_compare = '''
+In C you'd pass `int *arr, size_t len`. A Rust slice bundles both, and every index is bounds-checked.
+'''
+py_compare = '''
+Like `items[1:-1]`, but without making a new list.
+'''
+check = "tests"
+starter = '''
+fn middle(items: &[i32]) -> &[i32] {
+    todo!()
+}
+
+fn main() {
+    println!("{:?}", middle(&[1, 2, 3, 4]));
+}
+'''
+solution = '''
+fn middle(items: &[i32]) -> &[i32] {
+    if items.len() < 2 {
+        &[]
+    } else {
+        &items[1..items.len() - 1]
+    }
+}
+
+fn main() {
+    println!("{:?}", middle(&[1, 2, 3, 4]));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn four_items() {
+        assert_eq!(middle(&[1, 2, 3, 4]), &[2, 3]);
+    }
+
+    #[test]
+    fn from_a_vec() {
+        let v = vec![5, 6, 7];
+        assert_eq!(middle(&v), &[6]);
+    }
+
+    #[test]
+    fn too_short() {
+        assert_eq!(middle(&[7]), &[] as &[i32]);
+        assert_eq!(middle(&[]), &[] as &[i32]);
+    }
+}
+'''
+hints = [
+    "Two cases: fewer than two items, or enough to cut off both ends.",
+    "If `items.len() < 2` return `&[]`, otherwise slice from index 1 up to (not including) the last index.",
+    "`if items.len() < 2 { &[] } else { &items[1..items.len() - 1] }`",
+]
+
+[[level]]
+id = "4.9"
 title = "Looking back across the bridge"
 kind = "predict"
 book = ["4.5"]
-about = "How ownership keeps memory safe without a garbage collector."
+xp = 25
+goal = "Does this compile? If so, what does it print?"
+lesson = '''
+**Ownership recap:**
 
-[[planned]]
+- Every value has one owner; it's dropped when the owner goes away.
+- You can lend it: many `&` readers, or one `&mut` writer.
+- A borrow lasts until its **last use**, not until the end of the block.
+
+That last rule makes Rust friendlier than it first looks. Watch where each reference is last used.
+'''
+c_compare = '''
+These rules give you C's speed (no garbage collector) without C's memory bugs.
+'''
+py_compare = '''
+Python decides at runtime when to free memory. Rust decides at compile time, so there's no pause and no surprise.
+'''
+starter = '''
+fn main() {
+    let mut s = String::from("hi");
+    let r1 = &s;
+    let r2 = &s;
+    println!("{} {}", r1, r2);
+    let r3 = &mut s;
+    r3.push('!');
+    println!("{}", s);
+}
+'''
+choices = [
+    "hi hi / hi!",
+    "It doesn't compile: s is borrowed twice",
+    "It doesn't compile: r3 is a writer while r1 and r2 exist",
+    "hi hi / hi",
+]
+answer = 0
+expected_output = '''
+hi hi
+hi!
+'''
+explanation = "Two readers are fine. `r1` and `r2` are last used on line 5, so by the time `r3` borrows mutably, they're finished. No overlap, no error."
+
+[[level]]
+id = "4.10"
 title = "BOSS: The word counter"
 kind = "boss"
 book = ["4.4", "4.5"]
-about = "Find and count words using only borrows."
+xp = 100
+goal = '''Write three functions:
+count_words: how many words are in the text
+longest_word: the first longest word ("" if there are none)
+shout: change the String in place to UPPERCASE and add "!"'''
+lesson = '''
+**Boss fight!** Everything from Borrow Bridge, in one place.
+
+New helpers you can use:
+
+```rust
+for word in text.split_whitespace() { /* each word, as a &str */ }
+let loud = text.to_uppercase();   // a new String
+```
+
+Think about which functions only **read** (take `&str`), and which **change** the text (take `&mut String`). `longest_word` returns a slice borrowed from its input.
+'''
+c_compare = '''
+In C you'd write the word splitting by hand with `strtok` (which modifies the string!). Here, `split_whitespace` gives you safe borrowed slices.
+'''
+py_compare = '''
+`split_whitespace` is like Python's `str.split()` with no arguments, but it yields borrowed slices instead of new strings.
+'''
+check = "tests"
+starter = '''
+fn count_words(text: &str) -> usize {
+    todo!()
+}
+
+fn longest_word(text: &str) -> &str {
+    todo!()
+}
+
+fn shout(text: &mut String) {
+    todo!()
+}
+
+fn main() {
+    let mut cry = String::from("cross the bridge");
+    println!("{} words, longest: {}", count_words(&cry), longest_word(&cry));
+    shout(&mut cry);
+    println!("{}", cry);
+}
+'''
+solution = '''
+fn count_words(text: &str) -> usize {
+    text.split_whitespace().count()
+}
+
+fn longest_word(text: &str) -> &str {
+    let mut best = "";
+    for word in text.split_whitespace() {
+        if word.len() > best.len() {
+            best = word;
+        }
+    }
+    best
+}
+
+fn shout(text: &mut String) {
+    *text = text.to_uppercase();
+    text.push('!');
+}
+
+fn main() {
+    let mut cry = String::from("cross the bridge");
+    println!("{} words, longest: {}", count_words(&cry), longest_word(&cry));
+    shout(&mut cry);
+    println!("{}", cry);
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn counts_words() {
+        assert_eq!(count_words("cross the bridge"), 3);
+        assert_eq!(count_words("  lots   of   space  "), 3);
+        assert_eq!(count_words(""), 0);
+    }
+
+    #[test]
+    fn finds_the_longest_word() {
+        assert_eq!(longest_word("cross the bridge"), "bridge");
+        assert_eq!(longest_word("tie tie"), "tie");
+        assert_eq!(longest_word(""), "");
+    }
+
+    #[test]
+    fn shouts_in_place() {
+        let mut s = String::from("hello");
+        shout(&mut s);
+        assert_eq!(s, "HELLO!");
+    }
+}
+'''
+hints = [
+    "Start with count_words: `split_whitespace()` gives you the words. For longest_word, keep the best word so far in a variable.",
+    "count_words: `.count()` the words. longest_word: start with `let mut best = \"\";` and replace it when a word is longer. shout: replace `*text` with the uppercase version, then push '!'.",
+    "```rust\nfn count_words(text: &str) -> usize { text.split_whitespace().count() }\n\nfn longest_word(text: &str) -> &str {\n    let mut best = \"\";\n    for word in text.split_whitespace() {\n        if word.len() > best.len() { best = word; }\n    }\n    best\n}\n\nfn shout(text: &mut String) {\n    *text = text.to_uppercase();\n    text.push('!');\n}\n```",
+]

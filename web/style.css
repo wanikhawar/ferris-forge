@@ -140,7 +140,14 @@ canvas.sprite, canvas.pixel-bg, #map-canvas { image-rendering: pixelated; }
   letter-spacing: 2px;
 }
 .logo-sub { font-family: var(--font-talk); font-size: 26px; color: var(--parch-light); text-shadow: 2px 2px 0 var(--wood-dark); margin-top: 6px; }
-#title-ferris { width: 240px; height: 180px; }
+#title-ferris { width: 312px; height: 228px; margin: -20px 0 -12px; }
+.title-gear { position: absolute; top: 16px; right: 16px; z-index: 2; width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; padding: 0; }
+.title-gear:hover .px-icon { animation: spin 1.2s steps(8) infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.logo-main span { display: inline-block; animation: letter-bob 1.6s steps(2) infinite; }
+@keyframes letter-bob { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-6px); } }
+#btn-start { animation: start-glow 1.4s steps(2) infinite; }
+@keyframes start-glow { 50% { transform: translateY(-2px); filter: brightness(1.1); } }
 .title-buttons { display: flex; gap: 18px; align-items: center; }
 .title-foot { font-family: var(--font-talk); font-size: 22px; color: #fff; text-shadow: 2px 2px 0 rgba(0,0,0,.5); }
 
@@ -298,20 +305,21 @@ body[data-screen="level"] .mini-xp { display: block; }
 .badge { display: inline-flex; align-items: center; gap: 6px; }
 .badge .px-icon { display: block; }
 .badge.fix { background: #ffb38a; } .badge.fill { background: #a8e08a; }
-.badge.predict { background: #cdb5f5; } .badge.boss { background: #ff8a7a; color: #4a0a00; }
+.badge.predict { background: #cdb5f5; } .badge.quiz { background: #a9dcff; } .badge.boss { background: #ff8a7a; color: #4a0a00; }
 .badge.xp { background: var(--gold); }
 .badge.done { background: var(--good); color: #fff; }
 
 .left-col { grid-area: left; display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow-y: auto; }
 /* Predict levels: short read-only code, then the answers, then the real output. */
 .left-col.predict > * { flex-shrink: 0; }
-.left-col.predict .editor-frame { flex: 0 0 auto; height: var(--code-h, 220px); min-height: 0; }
+.left-col.predict .editor-frame { flex: 1 0 var(--code-h, 220px); height: auto; min-height: var(--code-h, 220px); }
 .left-col.predict .choices { order: 1; }
 .left-col.predict .console { order: 2; height: auto; min-height: var(--console-min); max-height: 260px; }
 .lesson-strip { flex: 0 0 auto; display: flex; align-items: center; gap: 12px; padding: 10px 14px; }
 /* The goal shows two lines; click it to see the rest (the full expected output is also
    in the console's Expected tab). */
-.lesson-strip .goal { flex: 1; min-width: 0; margin: 0; max-height: 2.35em; overflow: hidden; cursor: pointer; position: relative; padding: 3px 10px; }
+.lesson-strip .goal { flex: 1; min-width: 0; margin: 0; max-height: calc(2.2em + 12px); overflow: hidden; position: relative; padding: 3px 10px; }
+.lesson-strip .goal.long { cursor: pointer; }
 .lesson-strip .goal.long::after {
   content: "▾ more"; position: absolute; right: 6px; bottom: 2px; font-family: var(--font-ui); font-size: 12px;
   background: var(--parch-light); padding: 0 4px; color: var(--wood);
@@ -615,7 +623,8 @@ body.code-pixel .ed-hl, body.code-pixel .ed-ta, body.code-pixel .ed-gutter { fon
   background: linear-gradient(var(--wood-light), var(--wood)); color: var(--parch-light); text-shadow: 2px 2px 0 var(--wood-dark);
   border: 4px solid var(--wood-dark); clip-path: var(--px-corners);
 }
-.modal-body { overflow: auto; min-height: 0; }
+/* Reserve room for the scrollbar so it never sits on top of the content. */
+.modal-body { overflow: auto; min-height: 0; scrollbar-gutter: stable; padding-right: 10px; margin-right: -4px; }
 .modal-close {
   position: absolute; top: 12px; right: 12px; width: 36px; height: 36px; padding: 0; font-size: 0;
   background: var(--bad); border: 3px solid var(--bad-dark); box-shadow: inset 0 -3px 0 var(--bad-dark); z-index: 2;
@@ -759,7 +768,7 @@ body.code-pixel .ed-hl, body.code-pixel .ed-ta, body.code-pixel .ed-gutter { fon
 
 /* Short windows: a slightly smaller hotbar leaves room for the code and answers. */
 @media (max-height: 680px) {
-  .slot { height: 52px; width: 66px; }
+  .slot { padding-top: 12px; padding-bottom: 4px; }
   .slot-icon .px-icon { width: 24px; height: 24px; }
   .slot-label { font-size: 11px; margin-top: 1px; }
 }
@@ -798,20 +807,6 @@ body.code-pixel .ed-hl, body.code-pixel .ed-ta, body.code-pixel .ed-gutter { fon
 .out-diff tr.diff td.ln { color: #ff8f7a; }
 .out-diff .missing { color: #8a7461; font-style: italic; }
 
-/* ---------- Lesson panel beside the code ---------- */
-.lesson-dock { display: none; grid-area: dock; min-height: 0; flex-direction: column; padding: 12px 14px; }
-body.lesson-docked .lesson-dock { display: flex; }
-body.lesson-docked .level-grid {
-  grid-template-columns: clamp(260px, 25vw, 380px) minmax(0, 1fr) clamp(300px, 24vw, 380px);
-  grid-template-areas: "dock left right" "dock bar right";
-}
-body.lesson-docked.chat-wide .level-grid { grid-template-columns: clamp(240px, 22vw, 340px) minmax(0, 1fr) clamp(340px, 36vw, 620px); }
-body.lesson-docked .lesson-strip .lesson-buttons { display: none; }
-.dock-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
-.dock-title { font-weight: 700; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dock-body { flex: 1; min-height: 0; overflow-y: auto; padding-right: 4px; }
-.dock-body .lesson-body { font-size: 16px; line-height: 1.4; user-select: text; }
-.dock-body .md pre code { font-size: 12px; }
 .lesson-content .tabs { margin-bottom: 8px; }
 
 /* ---------- Ferris busy state ---------- */
@@ -843,20 +838,31 @@ body.readable .ask input { font-size: 16px; }
 .console-empty { font-family: var(--font-talk); font-size: 19px; color: #cbb79a; margin: 8px 4px; }
 .slot { position: relative; flex: 0 1 72px; width: 72px; min-width: 0; }
 .hotbar-inner { width: max-content; }
-.slot-icon .px-icon { width: min(32px, 100%); height: auto; }
+.slot-icon .px-icon { width: min(24px, 100%); height: auto; }
+/* Height comes from the content: key number row, icon, label. Nothing is ever clipped. */
+.slot { height: auto; padding: 14px 2px 6px; justify-content: flex-start; }
+.slot-key { top: 2px; left: 5px; font-size: 11px; line-height: 1; }
+@container (max-width: 900px) {
+  .hotbar .slot .slot-label { font-size: 9px; letter-spacing: -.3px; }
+}
 @container (max-width: 760px) {
   .hotbar-inner { width: 100%; gap: 3px; padding: 5px; }
-  .slot { height: 56px; }
-  .slot-label { font-size: 10px; }
 }
 @container (max-width: 600px) {
-  .slot { height: 46px; }
-  .slot-label { display: none; }
-  .slot-key { font-size: 10px; }
+  .hotbar .slot { padding: 12px 2px 5px; }
+  .hotbar .slot .slot-label { display: none; }
+  .hotbar .slot .slot-key { font-size: 10px; }
 }
 .slot-badge { position: absolute; top: -6px; right: -6px; line-height: 0; z-index: 2; animation: bob 1s steps(2) infinite; pointer-events: none; }
 .zen-only { display: none; }
 body.editor-expanded .zen-only { display: inline-block; position: relative; }
 .mini-toggle .slot-badge { top: -9px; right: -9px; }
 .mini-toggle .slot-badge .px-icon { width: 12px; height: 12px; }
-.slot-label { white-space: nowrap; overflow: hidden; text-overflow: clip; max-width: 100%; font-size: 11px; letter-spacing: -.2px; }
+.slot-label { white-space: nowrap; overflow: hidden; text-overflow: clip; max-width: 100%; font-size: 10px; letter-spacing: -.2px; margin-top: 4px; }
+
+/* Quiz levels without code: no editor, the question fills the column. */
+.left-col.no-code .editor-frame { display: none; }
+.left-col.no-code .choices { flex: 1 1 auto; }
+.left-col.no-code .choices.show { align-content: start; }
+.console-label { font-family: var(--font-ui); font-size: 13px; color: var(--wood-hi); margin: 6px 0 2px; }
+.console-label:first-child { margin-top: 0; }

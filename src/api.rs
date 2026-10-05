@@ -187,7 +187,8 @@ async fn get_state(State(s): State<Shared>) -> Json<Value> {
                         "locked"
                     };
                     json!({
-                        "id": l.id, "title": l.title, "kind": l.kind, "xp": l.xp, "status": status,
+                        "id": l.id, "num": format!("{}.{}", w.id, li + 1),
+                        "title": l.title, "kind": l.kind, "xp": l.xp, "status": status,
                         "earned": p.completed.get(&l.id).map(|c| c.xp),
                     })
                 })
@@ -262,7 +263,9 @@ async fn get_level(
     let p = s.progress.lock().unwrap();
     let done = p.completed.contains_key(&id);
     Ok(Json(json!({
-        "id": level.id, "title": level.title, "kind": level.kind, "goal": level.goal,
+        "id": level.id, "num": format!("{}.{}", world.id, li + 1),
+        "title": level.title, "kind": level.kind, "goal": level.goal,
+        "stdin": level.stdin, "args": level.args, "files": level.files.keys().collect::<Vec<_>>(),
         "lesson": level.lesson, "c_compare": level.c_compare, "py_compare": level.py_compare,
         "starter": level.starter,
         "code": p.drafts.get(&id).cloned().unwrap_or_else(|| level.starter.clone()),
@@ -289,10 +292,10 @@ async fn run_level(
     Json(req): Json<CodeReq>,
 ) -> Result<Json<Value>, ApiError> {
     let (world, li, level) = s.playable(&req.id)?;
-    if level.kind == Kind::Predict {
+    if matches!(level.kind, Kind::Predict | Kind::Quiz) {
         return Err(ApiError(
             StatusCode::BAD_REQUEST,
-            "Predict levels are answered, not run.".into(),
+            "Predict and quiz levels are answered, not run.".into(),
         ));
     }
     // Save the submitted code *before* compiling. Edits the player makes while it compiles
@@ -335,10 +338,19 @@ async fn run_level(
 #[derive(Deserialize)]
 struct PlayReq {
     code: String,
+    /// For a level's "Run it" button: give the program that level's input and files.
+    #[serde(default)]
+    id: Option<String>,
 }
 
 async fn play(State(s): State<Shared>, Json(req): Json<PlayReq>) -> Json<Value> {
-    Json(json!(runner::play(&req.code, &s.work_dir()).await))
+    let setup = req
+        .id
+        .as_deref()
+        .and_then(|id| s.level(id).ok())
+        .map(|(_, _, l)| runner::Setup::from_level(l))
+        .unwrap_or_default();
+    Json(json!(runner::play(&req.code, &setup, &s.work_dir()).await))
 }
 
 #[derive(Deserialize)]

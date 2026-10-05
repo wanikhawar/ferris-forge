@@ -2,52 +2,669 @@ id = 5
 name = "Struct Smithy"
 blurb = "Forge your own types."
 
-# Placeholder island: these levels are planned but not built yet.
-
-[[planned]]
+[[level]]
+id = "5.1"
 title = "Forging your first struct"
 kind = "fill"
 book = ["5.1"]
-about = "Group related values into one named type."
+xp = 40
+goal = "Define the Crab struct so the program prints: Ferris has 8 legs"
+lesson = '''
+A **struct** groups related values under one name:
 
-[[planned]]
+```rust
+struct Player {
+    name: String,
+    score: u32,
+}
+
+let p = Player { name: String::from("Ana"), score: 7 };
+println!("{}", p.name);   // fields are read with a dot
+```
+
+Each field has a name and a type. Struct names use `CamelCase`.
+'''
+c_compare = '''
+Almost the same as a C `struct`, but no `typedef` dance, and the struct **owns** its `String` (it frees it when the struct is dropped).
+'''
+py_compare = '''
+Like a Python `@dataclass`, but the field types are checked at compile time.
+'''
+check = "output"
+expected_output = "Ferris has 8 legs"
+starter = '''
+// TODO: define a struct called Crab with two fields:
+//   name: String
+//   legs: u32
+
+fn main() {
+    let ferris = Crab { name: String::from("Ferris"), legs: 8 };
+    println!("{} has {} legs", ferris.name, ferris.legs);
+}
+'''
+solution = '''
+struct Crab {
+    name: String,
+    legs: u32,
+}
+
+fn main() {
+    let ferris = Crab { name: String::from("Ferris"), legs: 8 };
+    println!("{} has {} legs", ferris.name, ferris.legs);
+}
+'''
+hints = [
+    "The compiler can't find a type called `Crab`. You need to define it above main.",
+    "Write `struct Crab { ... }` with each field as `name: Type,`.",
+    "```rust\nstruct Crab {\n    name: String,\n    legs: u32,\n}\n```",
+]
+
+[[level]]
+id = "5.2"
 title = "Copying the blueprint"
 kind = "predict"
 book = ["5.1"]
-about = "Build a new struct from an old one with ..update syntax."
+xp = 25
+goal = "Does this compile? If so, what does it print?"
+lesson = '''
+Two shortcuts for building structs:
 
-[[planned]]
+- **Field init shorthand**: if a variable has the same name as a field, write it once: `Hero { name, level }`.
+- **Struct update syntax**: copy the remaining fields from another struct with `..other`.
+
+```rust
+let b = Hero { level: 2, ..a };   // everything else comes from a
+```
+
+Careful: `..a` **moves** fields that aren't `Copy` (like a `String`) out of `a`.
+'''
+c_compare = '''
+C would copy the whole struct with `=`, including the pointer to the name, and then both structs would "own" it. Rust moves the `String` instead.
+'''
+py_compare = '''
+Similar to `dataclasses.replace(a, level=2)`, except here the name moves rather than being shared.
+'''
+starter = '''
+struct Hero {
+    name: String,
+    level: u32,
+}
+
+fn main() {
+    let a = Hero { name: String::from("Ferris"), level: 1 };
+    let b = Hero { level: 2, ..a };
+    println!("{} {}", b.name, b.level);
+    println!("{}", a.level);
+}
+'''
+choices = [
+    "Ferris 2 / 1",
+    "It doesn't compile: a was moved into b",
+    "Ferris 1 / 1",
+    "Ferris 2 / 2",
+]
+answer = 0
+expected_output = '''
+Ferris 2
+1
+'''
+explanation = "`..a` only moves the fields it uses: `name` moves into `b`, but `a.level` is a `u32` (Copy) and `b` set its own level anyway. `a.level` is still usable. Using `a.name` (or all of `a`) would fail."
+
+[[level]]
+id = "5.3"
 title = "Tiny tuple structs"
 kind = "fill"
 book = ["5.1"]
-about = "Give a tuple a name, like Meters(5.0)."
+xp = 40
+goal = "Define Feet, then write to_feet (1 meter = 3.28084 feet)."
+lesson = '''
+A **tuple struct** is a named tuple. Its fields have positions instead of names:
 
-[[planned]]
+```rust
+struct Meters(f64);
+let m = Meters(5.0);
+println!("{}", m.0);
+```
+
+Why bother? `Meters` and `Feet` are **different types**, so you can't accidentally mix them up, even though both hold an `f64`.
+
+There are also **unit structs** with no fields at all: `struct Marker;`.
+'''
+c_compare = '''
+Like `typedef struct { double v; } Meters;`, but zero-cost and impossible to mix up with `Feet`.
+'''
+py_compare = '''
+Python's `typing.NewType` is only a hint. In Rust, passing `Feet` where `Meters` is expected is a compile error.
+'''
+check = "tests"
+starter = '''
+struct Meters(f64);
+// TODO: define a tuple struct Feet that holds an f64
+
+fn to_feet(m: Meters) -> Feet {
+    todo!()
+}
+
+fn main() {
+    let f = to_feet(Meters(2.0));
+    println!("{:.2} feet", f.0);
+}
+'''
+solution = '''
+struct Meters(f64);
+struct Feet(f64);
+
+fn to_feet(m: Meters) -> Feet {
+    Feet(m.0 * 3.28084)
+}
+
+fn main() {
+    let f = to_feet(Meters(2.0));
+    println!("{:.2} feet", f.0);
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ten_meters() {
+        assert!((to_feet(Meters(10.0)).0 - 32.8084).abs() < 1e-9);
+    }
+
+    #[test]
+    fn zero_meters() {
+        assert_eq!(to_feet(Meters(0.0)).0, 0.0);
+    }
+}
+'''
+hints = [
+    "First define `Feet` the same way `Meters` is defined.",
+    "Inside to_feet, read the number with `m.0`, multiply it, and wrap the result in `Feet(...)`.",
+    "`struct Feet(f64);` and the body `Feet(m.0 * 3.28084)`.",
+]
+
+[[level]]
+id = "5.4"
 title = "Who owns the pieces?"
 kind = "fix"
 book = ["5.1"]
-about = "Structs that own their Strings, and structs that borrow them."
+xp = 40
+goal = "Make it print: Corro is 3"
+lesson = '''
+Most structs **own** their data, so they use `String`, not `&str`:
 
-[[planned]]
+```rust
+struct Pet { name: String }   // the Pet owns its name
+```
+
+A struct *can* hold a borrowed `&str`, but then Rust needs to know how long that borrow lasts. That needs **lifetimes**, which you'll meet in the Lifetime Labyrinth. For now: **owned fields keep things simple**.
+'''
+c_compare = '''
+A `char *` field in C leaves you wondering "who frees this?". In Rust, `String` means "the struct frees it" and `&str` means "someone else owns it".
+'''
+py_compare = '''
+In Python this question never comes up. In Rust it's part of the type.
+'''
+check = "output"
+expected_output = "Corro is 3"
+starter = '''
+struct Pet {
+    name: &str,
+    age: u32,
+}
+
+fn main() {
+    let pet = Pet { name: String::from("Corro"), age: 3 };
+    println!("{} is {}", pet.name, pet.age);
+}
+'''
+solution = '''
+struct Pet {
+    name: String,
+    age: u32,
+}
+
+fn main() {
+    let pet = Pet { name: String::from("Corro"), age: 3 };
+    println!("{} is {}", pet.name, pet.age);
+}
+'''
+hints = [
+    "The compiler wants a lifetime for the `&str` field. Is there a simpler type for a name the Pet owns?",
+    "Make the struct own its name.",
+    "Change the field to `name: String,`.",
+]
+
+[[level]]
+id = "5.5"
 title = "Measuring rectangles"
 kind = "fill"
 book = ["5.2"]
-about = "Turn loose variables into a struct and print it with {:?} and dbg!."
+xp = 40
+goal = '''Make it print:
+Rectangle { width: 30, height: 50 }
+Area: 1500'''
+lesson = '''
+To print a struct with `{:?}`, it needs the **Debug** ability. Ask the compiler to write it for you:
 
-[[planned]]
+```rust
+#[derive(Debug)]
+struct Rectangle { width: u32, height: u32 }
+```
+
+`#[derive(...)]` is an **attribute** that generates code. (`{:#?}` pretty-prints over several lines.)
+
+There's also **`dbg!(value)`**: it prints the value with the file and line number to stderr, then hands the value back. It's great for quick debugging.
+
+Functions that only read a struct should **borrow** it: `fn area(rect: &Rectangle)`.
+'''
+c_compare = '''
+C has no automatic printing of structs. `#[derive(Debug)]` writes the printing code for you.
+'''
+py_compare = '''
+Like the automatic `__repr__` a `@dataclass` gives you.
+'''
+check = "output"
+expected_output = '''
+Rectangle { width: 30, height: 50 }
+Area: 1500
+'''
+starter = '''
+struct Rectangle {
+    width: u32,
+    height: u32,
+}
+
+fn area(rect: &Rectangle) -> u32 {
+    todo!()
+}
+
+fn main() {
+    let rect = Rectangle { width: 30, height: 50 };
+    println!("{:?}", rect);
+    println!("Area: {}", area(&rect));
+}
+'''
+solution = '''
+#[derive(Debug)]
+struct Rectangle {
+    width: u32,
+    height: u32,
+}
+
+fn area(rect: &Rectangle) -> u32 {
+    rect.width * rect.height
+}
+
+fn main() {
+    let rect = Rectangle { width: 30, height: 50 };
+    println!("{:?}", rect);
+    println!("Area: {}", area(&rect));
+}
+'''
+hints = [
+    "Two things to do: let the struct be printed with {:?}, and fill in area.",
+    "Put `#[derive(Debug)]` on the line above `struct Rectangle`, and multiply the two fields in area.",
+    "`#[derive(Debug)]` above the struct, and `rect.width * rect.height` as area's body.",
+]
+
+[[level]]
+id = "5.6"
 title = "Teaching your struct tricks"
 kind = "fill"
 book = ["5.3"]
-about = "Add methods with impl and &self."
+xp = 45
+goal = "Write the three methods: area, can_hold and grow."
+lesson = '''
+**Methods** are functions attached to a type, written in an `impl` block:
 
-[[planned]]
+```rust
+impl Rectangle {
+    fn area(&self) -> u32 {          // borrows the rectangle
+        self.width * self.height
+    }
+    fn widen(&mut self, by: u32) {   // changes it
+        self.width += by;
+    }
+}
+
+rect.area();      // Rust adds the & for you
+rect.widen(5);    // ...or the &mut
+```
+
+`&self` reads, `&mut self` changes, and plain `self` takes ownership (rare).
+'''
+c_compare = '''
+In C you'd write `rect_area(&rect)`. Methods are the same idea, with nicer syntax and automatic `&`.
+'''
+py_compare = '''
+Just like Python methods, except `self` is written as `&self` or `&mut self` to say how it's borrowed.
+'''
+check = "tests"
+starter = '''
+struct Rectangle {
+    width: u32,
+    height: u32,
+}
+
+impl Rectangle {
+    fn area(&self) -> u32 {
+        todo!()
+    }
+
+    // true if `other` fits completely inside self
+    fn can_hold(&self, other: &Rectangle) -> bool {
+        todo!()
+    }
+
+    // make both sides bigger by `by`
+    fn grow(&mut self, by: u32) {
+        todo!()
+    }
+}
+
+fn main() {
+    let mut r = Rectangle { width: 3, height: 4 };
+    r.grow(1);
+    println!("{}", r.area());
+}
+'''
+solution = '''
+struct Rectangle {
+    width: u32,
+    height: u32,
+}
+
+impl Rectangle {
+    fn area(&self) -> u32 {
+        self.width * self.height
+    }
+
+    // true if `other` fits completely inside self
+    fn can_hold(&self, other: &Rectangle) -> bool {
+        self.width > other.width && self.height > other.height
+    }
+
+    // make both sides bigger by `by`
+    fn grow(&mut self, by: u32) {
+        self.width += by;
+        self.height += by;
+    }
+}
+
+fn main() {
+    let mut r = Rectangle { width: 3, height: 4 };
+    r.grow(1);
+    println!("{}", r.area());
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn area() {
+        assert_eq!(Rectangle { width: 3, height: 4 }.area(), 12);
+    }
+
+    #[test]
+    fn can_hold() {
+        let big = Rectangle { width: 10, height: 10 };
+        let small = Rectangle { width: 2, height: 3 };
+        assert!(big.can_hold(&small));
+        assert!(!small.can_hold(&big));
+    }
+
+    #[test]
+    fn grow() {
+        let mut r = Rectangle { width: 3, height: 4 };
+        r.grow(2);
+        assert_eq!((r.width, r.height), (5, 6));
+    }
+}
+'''
+hints = [
+    "Inside a method, the rectangle is `self`, so its fields are `self.width` and `self.height`.",
+    "can_hold compares both sides of self with both sides of other. grow adds `by` to both fields.",
+    "area: `self.width * self.height`. can_hold: `self.width > other.width && self.height > other.height`. grow: `self.width += by; self.height += by;`",
+]
+
+[[level]]
+id = "5.7"
 title = "The factory: ::new"
 kind = "fill"
 book = ["5.3"]
-about = "Associated functions that build new values."
+xp = 40
+goal = "Write the associated functions Rectangle::new and Rectangle::square."
+lesson = '''
+Functions in an `impl` block that **don't** take `self` are **associated functions**. You call them with `::`:
 
-[[planned]]
+```rust
+impl Rectangle {
+    fn new(width: u32, height: u32) -> Self {
+        Self { width, height }
+    }
+}
+
+let r = Rectangle::new(3, 4);
+```
+
+`Self` is a nickname for the type you're implementing. `new` is just a convention, not a keyword: Rust has no special constructors.
+'''
+c_compare = '''
+Like a C function `Rectangle rect_new(int w, int h)` that returns a filled-in struct.
+'''
+py_compare = '''
+Like a `@classmethod` or `__init__`, but it's an ordinary function that returns the value.
+'''
+check = "tests"
+starter = '''
+#[derive(Debug, PartialEq)]
+struct Rectangle {
+    width: u32,
+    height: u32,
+}
+
+impl Rectangle {
+    fn new(width: u32, height: u32) -> Self {
+        todo!()
+    }
+
+    fn square(size: u32) -> Self {
+        todo!()
+    }
+}
+
+fn main() {
+    println!("{:?}", Rectangle::square(3));
+}
+'''
+solution = '''
+#[derive(Debug, PartialEq)]
+struct Rectangle {
+    width: u32,
+    height: u32,
+}
+
+impl Rectangle {
+    fn new(width: u32, height: u32) -> Self {
+        Self { width, height }
+    }
+
+    fn square(size: u32) -> Self {
+        Self::new(size, size)
+    }
+}
+
+fn main() {
+    println!("{:?}", Rectangle::square(3));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_rectangle() {
+        assert_eq!(Rectangle::new(2, 5), Rectangle { width: 2, height: 5 });
+    }
+
+    #[test]
+    fn square() {
+        assert_eq!(Rectangle::square(3), Rectangle { width: 3, height: 3 });
+    }
+}
+'''
+hints = [
+    "Each function builds and returns a new Rectangle.",
+    "In new, use field init shorthand: `Self { width, height }`. square can call `Self::new`.",
+    "`Self { width, height }` in new, and `Self::new(size, size)` in square.",
+]
+
+[[level]]
+id = "5.8"
 title = "BOSS: The character sheet"
 kind = "boss"
 book = ["5.1", "5.2", "5.3"]
-about = "Stats, methods and level-ups for an RPG hero."
+xp = 100
+goal = '''Build a Hero with methods:
+new, take_damage, heal, level_up, is_alive and describe.'''
+lesson = '''
+**Boss fight!** Forge a hero:
+
+- `Hero::new(name)` starts at level 1 with 10 out of 10 HP.
+- `take_damage(n)` lowers HP, but never below 0. Use `self.hp.saturating_sub(n)`.
+- `heal(n)` raises HP, but never above `max_hp`. Use `.min(...)`.
+- `level_up()`: level + 1, max_hp + 5, and HP refills to full.
+- `is_alive()`: HP above 0.
+- `describe()` returns text like `Ferris (lvl 2) 15/15 HP` (use `format!`).
+
+Pick `&self` or `&mut self` for each method.
+'''
+c_compare = '''
+`saturating_sub` stops at 0 instead of wrapping around to 4 billion like C's unsigned subtraction.
+'''
+py_compare = '''
+A Python class with methods, but each method's `self` says whether it changes the hero.
+'''
+check = "tests"
+starter = '''
+struct Hero {
+    name: String,
+    level: u32,
+    hp: u32,
+    max_hp: u32,
+}
+
+impl Hero {
+    fn new(name: &str) -> Self {
+        todo!()
+    }
+    fn take_damage(&mut self, amount: u32) {
+        todo!()
+    }
+    fn heal(&mut self, amount: u32) {
+        todo!()
+    }
+    fn level_up(&mut self) {
+        todo!()
+    }
+    fn is_alive(&self) -> bool {
+        todo!()
+    }
+    fn describe(&self) -> String {
+        todo!()
+    }
+}
+
+fn main() {
+    let mut ferris = Hero::new("Ferris");
+    ferris.take_damage(4);
+    ferris.level_up();
+    println!("{}", ferris.describe());
+}
+'''
+solution = '''
+struct Hero {
+    name: String,
+    level: u32,
+    hp: u32,
+    max_hp: u32,
+}
+
+impl Hero {
+    fn new(name: &str) -> Self {
+        Self { name: name.to_string(), level: 1, hp: 10, max_hp: 10 }
+    }
+    fn take_damage(&mut self, amount: u32) {
+        self.hp = self.hp.saturating_sub(amount);
+    }
+    fn heal(&mut self, amount: u32) {
+        self.hp = (self.hp + amount).min(self.max_hp);
+    }
+    fn level_up(&mut self) {
+        self.level += 1;
+        self.max_hp += 5;
+        self.hp = self.max_hp;
+    }
+    fn is_alive(&self) -> bool {
+        self.hp > 0
+    }
+    fn describe(&self) -> String {
+        format!("{} (lvl {}) {}/{} HP", self.name, self.level, self.hp, self.max_hp)
+    }
+}
+
+fn main() {
+    let mut ferris = Hero::new("Ferris");
+    ferris.take_damage(4);
+    ferris.level_up();
+    println!("{}", ferris.describe());
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn starts_fresh() {
+        let h = Hero::new("Ferris");
+        assert_eq!(h.describe(), "Ferris (lvl 1) 10/10 HP");
+        assert!(h.is_alive());
+    }
+
+    #[test]
+    fn damage_never_goes_below_zero() {
+        let mut h = Hero::new("Ferris");
+        h.take_damage(25);
+        assert_eq!(h.hp, 0);
+        assert!(!h.is_alive());
+    }
+
+    #[test]
+    fn healing_is_capped() {
+        let mut h = Hero::new("Ferris");
+        h.take_damage(6);
+        h.heal(100);
+        assert_eq!(h.hp, 10);
+    }
+
+    #[test]
+    fn leveling_up_refills_hp() {
+        let mut h = Hero::new("Ferris");
+        h.take_damage(9);
+        h.level_up();
+        assert_eq!(h.describe(), "Ferris (lvl 2) 15/15 HP");
+    }
+}
+'''
+hints = [
+    "Do `new` and `describe` first, then the methods that change the hero (`&mut self`).",
+    "new: `Self { name: name.to_string(), level: 1, hp: 10, max_hp: 10 }`. take_damage: `saturating_sub`. heal: add, then `.min(self.max_hp)`.",
+    "```rust\nfn take_damage(&mut self, amount: u32) { self.hp = self.hp.saturating_sub(amount); }\nfn heal(&mut self, amount: u32) { self.hp = (self.hp + amount).min(self.max_hp); }\nfn level_up(&mut self) { self.level += 1; self.max_hp += 5; self.hp = self.max_hp; }\nfn is_alive(&self) -> bool { self.hp > 0 }\nfn describe(&self) -> String { format!(\"{} (lvl {}) {}/{} HP\", self.name, self.level, self.hp, self.max_hp) }\n```",
+]

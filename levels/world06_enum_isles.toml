@@ -2,52 +2,632 @@ id = 6
 name = "Enum Isles"
 blurb = "A value that can be one of several things."
 
-# Placeholder island: these levels are planned but not built yet.
-
-[[planned]]
+[[level]]
+id = "6.1"
 title = "Pick one: enums"
 kind = "fill"
 book = ["6.1"]
-about = "A type with several variants, each carrying its own data."
+xp = 40
+goal = '''Define the Shape enum so it prints:
+3.14
+4.00'''
+lesson = '''
+An **enum** is a type that can be **one of several variants**. Each variant can carry its own data:
 
-[[planned]]
+```rust
+enum Message {
+    Quit,                 // no data
+    Move(i32, i32),       // two numbers
+    Write(String),        // some text
+}
+
+let m = Message::Move(3, 4);
+```
+
+You create a variant with `EnumName::Variant(...)`. The `match` in this level (you'll learn it soon) looks inside to see which variant it is.
+'''
+c_compare = '''
+Like a C `union` plus a tag saying which member is valid, but Rust keeps the tag for you and never lets you read the wrong member.
+'''
+py_compare = '''
+Python's `Enum` can't carry different data per member. Rust enums are closer to a set of small classes where a value is exactly one of them.
+'''
+check = "output"
+expected_output = '''
+3.14
+4.00
+'''
+starter = '''
+// TODO: define an enum Shape with two variants:
+//   Circle, holding a radius (f64)
+//   Square, holding a side length (f64)
+
+fn area(s: &Shape) -> f64 {
+    match s {
+        Shape::Circle(r) => 3.14 * r * r,
+        Shape::Square(side) => side * side,
+    }
+}
+
+fn main() {
+    let shapes = [Shape::Circle(1.0), Shape::Square(2.0)];
+    for s in &shapes {
+        println!("{:.2}", area(s));
+    }
+}
+'''
+solution = '''
+enum Shape {
+    Circle(f64),
+    Square(f64),
+}
+
+fn area(s: &Shape) -> f64 {
+    match s {
+        Shape::Circle(r) => 3.14 * r * r,
+        Shape::Square(side) => side * side,
+    }
+}
+
+fn main() {
+    let shapes = [Shape::Circle(1.0), Shape::Square(2.0)];
+    for s in &shapes {
+        println!("{:.2}", area(s));
+    }
+}
+'''
+hints = [
+    "The compiler can't find `Shape`. Define it with the `enum` keyword above `area`.",
+    "Each variant is written like `Name(Type),` inside the braces.",
+    "```rust\nenum Shape {\n    Circle(f64),\n    Square(f64),\n}\n```",
+]
+
+[[level]]
+id = "6.2"
 title = "Something or nothing"
 kind = "fix"
 book = ["6.1"]
-about = "Option replaces null, so nothing crashes by surprise."
+xp = 40
+goal = "Make it print: Ferris is at spot 2"
+lesson = '''
+Rust has **no null**. When a value might be missing, the type says so:
 
-[[planned]]
+```rust
+enum Option<T> {
+    Some(T),   // there is a value
+    None,      // there isn't
+}
+```
+
+An `Option<usize>` is **not** a `usize`, so you can't do math on it directly. You have to deal with the `None` case first. That's why null-pointer crashes can't happen.
+
+The quickest way out is `.unwrap()`: it gives you the value, but **crashes** on `None`. Use it only when you're sure. `.unwrap_or(default)` is the safe version. Next level shows the proper tool: `match`.
+'''
+c_compare = '''
+In C, a function returning a pointer might return `NULL`, and forgetting to check is the "billion dollar mistake". `Option` makes the check impossible to forget.
+'''
+py_compare = '''
+Like a function that can return `None` in Python, except Rust won't let you use the result as if it were never `None`.
+'''
+check = "output"
+expected_output = "Ferris is at spot 2"
+starter = '''
+fn find_crab(names: &[&str]) -> Option<usize> {
+    for (i, name) in names.iter().enumerate() {
+        if *name == "Ferris" {
+            return Some(i);
+        }
+    }
+    None
+}
+
+fn main() {
+    let beach = ["Gull", "Ferris", "Seal"];
+    let spot = find_crab(&beach);
+    println!("Ferris is at spot {}", spot + 1);
+}
+'''
+solution = '''
+fn find_crab(names: &[&str]) -> Option<usize> {
+    for (i, name) in names.iter().enumerate() {
+        if *name == "Ferris" {
+            return Some(i);
+        }
+    }
+    None
+}
+
+fn main() {
+    let beach = ["Gull", "Ferris", "Seal"];
+    let spot = find_crab(&beach).unwrap();
+    println!("Ferris is at spot {}", spot + 1);
+}
+'''
+hints = [
+    "`spot` is an `Option<usize>`, not a number. What do you need to do before adding 1?",
+    "Get the number out of the Option. Here we know Ferris is on the beach.",
+    "`let spot = find_crab(&beach).unwrap();`",
+]
+
+[[level]]
+id = "6.3"
 title = "The sorting hat: match"
 kind = "fill"
 book = ["6.2"]
-about = "Handle every case, or the compiler will remind you."
+xp = 40
+goal = "Write value_in_cents: Penny 1, Nickel 5, Dime 10, Quarter 25."
+lesson = '''
+**`match`** compares a value against patterns, top to bottom, and runs the first arm that fits:
 
-[[planned]]
+```rust
+match direction {
+    Direction::North => println!("up"),
+    Direction::South => println!("down"),
+}
+```
+
+`match` must be **exhaustive**: every possible variant needs an arm, or it won't compile. And like `if`, a `match` is an expression with a value.
+'''
+c_compare = '''
+Like a `switch` that can't fall through and can't forget a case.
+'''
+py_compare = '''
+Python 3.10's `match` looks similar, but Rust checks at compile time that you covered every case.
+'''
+check = "tests"
+starter = '''
+enum Coin {
+    Penny,
+    Nickel,
+    Dime,
+    Quarter,
+}
+
+fn value_in_cents(coin: Coin) -> u32 {
+    todo!()
+}
+
+fn main() {
+    println!("{}", value_in_cents(Coin::Quarter));
+}
+'''
+solution = '''
+enum Coin {
+    Penny,
+    Nickel,
+    Dime,
+    Quarter,
+}
+
+fn value_in_cents(coin: Coin) -> u32 {
+    match coin {
+        Coin::Penny => 1,
+        Coin::Nickel => 5,
+        Coin::Dime => 10,
+        Coin::Quarter => 25,
+    }
+}
+
+fn main() {
+    println!("{}", value_in_cents(Coin::Quarter));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn all_coins() {
+        assert_eq!(value_in_cents(Coin::Penny), 1);
+        assert_eq!(value_in_cents(Coin::Nickel), 5);
+        assert_eq!(value_in_cents(Coin::Dime), 10);
+        assert_eq!(value_in_cents(Coin::Quarter), 25);
+    }
+}
+'''
+hints = [
+    "Use `match coin { ... }` with one arm per coin.",
+    "Each arm looks like `Coin::Penny => 1,`.",
+    "```rust\nmatch coin {\n    Coin::Penny => 1,\n    Coin::Nickel => 5,\n    Coin::Dime => 10,\n    Coin::Quarter => 25,\n}\n```",
+]
+
+[[level]]
+id = "6.4"
 title = "Unpacking the treasure"
 kind = "predict"
 book = ["6.2"]
-about = "Pull the values out of enum variants inside match arms."
+xp = 25
+goal = "What does this print?"
+lesson = '''
+Patterns can **bind** the data inside a variant to new names:
 
-[[planned]]
+```rust
+match msg {
+    Message::Move(x, y) => println!("{x},{y}"),
+    Message::Write(text) => println!("{text}"),
+    Message::Quit => {}
+}
+```
+
+For struct-like variants, `..` means "I don't care about the other fields".
+'''
+c_compare = '''
+No casting, no reading the wrong union member: the pattern only matches if the variant is right, and then gives you its data.
+'''
+py_compare = '''
+Like Python's `case Point(x=0, y=y):` patterns.
+'''
+starter = '''
+enum Loot {
+    Gold(u32),
+    Gem { color: String, size: u32 },
+    Nothing,
+}
+
+fn main() {
+    let finds = [
+        Loot::Gold(5),
+        Loot::Gem { color: String::from("red"), size: 3 },
+        Loot::Nothing,
+    ];
+    let mut total = 0;
+    for find in &finds {
+        match find {
+            Loot::Gold(n) => total += n,
+            Loot::Gem { size, .. } => total += size * 10,
+            Loot::Nothing => {}
+        }
+    }
+    println!("{}", total);
+}
+'''
+choices = ["35", "8", "5", "It doesn't compile: color is never used"]
+answer = 0
+expected_output = "35"
+explanation = "Gold adds 5, the gem adds 3 × 10 = 30, and Nothing adds nothing: 35. An unused field only causes a warning, and `..` skips it anyway."
+
+[[level]]
+id = "6.5"
 title = "Everything else goes here"
 kind = "fix"
 book = ["6.2"]
-about = "Catch-all arms with _, and what match does with ownership."
+xp = 40
+goal = '''Make it print:
+none
+one
+many'''
+lesson = '''
+When you only care about a few values, finish with a **catch-all** arm:
 
-[[planned]]
+```rust
+match roll {
+    6 => println!("You win!"),
+    1 => println!("Oops"),
+    other => println!("You rolled {other}"),  // names the value
+    // or:  _ => ...                           // ignores it
+}
+```
+
+Without it, a `match` on a number isn't exhaustive (there are billions of `u32`s!), and that's error **E0004**.
+
+One more thing: matching on a value can **move** data out of it. Match on a reference (`match &x`) to only look.
+'''
+c_compare = '''
+The catch-all is like `default:` in a C `switch`, but here it's required whenever the other arms don't cover everything.
+'''
+py_compare = '''
+Like `case _:` in Python's `match`.
+'''
+check = "output"
+expected_output = '''
+none
+one
+many
+'''
+starter = '''
+fn describe(n: u32) {
+    match n {
+        0 => println!("none"),
+        1 => println!("one"),
+    }
+}
+
+fn main() {
+    describe(0);
+    describe(1);
+    describe(7);
+}
+'''
+solution = '''
+fn describe(n: u32) {
+    match n {
+        0 => println!("none"),
+        1 => println!("one"),
+        _ => println!("many"),
+    }
+}
+
+fn main() {
+    describe(0);
+    describe(1);
+    describe(7);
+}
+'''
+hints = [
+    "The compiler says some numbers aren't covered. Which arm would handle 7?",
+    "Add a last arm that matches anything else.",
+    "`_ => println!(\"many\"),`",
+]
+
+[[level]]
+id = "6.6"
 title = "Just this one: if let"
 kind = "fill"
 book = ["6.3"]
-about = "Shortcuts for when you only care about one case (if let, let...else)."
+xp = 45
+goal = "Write greet (with if let) and initial (with let...else)."
+lesson = '''
+When you only care about **one** pattern, `match` is wordy. Use **`if let`**:
 
-[[planned]]
+```rust
+if let Some(name) = maybe_name {
+    println!("Hi {name}");
+} else {
+    println!("Who's there?");
+}
+```
+
+And when the *other* case should just leave the function early, use **`let ... else`**:
+
+```rust
+let Some(first) = word.chars().next() else {
+    return '?';    // the else block must leave (return, break, ...)
+};
+// `first` is usable from here on
+```
+'''
+c_compare = '''
+`let ... else` is the "check and return early" pattern you'd write in C, but the compiler makes sure you actually return.
+'''
+py_compare = '''
+Similar to `if (x := f()) is not None:` in Python.
+'''
+check = "tests"
+starter = '''
+fn greet(name: Option<&str>) -> String {
+    // TODO: with `if let`, return "Hello, NAME!" when there's a name,
+    // otherwise "Hello, stranger!"
+    todo!()
+}
+
+fn initial(name: &str) -> char {
+    // TODO: with `let ... else`, get the first char of `name`,
+    // or return '?' if the name is empty. Return it in uppercase.
+    todo!()
+}
+
+fn main() {
+    println!("{} {}", greet(Some("Ferris")), initial("ferris"));
+}
+'''
+solution = '''
+fn greet(name: Option<&str>) -> String {
+    if let Some(n) = name {
+        format!("Hello, {n}!")
+    } else {
+        String::from("Hello, stranger!")
+    }
+}
+
+fn initial(name: &str) -> char {
+    let Some(first) = name.chars().next() else {
+        return '?';
+    };
+    first.to_ascii_uppercase()
+}
+
+fn main() {
+    println!("{} {}", greet(Some("Ferris")), initial("ferris"));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn greets_by_name() {
+        assert_eq!(greet(Some("Ferris")), "Hello, Ferris!");
+        assert_eq!(greet(None), "Hello, stranger!");
+    }
+
+    #[test]
+    fn initials() {
+        assert_eq!(initial("ferris"), 'F');
+        assert_eq!(initial(""), '?');
+    }
+}
+'''
+hints = [
+    "`name.chars().next()` gives an `Option<char>`: Some(first letter), or None for an empty name.",
+    "greet: `if let Some(n) = name { ... } else { ... }`. initial: `let Some(first) = name.chars().next() else { return '?'; };`",
+    "```rust\nfn greet(name: Option<&str>) -> String {\n    if let Some(n) = name { format!(\"Hello, {n}!\") } else { String::from(\"Hello, stranger!\") }\n}\n\nfn initial(name: &str) -> char {\n    let Some(first) = name.chars().next() else { return '?'; };\n    first.to_ascii_uppercase()\n}\n```",
+]
+
+[[level]]
+id = "6.7"
 title = "Ownership Inventory #1"
 kind = "predict"
 book = ["6.4"]
-about = "Checkpoint quiz: ownership puzzles using everything so far."
+xp = 30
+goal = "Does this compile? If so, what does it print?"
+lesson = '''
+**Ownership Inventory** checkpoints come from the Brown edition of the Rust Book. They mix everything you know about ownership with new features (here: `match` and `Option`).
 
-[[planned]]
+Remember: matching on a **reference** (`&Option<String>`) gives you **references** to the data inside. Nothing is moved out.
+'''
+c_compare = '''
+Think about who owns the String at each line, as if you had to call `free` yourself.
+'''
+py_compare = '''
+In Python, this would just work. The question is whether Rust agrees.
+'''
+starter = '''
+fn get_or_default(arg: &Option<String>) -> String {
+    match arg {
+        None => String::new(),
+        Some(s) => s.clone(),
+    }
+}
+
+fn main() {
+    let opt = Some(String::from("Rustacean"));
+    let s = get_or_default(&opt);
+    println!("{} {}", s, opt.is_some());
+}
+'''
+choices = [
+    "Rustacean true",
+    "It doesn't compile: s is moved out of a reference",
+    "It doesn't compile: opt was moved into get_or_default",
+    "Rustacean false",
+]
+answer = 0
+expected_output = "Rustacean true"
+explanation = "Matching on `&Option<String>` makes `s` a `&String`, so nothing is moved. `.clone()` makes a new owned String to return. `opt` is only lent, so main still owns it."
+
+[[level]]
+id = "6.8"
 title = "BOSS: The vending machine"
 kind = "boss"
 book = ["6.1", "6.2", "6.3"]
-about = "A snack machine whose states are enum variants."
+xp = 100
+goal = '''Write step(state, action) for a snack machine (a snack costs 3 coins):
+Idle + coin → HasCoins; more coins add up; Choose with 3+ coins → Dispensing; Take → Idle.
+Anything else leaves the state unchanged.'''
+lesson = '''
+**Boss fight!** A **state machine**: the machine is always in exactly one state, and each action moves it to the next. Enums are perfect for this.
+
+Tip: match on **both** at once, using a tuple:
+
+```rust
+match (state, action) {
+    (State::Idle, Action::InsertCoin(n)) => State::HasCoins(n),
+    // ...
+    (state, _) => state,   // anything else: no change
+}
+```
+
+Rules (a snack costs 3 coins):
+- `Idle` + `InsertCoin(n)` → `HasCoins(n)`
+- `HasCoins(c)` + `InsertCoin(n)` → `HasCoins(c + n)`
+- `HasCoins(c)` + `Choose(snack)` → `Dispensing(snack)` if `c >= 3`, otherwise unchanged
+- `Dispensing(_)` + `Take` → `Idle`
+'''
+c_compare = '''
+In C you'd use an `enum` for the state and a pile of `switch` statements. Rust's enum variants carry their data (the coin count, the snack), so the state can't get out of sync.
+'''
+py_compare = '''
+Python would use strings or classes for states. Here the compiler knows every state and every action.
+'''
+check = "tests"
+starter = '''
+#[derive(Debug, PartialEq)]
+enum State {
+    Idle,
+    HasCoins(u32),
+    Dispensing(String),
+}
+
+enum Action {
+    InsertCoin(u32),
+    Choose(String),
+    Take,
+}
+
+fn step(state: State, action: Action) -> State {
+    todo!()
+}
+
+fn main() {
+    let s = step(State::Idle, Action::InsertCoin(2));
+    let s = step(s, Action::InsertCoin(1));
+    let s = step(s, Action::Choose(String::from("pretzel")));
+    println!("{:?}", s);
+}
+'''
+solution = '''
+#[derive(Debug, PartialEq)]
+enum State {
+    Idle,
+    HasCoins(u32),
+    Dispensing(String),
+}
+
+enum Action {
+    InsertCoin(u32),
+    Choose(String),
+    Take,
+}
+
+fn step(state: State, action: Action) -> State {
+    match (state, action) {
+        (State::Idle, Action::InsertCoin(n)) => State::HasCoins(n),
+        (State::HasCoins(c), Action::InsertCoin(n)) => State::HasCoins(c + n),
+        (State::HasCoins(c), Action::Choose(snack)) => {
+            if c >= 3 {
+                State::Dispensing(snack)
+            } else {
+                State::HasCoins(c)
+            }
+        }
+        (State::Dispensing(_), Action::Take) => State::Idle,
+        (state, _) => state,
+    }
+}
+
+fn main() {
+    let s = step(State::Idle, Action::InsertCoin(2));
+    let s = step(s, Action::InsertCoin(1));
+    let s = step(s, Action::Choose(String::from("pretzel")));
+    println!("{:?}", s);
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn coins_add_up() {
+        let s = step(State::Idle, Action::InsertCoin(2));
+        assert_eq!(step(s, Action::InsertCoin(2)), State::HasCoins(4));
+    }
+
+    #[test]
+    fn buys_a_snack() {
+        let s = step(State::HasCoins(3), Action::Choose(String::from("chips")));
+        assert_eq!(s, State::Dispensing(String::from("chips")));
+        assert_eq!(step(s, Action::Take), State::Idle);
+    }
+
+    #[test]
+    fn not_enough_coins() {
+        let s = step(State::HasCoins(2), Action::Choose(String::from("chips")));
+        assert_eq!(s, State::HasCoins(2));
+    }
+
+    #[test]
+    fn other_actions_do_nothing() {
+        assert_eq!(step(State::Idle, Action::Take), State::Idle);
+        let s = State::Dispensing(String::from("gum"));
+        assert_eq!(step(s, Action::InsertCoin(1)), State::Dispensing(String::from("gum")));
+    }
+}
+'''
+hints = [
+    "Match on the pair `(state, action)` and write one arm per rule, with a catch-all at the end.",
+    "For Choose, match `(State::HasCoins(c), Action::Choose(snack))` and decide with an `if c >= 3` inside the arm. The last arm `(state, _) => state` keeps everything else unchanged.",
+    "```rust\nmatch (state, action) {\n    (State::Idle, Action::InsertCoin(n)) => State::HasCoins(n),\n    (State::HasCoins(c), Action::InsertCoin(n)) => State::HasCoins(c + n),\n    (State::HasCoins(c), Action::Choose(snack)) => {\n        if c >= 3 { State::Dispensing(snack) } else { State::HasCoins(c) }\n    }\n    (State::Dispensing(_), Action::Take) => State::Idle,\n    (state, _) => state,\n}\n```",
+]

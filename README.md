@@ -40,7 +40,9 @@ Click **VIM** above the editor (or turn it on in Settings) and every keystroke g
 
 ## Level types
 
-🔧 **Fix it**: broken code to repair · ✍️ **Fill it**: write the missing part · 🔮 **Predict it**: guess the output · 👹 **Boss**: a mini-project at the end of each world.
+🔧 **Fix it**: broken code to repair · ✍️ **Fill it**: write the missing part · 🔮 **Predict it**: guess the output · 📖 **Quiz**: a concept question · 👹 **Boss**: a mini-project at the end of each world.
+
+Levels can also give your program keyboard input, command-line arguments, environment variables and extra files (see the `stdin`, `args`, `env` and `files` fields in the level TOML).
 
 Hints cost XP on that level (−10%, −30%, then −60% for the full answer). If Ferris' code review says your passing code is idiomatic, you get +15 bonus XP.
 
@@ -56,7 +58,8 @@ save/       your progress (created on first run)
 To check that every level is solvable (each starter fails, each solution passes, each predict answer is correct):
 
 ```bash
-cargo run -- verify
+cargo run -- verify      # every world
+cargo run -- verify 5    # just world 5
 ```
 
 ## Follows the Rust Book
@@ -67,7 +70,7 @@ The curriculum follows **The Rust Programming Language**, using Brown University
 
 ## Roadmap
 
-25 islands cover the whole book, ordered by what you need to know first rather than by chapter number. Worlds 0–3 are playable; the rest are placeholders whose planned levels already have names and goals.
+25 islands cover the whole book, ordered by what you need to know first rather than by chapter number. **Worlds 0–9 are playable (83 levels)**; Worlds 10–24 are placeholders whose planned levels already have names and goals.
 
 | # | Island | Book |
 |---|---|---|

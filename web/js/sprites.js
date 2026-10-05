@@ -166,12 +166,15 @@ export function drawGrid(ctx, g, ox, oy, scale, palette = PALETTE) {
 
 /** An animated Ferris on a canvas. */
 export class Ferris {
-  constructor(canvas, { scale = 6, shadow = true } = {}) {
+  /** `pad` adds empty cells around Ferris so he has room to dance. */
+  constructor(canvas, { scale = 6, shadow = true, pad = 0 } = {}) {
     this.canvas = canvas;
     this.scale = scale;
     this.shadow = shadow;
-    canvas.width = FW * scale;
-    canvas.height = (FH + 2) * scale;
+    this.pad = pad;
+    this.dancing = false;
+    canvas.width = (FW + pad * 2) * scale;
+    canvas.height = (FH + 2 + pad) * scale;
     this.ctx = canvas.getContext("2d");
     this.mood = "idle";
     this.frame = 0;
@@ -190,9 +193,15 @@ export class Ferris {
     else { this.baseMood = mood; if (performance.now() >= this.moodUntil) this.mood = mood; }
   }
 
+  /** Start or stop Ferris' dance routine. */
+  setDance(on) {
+    this.dancing = on;
+    this.frame = 0;
+  }
+
   _loop(t) {
     requestAnimationFrame(this._loop);
-    const fps = this.mood === "talking" ? 8 : this.mood === "excited" ? 8 : 4;
+    const fps = this.dancing ? 8 : this.mood === "talking" ? 8 : this.mood === "excited" ? 8 : 4;
     if (t - this._last < 1000 / fps) return;
     this._last = t;
     this.frame++;
@@ -201,17 +210,56 @@ export class Ferris {
     this.draw(t < this.blinkUntil);
   }
 
-  draw(blink = false) {
-    const { ctx, scale } = this;
-    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    const bob = this.mood === "excited" ? (this.frame % 2 ? -2 : 0) : (this.frame % 4 < 2 ? 0 : 1);
-    if (this.shadow) {
-      ctx.fillStyle = "rgba(60, 30, 10, .25)";
-      for (let x = 8; x < 32; x++) ctx.fillRect(x * scale, 29 * scale, scale, scale);
-      for (let x = 11; x < 29; x++) ctx.fillRect(x * scale, 30 * scale, scale, scale);
+  /** One step of the dance: sideways offset, hop height, mood and facing, by beat. */
+  danceStep() {
+    const f = this.frame % 48;
+    if (f < 16) {
+      // Shuffle side to side, claws pumping.
+      const dx = [0, 2, 4, 2, 0, -2, -4, -2][f % 8];
+      return { dx, hop: f % 2 ? -1 : 0, mood: "excited", flip: false };
     }
-    const g = ferrisGrid({ mood: this.mood, frame: this.frame, blink, mouthOpen: this.frame % 2 === 0 });
-    drawGrid(ctx, g, 0, 1 + bob, scale);
+    if (f < 24) {
+      // Big hops in place, looking happy.
+      return { dx: 0, hop: [0, -3, -5, -3][f % 4], mood: f % 4 === 2 ? "excited" : "happy", flip: false };
+    }
+    if (f < 40) {
+      // Turn around and shuffle the other way.
+      const dx = [0, -2, -4, -2, 0, 2, 4, 2][f % 8];
+      return { dx, hop: f % 2 ? -1 : 0, mood: "excited", flip: true };
+    }
+    // Wiggle and sing.
+    return { dx: f % 2 ? 1 : -1, hop: 0, mood: "talking", flip: f % 4 < 2 };
+  }
+
+  draw(blink = false) {
+    const { ctx, scale, pad } = this;
+    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    let dx = 0, bob, mood = this.mood, flip = false;
+    if (this.dancing) {
+      const step = this.danceStep();
+      ({ dx, mood, flip } = step);
+      bob = step.hop;
+      blink = false;
+    } else {
+      bob = this.mood === "excited" ? (this.frame % 2 ? -2 : 0) : (this.frame % 4 < 2 ? 0 : 1);
+    }
+    if (this.shadow) {
+      // The shadow shrinks a little while Ferris is in the air.
+      const air = Math.min(3, -Math.min(0, bob));
+      ctx.fillStyle = "rgba(60, 30, 10, .25)";
+      for (let x = 8 + air; x < 32 - air; x++) ctx.fillRect((x + pad + dx) * scale, (29 + pad) * scale, scale, scale);
+      for (let x = 11 + air; x < 29 - air; x++) ctx.fillRect((x + pad + dx) * scale, (30 + pad) * scale, scale, scale);
+    }
+    const g = ferrisGrid({ mood, frame: this.frame, blink, mouthOpen: this.frame % 2 === 0 });
+    if (flip) {
+      ctx.save();
+      ctx.translate(this.canvas.width, 0);
+      ctx.scale(-1, 1);
+      drawGrid(ctx, g, pad - dx, 1 + pad + bob, scale);
+      ctx.restore();
+    } else {
+      drawGrid(ctx, g, pad + dx, 1 + pad + bob, scale);
+    }
   }
 }
 

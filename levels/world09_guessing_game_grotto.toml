@@ -3,34 +3,370 @@ name = "Guessing Game Grotto"
 blurb = "A project island: build the book's guessing game."
 tag = "project"
 
-# Placeholder island: these levels are planned but not built yet.
-
-[[planned]]
+[[level]]
+id = "9.1"
 title = "Ask the player"
 kind = "fill"
 book = ["2"]
-about = "Read a line of keyboard input."
+xp = 40
+goal = '''Read the player's name from the keyboard. The game types "Ferris" for you, so it should print:
+What's your name?
+Hello, Ferris!'''
+lesson = '''
+Time to build a real game, step by step (it's Chapter 2 of the Rust Book).
 
-[[planned]]
+First, reading what the player types:
+
+```rust
+use std::io;
+
+let mut line = String::new();
+io::stdin()
+    .read_line(&mut line)          // appends the typed line, including the Enter (\n)
+    .expect("Failed to read line");
+```
+
+- `read_line` needs `&mut line` because it **changes** the String.
+- It returns a `Result` (reading can fail), so we `expect` it.
+- The line ends with a newline; `.trim()` removes it.
+
+In this grotto, the game types the player's input for you. Check the **Expected** button to see it.
+'''
+c_compare = '''
+Like `fgets(buf, sizeof buf, stdin)`, but the String grows to fit, so there's no buffer to overflow.
+'''
+py_compare = '''
+Like `name = input()`, except Rust keeps the newline (hence `.trim()`) and makes you handle the possible error.
+'''
+check = "output"
+stdin = "Ferris\n"
+expected_output = '''
+What's your name?
+Hello, Ferris!
+'''
+starter = '''
+use std::io;
+
+fn main() {
+    println!("What's your name?");
+    let mut name = String::new();
+    // TODO: read a line from the keyboard into `name`
+    println!("Hello, {}!", name.trim());
+}
+'''
+solution = '''
+use std::io;
+
+fn main() {
+    println!("What's your name?");
+    let mut name = String::new();
+    io::stdin().read_line(&mut name).expect("Failed to read line");
+    println!("Hello, {}!", name.trim());
+}
+'''
+hints = [
+    "You need `io::stdin()` and its `read_line` method.",
+    "`read_line` wants a mutable borrow of the String, and returns a Result.",
+    "`io::stdin().read_line(&mut name).expect(\"Failed to read line\");`",
+]
+
+[[level]]
+id = "9.2"
 title = "Words into numbers"
 kind = "fix"
 book = ["2"]
-about = "Turn the text \"42\" into the number 42, safely."
+xp = 45
+goal = '''The game types 41. Make it print:
+One more than your guess is 42'''
+lesson = '''
+Whatever the player types arrives as **text**, a `String`. To do math, convert it:
 
-[[planned]]
+```rust
+let guess: u32 = guess.trim().parse().expect("Please type a number!");
+```
+
+- `trim()` removes the newline at the end
+- `parse()` converts text to a number; the `: u32` tells it which kind
+- it returns a `Result`, because `"abc"` isn't a number
+
+Notice we reused the name `guess`. That's **shadowing**: the number replaces the text under the same name.
+'''
+c_compare = '''
+Like `strtol` or `atoi`, but failure is a real `Err` instead of a silent 0.
+'''
+py_compare = '''
+Like `int(input())`, but Rust returns an error value instead of raising `ValueError`.
+'''
+check = "output"
+stdin = "41\n"
+expected_output = "One more than your guess is 42"
+starter = '''
+use std::io;
+
+fn main() {
+    let mut guess = String::new();
+    io::stdin().read_line(&mut guess).expect("Failed to read line");
+    let next = guess + 1;
+    println!("One more than your guess is {}", next);
+}
+'''
+solution = '''
+use std::io;
+
+fn main() {
+    let mut guess = String::new();
+    io::stdin().read_line(&mut guess).expect("Failed to read line");
+    let guess: u32 = guess.trim().parse().expect("Please type a number!");
+    let next = guess + 1;
+    println!("One more than your guess is {}", next);
+}
+'''
+hints = [
+    "`guess` is still text. You can't add 1 to text.",
+    "Turn it into a number first: trim it, then parse it, and say which number type you want.",
+    "Add `let guess: u32 = guess.trim().parse().expect(\"Please type a number!\");` before the addition.",
+]
+
+[[level]]
+id = "9.3"
 title = "Borrowing someone else's dice"
-kind = "predict"
+kind = "quiz"
 book = ["2"]
-about = "Add the rand crate to roll a secret number."
+xp = 20
+goal = "You add these lines to Cargo.toml. What happens the next time you run cargo build?"
+lesson = '''
+The standard library has no random numbers, so the book uses a **crate** (a Rust library) called `rand`, from **crates.io**.
 
-[[planned]]
+You add it to `Cargo.toml`:
+
+```toml
+[dependencies]
+rand = "0.8.5"
+```
+
+and use it in code:
+
+```rust
+use rand::Rng;
+let secret = rand::thread_rng().gen_range(1..=100);
+```
+
+Cargo downloads the crate and remembers the exact versions it picked in **`Cargo.lock`**, so your build is the same tomorrow.
+
+(This game's runner can't download crates, so the next levels use a built-in "dice" function instead.)
+'''
+c_compare = '''
+No hunting for headers and `.so` files: one line in Cargo.toml, and Cargo fetches, builds and links the library.
+'''
+py_compare = '''
+Like adding a line to `requirements.txt`, except Cargo installs it automatically, per project. Cargo.lock is like a pinned lock file.
+'''
+starter = '''
+[dependencies]
+rand = "0.8.5"
+'''
+choices = [
+    "Nothing happens until you write `use rand` in your code",
+    "Cargo downloads rand (and everything it needs) from crates.io, compiles it, and records the exact versions in Cargo.lock",
+    "Rust installs rand globally for every project on your computer",
+    "The build fails: crates must be copied into the project by hand",
+]
+answer = 1
+explanation = "Cargo resolves the dependency from crates.io, downloads and compiles it, and writes the exact versions to Cargo.lock so future builds use the same ones."
+
+[[level]]
+id = "9.4"
 title = "Hot or cold?"
 kind = "fill"
 book = ["2"]
-about = "Compare the guess with Ordering and match."
+xp = 45
+goal = "Write judge: \"Too small!\", \"Too big!\" or \"You win!\" by comparing the guess with the secret."
+lesson = '''
+Comparing two numbers with `.cmp()` gives an **`Ordering`**, an enum with three variants:
 
-[[planned]]
+```rust
+use std::cmp::Ordering;
+
+match guess.cmp(&secret) {
+    Ordering::Less => ...,
+    Ordering::Greater => ...,
+    Ordering::Equal => ...,
+}
+```
+
+Because it's a `match` over an enum, Rust makes sure you handle all three cases.
+'''
+c_compare = '''
+Like the `-1 / 0 / 1` that `strcmp` returns, but as a proper enum you can't misread.
+'''
+py_compare = '''
+Python would use `if / elif / else`. A `match` on `Ordering` covers the same three cases, and the compiler checks you didn't forget one.
+'''
+check = "tests"
+starter = '''
+use std::cmp::Ordering;
+
+fn judge(guess: u32, secret: u32) -> String {
+    todo!()
+}
+
+fn main() {
+    println!("{}", judge(40, 31));
+}
+'''
+solution = '''
+use std::cmp::Ordering;
+
+fn judge(guess: u32, secret: u32) -> String {
+    match guess.cmp(&secret) {
+        Ordering::Less => String::from("Too small!"),
+        Ordering::Greater => String::from("Too big!"),
+        Ordering::Equal => String::from("You win!"),
+    }
+}
+
+fn main() {
+    println!("{}", judge(40, 31));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn all_three() {
+        assert_eq!(judge(10, 31), "Too small!");
+        assert_eq!(judge(40, 31), "Too big!");
+        assert_eq!(judge(31, 31), "You win!");
+    }
+}
+'''
+hints = [
+    "Compare with `guess.cmp(&secret)` and match on the result.",
+    "There are three arms: `Ordering::Less`, `Ordering::Greater` and `Ordering::Equal`. Each returns a String.",
+    "```rust\nmatch guess.cmp(&secret) {\n    Ordering::Less => String::from(\"Too small!\"),\n    Ordering::Greater => String::from(\"Too big!\"),\n    Ordering::Equal => String::from(\"You win!\"),\n}\n```",
+]
+
+[[level]]
+id = "9.5"
 title = "BOSS: The guessing game"
 kind = "boss"
 book = ["2"]
-about = "Keep asking until the player wins, without crashing on bad input."
+xp = 120
+goal = '''Finish the game. The player types 50, abc, 25, 37, 31 (the secret is 31).
+Keep asking until they win, and don't crash on "abc". Check Expected for the exact output.'''
+lesson = '''
+**Boss fight!** Put the whole game together:
+
+1. Loop forever with `loop { ... }`.
+2. Each round: print `Please input your guess.` and read a line.
+   - `read_line` returns `Ok(0)` when there's no more input. Then `break`, so the game can't loop forever.
+3. Parse it. If it isn't a number, print `That's not a number!` and `continue` (try again):
+
+```rust
+let guess: u32 = match guess.trim().parse() {
+    Ok(num) => num,
+    Err(_) => {
+        println!("That's not a number!");
+        continue;
+    }
+};
+```
+
+4. Print `You guessed: N`, then compare: `Too small!`, `Too big!`, or `You win!` and `break`.
+'''
+c_compare = '''
+The classic C version uses `scanf("%d")`, which goes haywire when someone types letters. Here bad input is just one more `match` arm.
+'''
+py_compare = '''
+Like `while True:` with `try: int(input())` / `except ValueError: continue`.
+'''
+check = "output"
+stdin = "50\nabc\n25\n37\n31\n"
+expected_output = '''
+Guess the number!
+Please input your guess.
+You guessed: 50
+Too big!
+Please input your guess.
+That's not a number!
+Please input your guess.
+You guessed: 25
+Too small!
+Please input your guess.
+You guessed: 37
+Too big!
+Please input your guess.
+You guessed: 31
+You win!
+'''
+starter = '''
+use std::cmp::Ordering;
+use std::io;
+
+// The game's dice. In a real project you'd use the rand crate:
+//     rand::thread_rng().gen_range(1..=100)
+fn secret_number() -> u32 {
+    31
+}
+
+fn main() {
+    println!("Guess the number!");
+    let secret = secret_number();
+
+    // TODO: loop forever:
+    //   print "Please input your guess."
+    //   read a line (stop if read_line returns Ok(0): no more input)
+    //   parse it; if it isn't a number, print "That's not a number!" and try again
+    //   print "You guessed: N"
+    //   compare: "Too small!", "Too big!", or "You win!" (and stop)
+}
+'''
+solution = '''
+use std::cmp::Ordering;
+use std::io;
+
+// The game's dice. In a real project you'd use the rand crate:
+//     rand::thread_rng().gen_range(1..=100)
+fn secret_number() -> u32 {
+    31
+}
+
+fn main() {
+    println!("Guess the number!");
+    let secret = secret_number();
+
+    loop {
+        println!("Please input your guess.");
+        let mut guess = String::new();
+        let read = io::stdin().read_line(&mut guess).expect("Failed to read line");
+        if read == 0 {
+            break;
+        }
+
+        let guess: u32 = match guess.trim().parse() {
+            Ok(num) => num,
+            Err(_) => {
+                println!("That's not a number!");
+                continue;
+            }
+        };
+
+        println!("You guessed: {guess}");
+        match guess.cmp(&secret) {
+            Ordering::Less => println!("Too small!"),
+            Ordering::Greater => println!("Too big!"),
+            Ordering::Equal => {
+                println!("You win!");
+                break;
+            }
+        }
+    }
+}
+'''
+hints = [
+    "Start with the loop and the reading. Make sure you `break` when read_line returns 0, or the game never ends.",
+    "Parse with a `match` that `continue`s on Err, then match on `guess.cmp(&secret)`. Remember to `break` after \"You win!\".",
+    "```rust\nloop {\n    println!(\"Please input your guess.\");\n    let mut guess = String::new();\n    let read = io::stdin().read_line(&mut guess).expect(\"Failed to read line\");\n    if read == 0 { break; }\n    let guess: u32 = match guess.trim().parse() {\n        Ok(num) => num,\n        Err(_) => { println!(\"That's not a number!\"); continue; }\n    };\n    println!(\"You guessed: {guess}\");\n    match guess.cmp(&secret) {\n        Ordering::Less => println!(\"Too small!\"),\n        Ordering::Greater => println!(\"Too big!\"),\n        Ordering::Equal => { println!(\"You win!\"); break; }\n    }\n}\n```",
+]

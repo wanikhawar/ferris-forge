@@ -387,6 +387,105 @@ hints = [
 ]
 
 [[level]]
+id = "3.box"
+title = "Treasure in the storeroom"
+kind = "predict"
+book = ["4.1"]
+xp = 25
+goal = "Does this compile? If so, what does it print?"
+lesson = '''
+Where does data live?
+
+- The **stack** holds a function's local variables. It's fast and cleaned up when the function returns.
+- The **heap** is a big storeroom for data that needs to live longer or grow.
+
+`Box::new(5)` puts the 5 in the heap and keeps a **pointer** to it on the stack. The box **owns** that heap space, so when the box is dropped, the space is freed.
+
+What happens when you assign one box to another?
+'''
+c_compare = '''
+`Box::new(5)` is like `int *p = malloc(sizeof(int)); *p = 5;`, except Rust calls `free` for you, exactly once.
+'''
+py_compare = '''
+Every Python object lives on the heap. Rust lets you choose, and makes the owner clear.
+'''
+starter = '''
+fn main() {
+    let a = Box::new(5);
+    let b = a;
+    println!("{}", b);
+    println!("{}", a);
+}
+'''
+choices = [
+    "5 / 5",
+    "It doesn't compile: a was moved into b",
+    "5 / 0",
+    "It crashes: the box is freed twice",
+]
+answer = 1
+compile_fails = true
+explanation = "`let b = a;` moves the box: the pointer is copied and `a` is no longer valid, so using it is error E0382. That's how Rust prevents the double free from choice D."
+
+[[level]]
+id = "3.boxmove"
+title = "Handing over the key"
+kind = "fix"
+book = ["4.1"]
+xp = 40
+goal = '''Make it print:
+Total gold: 60
+Chest still has 3 slots'''
+lesson = '''
+Passing a `Box` to a function **moves** it: you hand over the key to the storeroom. Only the pointer is copied (cheap!), and the data stays where it is.
+
+After the call, the function owns the box, and it's freed when the function ends. If you still need it, either:
+
+- use it **before** you hand it over, or
+- hand over a **copy** with `.clone()`
+'''
+c_compare = '''
+Like passing a malloc'd pointer to a function that frees it. Using the pointer afterwards would be use-after-free; in Rust it doesn't compile.
+'''
+py_compare = '''
+In Python the caller would still have the object. Here the function takes it away.
+'''
+check = "output"
+expected_output = '''
+Total gold: 60
+Chest still has 3 slots
+'''
+starter = '''
+fn open_chest(chest: Box<[u32; 3]>) -> u32 {
+    chest.iter().sum()
+}
+
+fn main() {
+    let chest = Box::new([10, 20, 30]);
+    let total = open_chest(chest);
+    println!("Total gold: {}", total);
+    println!("Chest still has {} slots", chest.len());
+}
+'''
+solution = '''
+fn open_chest(chest: Box<[u32; 3]>) -> u32 {
+    chest.iter().sum()
+}
+
+fn main() {
+    let chest = Box::new([10, 20, 30]);
+    let total = open_chest(chest.clone());
+    println!("Total gold: {}", total);
+    println!("Chest still has {} slots", chest.len());
+}
+'''
+hints = [
+    "After `open_chest(chest)`, who owns the chest?",
+    "Either give the function a copy, or read `chest.len()` before you hand it over.",
+    "Change the call to `open_chest(chest.clone())`.",
+]
+
+[[level]]
 id = "3.9"
 title = "BOSS: The cave inventory"
 kind = "boss"
@@ -490,17 +589,3 @@ hints = [
     "`pick_up` needs a `mut` parameter so it can `push`. `count` should read `.len()` first, then return `(inventory, n)`. In `main`, give `pick_up` a clone of `sword`.",
     "```rust\nfn pick_up(mut inventory: Vec<String>, item: String) -> Vec<String> {\n    inventory.push(item);\n    inventory\n}\n\nfn count(inventory: Vec<String>) -> (Vec<String>, usize) {\n    let n = inventory.len();\n    (inventory, n)\n}\n```\nAnd in `main`: `pick_up(inventory, sword.clone())`.",
 ]
-
-# ---- Planned (not built yet) ----
-
-[[planned]]
-title = "Treasure in the storeroom"
-kind = "predict"
-book = ["4.1"]
-about = "Box puts data on the heap; the stack holds the pointer."
-
-[[planned]]
-title = "Handing over the key"
-kind = "fix"
-book = ["4.1"]
-about = "Moving a Box hands over the pointer, not the data."

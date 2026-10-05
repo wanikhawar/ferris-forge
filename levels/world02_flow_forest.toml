@@ -370,6 +370,71 @@ hints = [
 ]
 
 [[level]]
+id = "2.labels"
+title = "Escape the maze of loops"
+kind = "fill"
+book = ["3.5"]
+xp = 35
+goal = '''Stop BOTH loops at the first match, so it prints:
+3 x 4 = 12'''
+lesson = '''
+A plain `break` only leaves the **innermost** loop. To leave an outer loop, give it a **label** (a name starting with `'`):
+
+```rust
+'outer: for a in 1..=5 {
+    for b in 1..=5 {
+        if a * b == 6 {
+            break 'outer; // leaves BOTH loops
+        }
+    }
+}
+```
+
+`continue 'outer` works the same way.
+'''
+c_compare = '''
+In C you'd need a `goto` or a flag variable. Labels are the safe, structured version.
+'''
+py_compare = '''
+Python has no loop labels. You'd use a flag or a function with `return`.
+'''
+check = "output"
+expected_output = "3 x 4 = 12"
+starter = '''
+fn main() {
+    let mut found = (0, 0);
+    for a in 1..=5 {
+        for b in 1..=5 {
+            if a * b == 12 {
+                found = (a, b);
+                // TODO: stop BOTH loops here
+            }
+        }
+    }
+    println!("{} x {} = 12", found.0, found.1);
+}
+'''
+solution = '''
+fn main() {
+    let mut found = (0, 0);
+    'outer: for a in 1..=5 {
+        for b in 1..=5 {
+            if a * b == 12 {
+                found = (a, b);
+                break 'outer;
+            }
+        }
+    }
+    println!("{} x {} = 12", found.0, found.1);
+}
+'''
+hints = [
+    "Right now the loops keep going and find another pair later. How do you stop the outer loop from inside the inner one?",
+    "Put a label like `'outer:` before the first `for`, then use `break 'outer;`.",
+    "Write `'outer: for a in 1..=5 {` and replace the TODO with `break 'outer;`.",
+]
+
+[[level]]
 id = "2.8"
 title = "BOSS: FizzBuzz Arena"
 kind = "boss"
@@ -463,11 +528,3 @@ hints = [
     "Use `if n % 15 == 0 { ... } else if n % 3 == 0 { ... } else if ...`. Each branch must produce a `String`: use `String::from(\"Fizz\")` for words and `n.to_string()` for the number.",
     "```rust\nif n % 15 == 0 {\n    String::from(\"FizzBuzz\")\n} else if n % 3 == 0 {\n    String::from(\"Fizz\")\n} else if n % 5 == 0 {\n    String::from(\"Buzz\")\n} else {\n    n.to_string()\n}\n```",
 ]
-
-# ---- Planned (not built yet) ----
-
-[[planned]]
-title = "Escape the maze of loops"
-kind = "fill"
-book = ["3.5"]
-about = "Loop labels let you break out of an outer loop."

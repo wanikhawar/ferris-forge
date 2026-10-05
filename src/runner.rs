@@ -36,6 +36,53 @@ pub struct RunResult {
     pub summary: String,
 }
 
+/// What a program gets when it runs: keyboard input, arguments, environment and files.
+#[derive(Debug, Clone, Default)]
+pub struct Setup {
+    pub stdin: String,
+    pub args: Vec<String>,
+    pub env: Vec<(String, String)>,
+    pub files: Vec<(String, String)>,
+}
+
+impl Setup {
+    pub fn from_level(l: &Level) -> Setup {
+        Setup {
+            stdin: l.stdin.clone(),
+            args: l.args.clone(),
+            env: l.env.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+            files: l
+                .files
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
+        }
+    }
+
+    /// Write the extra files into the scratch folder (only plain relative paths).
+    fn write_files(&self, dir: &Path) -> std::io::Result<()> {
+        for (name, text) in &self.files {
+            let safe = !name.is_empty()
+                && !name.starts_with('/')
+                && !name
+                    .split('/')
+                    .any(|part| part.is_empty() || part == "." || part == "..")
+                && name
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "_-./".contains(c));
+            if !safe || name == "main.rs" {
+                continue;
+            }
+            let path = dir.join(name);
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::write(path, text)?;
+        }
+        Ok(())
+    }
+}
+
 /// A scratch directory that is deleted when dropped.
 struct Scratch(PathBuf);
 
@@ -148,11 +195,17 @@ async fn read_capped(mut pipe: impl AsyncRead + Unpin, over: Arc<Notify>) -> (Ve
     }
 }
 
-async fn run_binary(binary: &Path, dir: &Path, args: &[&str]) -> std::io::Result<Ran> {
+async fn run_binary(
+    binary: &Path,
+    dir: &Path,
+    args: &[&str],
+    setup: &Setup,
+) -> std::io::Result<Ran> {
     let mut child = Command::new(binary)
         .args(args)
+        .envs(setup.env.iter().map(|(k, v)| (k.as_str(), v.as_str())))
         .current_dir(dir)
-        .stdin(Stdio::null())
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true)
@@ -160,6 +213,14 @@ async fn run_binary(binary: &Path, dir: &Path, args: &[&str]) -> std::io::Result
         .process_group(0)
         .spawn()?;
     let pgid = child.id();
+    // Type the level's input, then "press Ctrl+D" (close stdin).
+    if let Some(mut stdin) = child.stdin.take() {
+        let input = setup.stdin.clone().into_bytes();
+        tokio::spawn(async move {
+            use tokio::io::AsyncWriteExt;
+            let _ = stdin.write_all(&input).await;
+        });
+    }
     let over = Arc::new(Notify::new());
     let out_task = tokio::spawn(read_capped(
         child.stdout.take().expect("piped"),
@@ -236,19 +297,21 @@ fn error_codes(messages: &str) -> Vec<String> {
 }
 
 /// Compile and run code with no pass/fail check (the workshop and predict levels).
-pub async fn play(code: &str, work: &Path) -> RunResult {
-    match play_inner(code, work).await {
+pub async fn play(code: &str, setup: &Setup, work: &Path) -> RunResult {
+    match play_inner(code, setup, work).await {
         Ok(r) => r,
         Err(e) => internal_error(e),
     }
 }
 
-async fn play_inner(code: &str, work: &Path) -> std::io::Result<RunResult> {
+async fn play_inner(code: &str, setup: &Setup, work: &Path) -> std::io::Result<RunResult> {
     let _slot = RUN_SLOTS
         .acquire()
         .await
         .expect("semaphore is never closed");
     let scratch = Scratch::new(work)?;
+    setup.write_files(&scratch.0)?;
+    let program_args: Vec<&str> = setup.args.iter().map(String::as_str).collect();
     let compiled = compile(&scratch.0, code, false).await?;
     let mut result = RunResult {
         compiled: compiled.ok,
@@ -260,7 +323,7 @@ async fn play_inner(code: &str, work: &Path) -> std::io::Result<RunResult> {
         result.summary = "It doesn't compile yet.".into();
         return Ok(result);
     }
-    let ran = run_binary(&compiled.binary, &scratch.0, &[]).await?;
+    let ran = run_binary(&compiled.binary, &scratch.0, &program_args, setup).await?;
     result.passed = ran.success;
     result.timed_out = ran.timed_out;
     result.stdout = ran.stdout;
@@ -289,6 +352,8 @@ async fn check_inner(level: &Level, code: &str, work: &Path) -> std::io::Result<
         .await
         .expect("semaphore is never closed");
     let scratch = Scratch::new(work)?;
+    let setup = Setup::from_level(level);
+    setup.write_files(&scratch.0)?;
     let as_tests = level.check == Check::Tests;
     let source = match (&level.tests, as_tests) {
         (Some(tests), true) => format!("{code}\n\n// ---- Ferris' tests ----\n{tests}\n"),
@@ -307,12 +372,12 @@ async fn check_inner(level: &Level, code: &str, work: &Path) -> std::io::Result<
         return Ok(result);
     }
 
-    let args: &[&str] = if as_tests {
-        &["--test-threads=1", "--color=never"]
+    let args: Vec<&str> = if as_tests {
+        vec!["--test-threads=1", "--color=never"]
     } else {
-        &[]
+        level.args.iter().map(String::as_str).collect()
     };
-    let ran = run_binary(&compiled.binary, &scratch.0, args).await?;
+    let ran = run_binary(&compiled.binary, &scratch.0, &args, &setup).await?;
     result.timed_out = ran.timed_out;
     result.stdout = ran.stdout;
     result.stderr = ran.stderr;
@@ -324,21 +389,38 @@ async fn check_inner(level: &Level, code: &str, work: &Path) -> std::io::Result<
 
     match level.check {
         Check::Tests => {
-            result.passed = ran.success;
-            result.summary = if ran.success {
-                "All of Ferris' tests passed!".into()
-            } else {
+            // Levels about testing also ask for tests of your own.
+            let written = code.matches("#[test]").count();
+            let enough = written >= level.min_tests;
+            result.passed = ran.success && enough;
+            result.summary = if !ran.success {
                 "It compiles, but some tests failed.".into()
+            } else if !enough {
+                format!(
+                    "All tests pass, but you wrote {written} test(s) of your own. Write at least {}.",
+                    level.min_tests
+                )
+            } else {
+                "All of Ferris' tests passed!".into()
             };
         }
         Check::Output => {
             let expected = normalize(level.expected_output.as_deref().unwrap_or(""));
             let got = normalize(&result.stdout);
-            result.passed = ran.success && got == expected;
+            let stderr_ok = level
+                .expected_stderr
+                .as_deref()
+                .is_none_or(|e| normalize(e) == normalize(&result.stderr));
+            result.passed = ran.success && got == expected && stderr_ok;
             result.summary = if result.passed {
                 "Output matches. Level passed!".into()
             } else if !ran.success {
                 "It compiled, but crashed (panicked) while running.".into()
+            } else if got == expected {
+                format!(
+                    "Standard output is right, but standard error (eprintln!) should be:\n{}",
+                    normalize(level.expected_stderr.as_deref().unwrap_or(""))
+                )
             } else {
                 format!("It runs, but the output isn't right yet.\nExpected:\n{expected}")
             };
@@ -391,14 +473,24 @@ mod tests {
 
     #[tokio::test]
     async fn runs_a_program() {
-        let r = play("fn main() { println!(\"hi\"); }", &work_dir("hello")).await;
+        let r = play(
+            "fn main() { println!(\"hi\"); }",
+            &Setup::default(),
+            &work_dir("hello"),
+        )
+        .await;
         assert!(r.compiled && r.passed, "{r:?}");
         assert_eq!(r.stdout.trim(), "hi");
     }
 
     #[tokio::test]
     async fn reports_error_codes() {
-        let r = play("fn main() { let x = 1; x = 2; }", &work_dir("e0384")).await;
+        let r = play(
+            "fn main() { let x = 1; x = 2; }",
+            &Setup::default(),
+            &work_dir("e0384"),
+        )
+        .await;
         assert!(!r.compiled);
         assert_eq!(r.error_codes, vec!["E0384".to_string()]);
     }
@@ -408,6 +500,7 @@ mod tests {
         let start = std::time::Instant::now();
         let r = play(
             "fn main() { loop { println!(\"spam spam spam spam\"); } }",
+            &Setup::default(),
             &work_dir("flood"),
         )
         .await;
@@ -430,7 +523,7 @@ mod tests {
             std::process::Command::new("sleep").arg("30").spawn().unwrap();
             println!("parent done");
         }"#;
-        let r = play(code, &work_dir("grandchild")).await;
+        let r = play(code, &Setup::default(), &work_dir("grandchild")).await;
         assert!(r.compiled, "{}", r.compiler);
         assert_eq!(r.stdout.trim(), "parent done");
         // Compiling takes a few seconds; the 30 s child must not hold the run open.
@@ -445,6 +538,7 @@ mod tests {
     async fn infinite_loops_time_out() {
         let r = play(
             "fn main() { loop { std::hint::black_box(0); } }",
+            &Setup::default(),
             &work_dir("spin"),
         )
         .await;

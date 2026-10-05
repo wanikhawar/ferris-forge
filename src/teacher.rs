@@ -119,7 +119,7 @@ pub fn build_prompt(mode: Mode, ctx: &Context) -> String {
     }
     p.push_str(&format!("\n## About the student\n{}\n", ctx.profile));
 
-    if level.kind == Kind::Predict {
+    if matches!(level.kind, Kind::Predict | Kind::Quiz) {
         p.push_str(&format!(
             "\n## Code to read\n```rust\n{}```\n## Choices\n",
             numbered(&level.starter)

@@ -14,14 +14,14 @@ In Rust, variables are **immutable by default**. Once set, they can't change:
 
 ```rust
 let x = 5;
-x = 6;        // ❌ error[E0384]
+x = 6;        // error[E0384]: x is immutable
 ```
 
 To allow changes, say so with **`mut`**:
 
 ```rust
 let mut x = 5;
-x = 6;        // ✅
+x = 6;        // works now
 ```
 
 Why? When most values never change, the ones that *do* change stand out, and the compiler can catch accidental changes.
@@ -316,6 +316,103 @@ expected_output = '(1, "two", 3.5)'
 explanation = "`{:?}` shows values the way you'd write them in code, so strings keep their quotes. With plain `{}` this line wouldn't compile, because tuples have no 'pretty' format."
 
 [[level]]
+id = "1.const"
+title = "Carved in stone"
+kind = "fix"
+book = ["3.1"]
+xp = 30
+goal = '''Make it print:
+Max health: 100
+Double: 200'''
+lesson = '''
+A **constant** is a value carved in stone, known before the program even runs:
+
+```rust
+const MAX_SPEED: u32 = 120;
+```
+
+Rules for constants:
+- write them in `SCREAMING_SNAKE_CASE`
+- the **type is required**, Rust won't guess
+- they can live outside functions, so the whole program can use them
+- they can never be `mut`
+'''
+c_compare = '''
+Like `#define MAX_SPEED 120`, but typed and checked, or like a global `const int`.
+'''
+py_compare = '''
+Python only has a naming convention (`MAX_SPEED = 120`). In Rust, `const` really can't change.
+'''
+check = "output"
+expected_output = '''
+Max health: 100
+Double: 200
+'''
+starter = '''
+const MAX_HEALTH = 100;
+
+fn main() {
+    println!("Max health: {}", MAX_HEALTH);
+    println!("Double: {}", MAX_HEALTH * 2);
+}
+'''
+solution = '''
+const MAX_HEALTH: u32 = 100;
+
+fn main() {
+    println!("Max health: {}", MAX_HEALTH);
+    println!("Double: {}", MAX_HEALTH * 2);
+}
+'''
+hints = [
+    "The compiler says something is missing from the constant. Constants are stricter than let.",
+    "Constants must say their type, like `const NAME: Type = value;`.",
+    "`const MAX_HEALTH: u32 = 100;`",
+]
+
+[[level]]
+id = "1.charbool"
+title = "Letters and light switches"
+kind = "predict"
+book = ["3.2"]
+xp = 20
+goal = "What does this print?"
+lesson = '''
+Two more simple types:
+
+- **`bool`**: `true` or `false`, like a light switch
+- **`char`**: one Unicode character, written in single quotes: `'a'`, `'Z'`, `'🦀'`
+
+`std::mem::size_of::<T>()` tells you how many bytes a type uses.
+'''
+c_compare = '''
+A C `char` is one byte. A Rust `char` is a full Unicode scalar value, so it can hold any letter or emoji.
+'''
+py_compare = '''
+Python has no separate character type (a "char" is just a 1-letter string). Rust's `char` is its own type.
+'''
+starter = '''
+fn main() {
+    let crab = '🦀';
+    let is_happy = true;
+    println!("{} {}", crab, is_happy);
+    println!("{}", std::mem::size_of::<char>());
+}
+'''
+choices = [
+    "🦀 true / 1",
+    "🦀 true / 4",
+    "It doesn't compile: a char can't hold an emoji",
+    "🦀 1 / 4",
+]
+answer = 1
+expected_output = '''
+🦀 true
+4
+'''
+explanation = "A Rust `char` can hold any Unicode character (even 🦀), so it takes 4 bytes. `bool` prints as `true`."
+
+[[level]]
 id = "1.8"
 title = "BOSS: The village thermometer"
 kind = "boss"
@@ -376,17 +473,3 @@ hints = [
     "Compute each Celsius value with the formula using `f64` literals (`32.0`, not `32`), then print with `{:.1}` for both numbers.",
     "`let c0 = (readings_f[0] - 32.0) * 5.0 / 9.0;` then `println!(\"{:.1}F = {:.1}C\", readings_f[0], c0);`, and the same for indexes 1 and 2.",
 ]
-
-# ---- Planned (not built yet) ----
-
-[[planned]]
-title = "Carved in stone"
-kind = "fix"
-book = ["3.1"]
-about = "Constants: values fixed forever, written in CAPITALS."
-
-[[planned]]
-title = "Letters and light switches"
-kind = "predict"
-book = ["3.2"]
-about = "char holds any Unicode letter (not just a byte!), and bool."

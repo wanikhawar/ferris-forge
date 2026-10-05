@@ -2,58 +2,716 @@ id = 7
 name = "Collection Citadel"
 blurb = "Keep lots of things: lists, text and dictionaries."
 
-# Placeholder island: these levels are planned but not built yet.
-
-[[planned]]
+[[level]]
+id = "7.1"
 title = "A growing backpack: Vec"
 kind = "fill"
 book = ["8.1"]
-about = "A list that grows: push, index and get."
+xp = 40
+goal = "Write backpack (make a Vec of three items) and safe_get (read an item without crashing)."
+lesson = '''
+A **`Vec<T>`** is a list that can grow:
 
-[[planned]]
+```rust
+let mut v: Vec<i32> = Vec::new();
+v.push(5);
+v.push(6);
+let w = vec![1, 2, 3];    // the vec! macro builds one with items
+```
+
+Two ways to read item `i`:
+- `v[i]` gives the item, but **crashes** if `i` is out of range
+- `v.get(i)` gives an **`Option<&T>`**: `Some(&item)` or `None`
+'''
+c_compare = '''
+A `Vec` is a growable array: pointer, length and capacity, like the dynamic array you'd write with `realloc`. It frees itself.
+'''
+py_compare = '''
+Like a Python `list`, but every item has the same type, and `.get(i)` lets you avoid `IndexError`.
+'''
+check = "tests"
+starter = '''
+fn backpack() -> Vec<String> {
+    // TODO: make an empty Vec, push "rope", "lamp" and "map" (in that order), return it
+    todo!()
+}
+
+fn safe_get(items: &Vec<String>, i: usize) -> String {
+    // TODO: use items.get(i): return a copy of the item, or "nothing" if i is out of range
+    todo!()
+}
+
+fn main() {
+    let bag = backpack();
+    println!("{} / {}", safe_get(&bag, 1), safe_get(&bag, 9));
+}
+'''
+solution = '''
+fn backpack() -> Vec<String> {
+    let mut bag = Vec::new();
+    bag.push(String::from("rope"));
+    bag.push(String::from("lamp"));
+    bag.push(String::from("map"));
+    bag
+}
+
+fn safe_get(items: &Vec<String>, i: usize) -> String {
+    match items.get(i) {
+        Some(item) => item.clone(),
+        None => String::from("nothing"),
+    }
+}
+
+fn main() {
+    let bag = backpack();
+    println!("{} / {}", safe_get(&bag, 1), safe_get(&bag, 9));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn packs_three_things() {
+        assert_eq!(backpack(), vec!["rope", "lamp", "map"]);
+    }
+
+    #[test]
+    fn safe_get_never_crashes() {
+        let bag = backpack();
+        assert_eq!(safe_get(&bag, 0), "rope");
+        assert_eq!(safe_get(&bag, 2), "map");
+        assert_eq!(safe_get(&bag, 3), "nothing");
+    }
+}
+'''
+hints = [
+    "backpack: start with `let mut bag = Vec::new();`. safe_get: `items.get(i)` is an Option, so match on it.",
+    "Push each item with `bag.push(String::from(\"rope\"))`. In safe_get, `Some(item) => item.clone()` and `None => String::from(\"nothing\")`.",
+    "```rust\nfn safe_get(items: &Vec<String>, i: usize) -> String {\n    match items.get(i) {\n        Some(item) => item.clone(),\n        None => String::from(\"nothing\"),\n    }\n}\n```",
+]
+
+[[level]]
+id = "7.2"
 title = "Don't hold it while it moves"
 kind = "fix"
 book = ["8.1"]
-about = "Why you can't keep a reference into a Vec while pushing."
+xp = 40
+goal = "Make it print: first: 1, len: 4"
+lesson = '''
+Why can't you keep a reference into a Vec while pushing?
 
-[[planned]]
+When a Vec runs out of room, `push` moves **all** the items to a bigger block of memory. Any reference into the old block would point at freed memory. So while `&v[0]` is in use, `v` can't be changed.
+
+The fix is usually to **copy** the value out (numbers are `Copy`), clone it, or finish using the reference before pushing.
+'''
+c_compare = '''
+This is exactly the C bug where you keep `int *p = &arr[0]`, call `realloc`, and then `p` dangles. Rust stops it at compile time.
+'''
+py_compare = '''
+Python lists also reallocate, but Python references point to objects, not into the list's memory, so it can't break there.
+'''
+check = "output"
+expected_output = "first: 1, len: 4"
+starter = '''
+fn main() {
+    let mut v = vec![1, 2, 3];
+    let first = &v[0];
+    v.push(4);
+    println!("first: {}, len: {}", first, v.len());
+}
+'''
+solution = '''
+fn main() {
+    let mut v = vec![1, 2, 3];
+    let first = v[0];
+    v.push(4);
+    println!("first: {}, len: {}", first, v.len());
+}
+'''
+hints = [
+    "`first` borrows from `v`, and it's still in use after the push.",
+    "A number is cheap to copy. Do you need a reference at all?",
+    "`let first = v[0];` copies the 1 out, so `v` is free to change.",
+]
+
+[[level]]
+id = "7.3"
 title = "Walking the shelves"
 kind = "fill"
 book = ["8.1"]
-about = "Loop over a Vec, and change items as you go."
+xp = 45
+goal = "Write double_all (change every item) and total (add them up)."
+lesson = '''
+Looping over a Vec:
 
-[[planned]]
+```rust
+for x in &v {        // read each item (x is &i32)
+    println!("{x}");
+}
+
+for x in &mut v {    // change each item (x is &mut i32)
+    *x += 1;         // * follows the reference to the item
+}
+```
+
+A Vec can only hold one type, but that type can be an **enum**, so one list can hold several kinds of things.
+'''
+c_compare = '''
+`for x in &mut v` is like walking a pointer over an array and writing through it, but without any chance of going out of bounds.
+'''
+py_compare = '''
+Python's `for x in items: x *= 2` doesn't change the list. In Rust, `for x in &mut v { *x *= 2 }` does.
+'''
+check = "tests"
+starter = '''
+fn double_all(v: &mut Vec<i32>) {
+    todo!()
+}
+
+fn total(v: &Vec<i32>) -> i32 {
+    todo!()
+}
+
+fn main() {
+    let mut v = vec![1, 2, 3];
+    double_all(&mut v);
+    println!("{:?} total {}", v, total(&v));
+}
+'''
+solution = '''
+fn double_all(v: &mut Vec<i32>) {
+    for x in v.iter_mut() {
+        *x *= 2;
+    }
+}
+
+fn total(v: &Vec<i32>) -> i32 {
+    let mut sum = 0;
+    for x in v {
+        sum += x;
+    }
+    sum
+}
+
+fn main() {
+    let mut v = vec![1, 2, 3];
+    double_all(&mut v);
+    println!("{:?} total {}", v, total(&v));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn doubles() {
+        let mut v = vec![1, 2, 3];
+        double_all(&mut v);
+        assert_eq!(v, vec![2, 4, 6]);
+    }
+
+    #[test]
+    fn totals() {
+        assert_eq!(total(&vec![2, 4, 6]), 12);
+        assert_eq!(total(&vec![]), 0);
+    }
+}
+'''
+hints = [
+    "double_all needs to change each item through a mutable reference. total just reads.",
+    "In double_all: `for x in v.iter_mut() { *x *= 2; }`. In total, keep a running sum.",
+    "```rust\nfn double_all(v: &mut Vec<i32>) { for x in v.iter_mut() { *x *= 2; } }\nfn total(v: &Vec<i32>) -> i32 { let mut sum = 0; for x in v { sum += x; } sum }\n```",
+]
+
+[[level]]
+id = "7.4"
 title = "Stringing words together"
 kind = "fill"
 book = ["8.2"]
-about = "Build text with push_str, + and format!."
+xp = 40
+goal = "Write make_tag (build a name tag) and exclaim (add \"!!\" in place)."
+lesson = '''
+Ways to build a `String`:
 
-[[planned]]
+```rust
+let mut s = String::from("Hello");
+s.push_str(", world");   // add a &str
+s.push('!');             // add one char
+let both = format!("{} and {}", "salt", "pepper");  // like println!, but returns a String
+```
+
+`format!` is usually the clearest way to glue several pieces together.
+'''
+c_compare = '''
+No `strcat`, no buffer sizes: `String` grows as needed. `format!` is a safe `snprintf` that always allocates enough.
+'''
+py_compare = '''
+`format!("{} {}", a, b)` is like an f-string `f"{a} {b}"`.
+'''
+check = "tests"
+starter = '''
+fn make_tag(first: &str, last: &str, level: u32) -> String {
+    // e.g. make_tag("Ferris", "Crab", 3) == "Ferris Crab (lvl 3)"
+    todo!()
+}
+
+fn exclaim(s: &mut String) {
+    // add "!!" to the end of s
+    todo!()
+}
+
+fn main() {
+    let mut tag = make_tag("Ferris", "Crab", 3);
+    exclaim(&mut tag);
+    println!("{}", tag);
+}
+'''
+solution = '''
+fn make_tag(first: &str, last: &str, level: u32) -> String {
+    format!("{} {} (lvl {})", first, last, level)
+}
+
+fn exclaim(s: &mut String) {
+    s.push_str("!!");
+}
+
+fn main() {
+    let mut tag = make_tag("Ferris", "Crab", 3);
+    exclaim(&mut tag);
+    println!("{}", tag);
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tag() {
+        assert_eq!(make_tag("Ferris", "Crab", 3), "Ferris Crab (lvl 3)");
+    }
+
+    #[test]
+    fn exclaims() {
+        let mut s = String::from("Yes");
+        exclaim(&mut s);
+        assert_eq!(s, "Yes!!");
+    }
+}
+'''
+hints = [
+    "make_tag can be a single `format!`. exclaim adds text to the String it borrows.",
+    "`format!(\"{} {} (lvl {})\", first, last, level)` and `s.push_str(\"!!\")`.",
+    "make_tag: `format!(\"{} {} (lvl {})\", first, last, level)`. exclaim: `s.push_str(\"!!\");`",
+]
+
+[[level]]
+id = "7.5"
 title = "Why can't I write s[0]?"
 kind = "predict"
 book = ["8.2"]
-about = "Strings are UTF-8, so one letter can take several bytes."
+xp = 25
+goal = "What does this print?"
+lesson = '''
+Rust strings are **UTF-8**. Plain English letters take 1 byte each, but letters like `é`, `ñ` or `你` take 2 to 4 bytes.
 
-[[planned]]
+- `s.len()` counts **bytes**
+- `s.chars().count()` counts **characters**
+
+That's why Rust doesn't let you write `s[0]`: "the first byte" might be half a letter! Use `s.chars()` to walk letters, or slices on byte positions you know are safe.
+'''
+c_compare = '''
+`strlen` also counts bytes, not characters, but C will happily let you index into the middle of a multi-byte letter.
+'''
+py_compare = '''
+Python's `len("héllo")` is 5 because Python counts characters. Rust's `.len()` counts bytes.
+'''
+starter = '''
+fn main() {
+    let s = String::from("héllo");
+    println!("{} {}", s.len(), s.chars().count());
+}
+'''
+choices = ["5 5", "6 5", "5 6", "It doesn't compile: é isn't allowed"]
+answer = 1
+expected_output = "6 5"
+explanation = "`é` takes 2 bytes in UTF-8, so the string is 6 bytes long but has only 5 characters."
+
+[[level]]
+id = "7.6"
 title = "The dictionary: HashMap"
 kind = "fill"
 book = ["8.3"]
-about = "Store and look up values by key."
+xp = 45
+goal = "Write prices (a price list) and price_of (look one up, 0 if it's missing)."
+lesson = '''
+A **`HashMap<K, V>`** stores values by key:
 
-[[planned]]
+```rust
+use std::collections::HashMap;
+
+let mut ages = HashMap::new();
+ages.insert(String::from("Ferris"), 9);
+let a = ages.get("Ferris");   // Option<&i32>
+```
+
+`.get` returns an `Option<&V>`. Two handy helpers:
+- `.copied()` turns `Option<&u32>` into `Option<u32>`
+- `.unwrap_or(0)` gives 0 when it's `None`
+
+Inserting a `String` key **moves** it into the map.
+'''
+c_compare = '''
+C has no built-in hash table. Here it's part of the standard library.
+'''
+py_compare = '''
+It's a Python `dict`. `map.get(k).copied().unwrap_or(0)` is like `d.get(k, 0)`.
+'''
+check = "tests"
+starter = '''
+use std::collections::HashMap;
+
+fn prices() -> HashMap<String, u32> {
+    // TODO: apple costs 3, bread costs 5
+    todo!()
+}
+
+fn price_of(map: &HashMap<String, u32>, item: &str) -> u32 {
+    // TODO: the price, or 0 if the item isn't in the map
+    todo!()
+}
+
+fn main() {
+    let p = prices();
+    println!("{} {}", price_of(&p, "bread"), price_of(&p, "cake"));
+}
+'''
+solution = '''
+use std::collections::HashMap;
+
+fn prices() -> HashMap<String, u32> {
+    let mut map = HashMap::new();
+    map.insert(String::from("apple"), 3);
+    map.insert(String::from("bread"), 5);
+    map
+}
+
+fn price_of(map: &HashMap<String, u32>, item: &str) -> u32 {
+    map.get(item).copied().unwrap_or(0)
+}
+
+fn main() {
+    let p = prices();
+    println!("{} {}", price_of(&p, "bread"), price_of(&p, "cake"));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn has_two_prices() {
+        let p = prices();
+        assert_eq!(p.len(), 2);
+        assert_eq!(price_of(&p, "apple"), 3);
+        assert_eq!(price_of(&p, "bread"), 5);
+    }
+
+    #[test]
+    fn missing_is_zero() {
+        assert_eq!(price_of(&prices(), "cake"), 0);
+    }
+}
+'''
+hints = [
+    "prices: make a `HashMap::new()` and insert two entries. price_of: `.get(item)` gives an Option.",
+    "`map.insert(String::from(\"apple\"), 3);` and `map.get(item).copied().unwrap_or(0)`.",
+    "```rust\nfn price_of(map: &HashMap<String, u32>, item: &str) -> u32 {\n    map.get(item).copied().unwrap_or(0)\n}\n```",
+]
+
+[[level]]
+id = "7.7"
 title = "Counting words"
 kind = "fill"
 book = ["8.3"]
-about = "Update a map in one line with entry().or_insert()."
+xp = 50
+goal = "Write count_words: how many times does each word appear?"
+lesson = '''
+Updating a map value based on the old one is so common that HashMap has the **entry API**:
 
-[[planned]]
+```rust
+let count = map.entry(word).or_insert(0);  // get the value, inserting 0 if missing
+*count += 1;                               // count is a &mut, so change it through *
+```
+
+`entry(...).or_insert(...)` returns a mutable reference to the value in the map.
+'''
+c_compare = '''
+In C this would be a lookup, then an insert if missing, then an update: three separate steps and three chances for a bug.
+'''
+py_compare = '''
+Like `counts[w] = counts.get(w, 0) + 1`, or a `collections.Counter`.
+'''
+check = "tests"
+starter = '''
+use std::collections::HashMap;
+
+fn count_words(text: &str) -> HashMap<String, u32> {
+    todo!()
+}
+
+fn main() {
+    let counts = count_words("the crab saw the sea");
+    println!("the: {}", counts["the"]);
+}
+'''
+solution = '''
+use std::collections::HashMap;
+
+fn count_words(text: &str) -> HashMap<String, u32> {
+    let mut counts = HashMap::new();
+    for word in text.split_whitespace() {
+        let count = counts.entry(word.to_string()).or_insert(0);
+        *count += 1;
+    }
+    counts
+}
+
+fn main() {
+    let counts = count_words("the crab saw the sea");
+    println!("the: {}", counts["the"]);
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn counts_each_word() {
+        let c = count_words("the crab saw the sea the end");
+        assert_eq!(c["the"], 3);
+        assert_eq!(c["crab"], 1);
+        assert_eq!(c.len(), 5);
+    }
+
+    #[test]
+    fn empty_text() {
+        assert!(count_words("").is_empty());
+    }
+}
+'''
+hints = [
+    "Loop over `text.split_whitespace()`, and for each word, add one to its count.",
+    "`let count = counts.entry(word.to_string()).or_insert(0); *count += 1;`",
+    "```rust\nlet mut counts = HashMap::new();\nfor word in text.split_whitespace() {\n    let count = counts.entry(word.to_string()).or_insert(0);\n    *count += 1;\n}\ncounts\n```",
+]
+
+[[level]]
+id = "7.8"
 title = "Ownership Inventory #2"
 kind = "predict"
 book = ["8.4"]
-about = "Checkpoint quiz: ownership puzzles with collections."
+xp = 30
+goal = "Does this compile? If so, what does it print?"
+lesson = '''
+**Ownership Inventory #2**: ownership puzzles with collections, from the Brown edition of the Rust Book.
 
-[[planned]]
+Remember: `.clone()` makes a brand-new, independent value. Changing (or clearing) the original doesn't touch the clone.
+'''
+c_compare = '''
+Think `strdup`: a separate copy with its own memory.
+'''
+py_compare = '''
+In Python, `first = names[0]` would share the same string object. A Rust clone is a real copy.
+'''
+starter = '''
+fn main() {
+    let mut names = vec![String::from("Ferris"), String::from("Corro")];
+    let first = names[0].clone();
+    names.clear();
+    println!("{} {}", first, names.len());
+}
+'''
+choices = [
+    "Ferris 0",
+    "It doesn't compile: names is still borrowed by first",
+    " 0 (first is empty after clear)",
+    "It doesn't compile: cannot move out of names[0]",
+]
+answer = 0
+expected_output = "Ferris 0"
+explanation = "`first` is a separate String (a clone), not a borrow, so clearing `names` is allowed and doesn't affect it. `.clone()` also avoids the 'move out of index' error."
+
+[[level]]
+id = "7.9"
 title = "BOSS: The gradebook"
 kind = "boss"
 book = ["8.1", "8.2", "8.3"]
-about = "Students, scores and averages."
+xp = 100
+goal = '''Build a Gradebook: add scores, get each student's average,
+find the best student, and list the names in alphabetical order.'''
+lesson = '''
+**Boss fight!** Keep a `HashMap<String, Vec<u32>>`: each student's name maps to a list of their scores.
+
+Methods to write:
+- `add(name, score)`: push the score onto that student's list (create it if needed: `entry(...).or_insert_with(Vec::new)` or `or_default()`)
+- `average(name) -> Option<f64>`: `None` if the student is unknown
+- `best_student() -> Option<String>`: highest average (if two tie, the name that comes first alphabetically)
+- `names() -> Vec<String>`: all names, sorted (`v.sort()`)
+
+Maps don't keep any order, so sort when you need one.
+'''
+c_compare = '''
+A map of growable arrays in C would be hundreds of lines. Here it's one type: `HashMap<String, Vec<u32>>`.
+'''
+py_compare = '''
+Like a `defaultdict(list)` of scores.
+'''
+check = "tests"
+starter = '''
+use std::collections::HashMap;
+
+struct Gradebook {
+    scores: HashMap<String, Vec<u32>>,
+}
+
+impl Gradebook {
+    fn new() -> Self {
+        Gradebook { scores: HashMap::new() }
+    }
+
+    fn add(&mut self, name: &str, score: u32) {
+        todo!()
+    }
+
+    fn average(&self, name: &str) -> Option<f64> {
+        todo!()
+    }
+
+    fn best_student(&self) -> Option<String> {
+        todo!()
+    }
+
+    fn names(&self) -> Vec<String> {
+        todo!()
+    }
+}
+
+fn main() {
+    let mut book = Gradebook::new();
+    book.add("Ferris", 90);
+    book.add("Corro", 70);
+    println!("{:?}", book.best_student());
+}
+'''
+solution = '''
+use std::collections::HashMap;
+
+struct Gradebook {
+    scores: HashMap<String, Vec<u32>>,
+}
+
+impl Gradebook {
+    fn new() -> Self {
+        Gradebook { scores: HashMap::new() }
+    }
+
+    fn add(&mut self, name: &str, score: u32) {
+        self.scores.entry(name.to_string()).or_default().push(score);
+    }
+
+    fn average(&self, name: &str) -> Option<f64> {
+        let list = self.scores.get(name)?;
+        if list.is_empty() {
+            return None;
+        }
+        let mut sum = 0;
+        for s in list {
+            sum += s;
+        }
+        Some(sum as f64 / list.len() as f64)
+    }
+
+    fn best_student(&self) -> Option<String> {
+        let mut best: Option<(String, f64)> = None;
+        for name in self.names() {
+            let avg = self.average(&name).unwrap_or(0.0);
+            let better = match &best {
+                None => true,
+                Some((_, best_avg)) => avg > *best_avg,
+            };
+            if better {
+                best = Some((name, avg));
+            }
+        }
+        best.map(|(name, _)| name)
+    }
+
+    fn names(&self) -> Vec<String> {
+        let mut names: Vec<String> = Vec::new();
+        for name in self.scores.keys() {
+            names.push(name.clone());
+        }
+        names.sort();
+        names
+    }
+}
+
+fn main() {
+    let mut book = Gradebook::new();
+    book.add("Ferris", 90);
+    book.add("Corro", 70);
+    println!("{:?}", book.best_student());
+}
+'''
+tests = '''
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample() -> Gradebook {
+        let mut b = Gradebook::new();
+        b.add("Ferris", 90);
+        b.add("Ferris", 70);
+        b.add("Corro", 85);
+        b.add("Ana", 60);
+        b
+    }
+
+    #[test]
+    fn averages() {
+        let b = sample();
+        assert_eq!(b.average("Ferris"), Some(80.0));
+        assert_eq!(b.average("Nobody"), None);
+    }
+
+    #[test]
+    fn best() {
+        assert_eq!(sample().best_student(), Some(String::from("Corro")));
+        assert_eq!(Gradebook::new().best_student(), None);
+    }
+
+    #[test]
+    fn ties_go_to_the_first_name() {
+        let mut b = Gradebook::new();
+        b.add("Zed", 50);
+        b.add("Bea", 50);
+        assert_eq!(b.best_student(), Some(String::from("Bea")));
+    }
+
+    #[test]
+    fn sorted_names() {
+        assert_eq!(sample().names(), vec!["Ana", "Corro", "Ferris"]);
+    }
+}
+'''
+hints = [
+    "Do add and names first, then average, then best_student (which can use the other two).",
+    "add: `self.scores.entry(name.to_string()).or_default().push(score)`. average: get the list (return None if missing), sum it, divide by the length as f64. best_student: walk the sorted names and keep the best average so far, only replacing it when a later one is strictly greater.",
+    "```rust\nfn names(&self) -> Vec<String> {\n    let mut names: Vec<String> = Vec::new();\n    for name in self.scores.keys() { names.push(name.clone()); }\n    names.sort();\n    names\n}\n```\nIn average, `let list = self.scores.get(name)?;` returns None early when the name is missing.",
+]

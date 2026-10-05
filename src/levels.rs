@@ -2,6 +2,7 @@
 //! `levels/book.toml`, the table of contents of the Rust Book the game follows.
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::path::Path;
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq)]
@@ -11,6 +12,8 @@ pub enum Kind {
     Fill,
     Predict,
     Boss,
+    /// A multiple-choice question about a concept, with no code to run.
+    Quiz,
 }
 
 /// How the game decides that a level is passed.
@@ -62,6 +65,25 @@ pub struct Level {
     pub explanation: String,
     #[serde(default = "default_xp")]
     pub xp: u32,
+    // What the program gets when it runs (all optional).
+    /// Typed at the keyboard (standard input).
+    #[serde(default)]
+    pub stdin: String,
+    /// Command-line arguments.
+    #[serde(default)]
+    pub args: Vec<String>,
+    /// Environment variables.
+    #[serde(default)]
+    pub env: BTreeMap<String, String>,
+    /// Extra files next to main.rs: data files, or modules like `garden.rs`.
+    #[serde(default)]
+    pub files: BTreeMap<String, String>,
+    /// What the program must print to standard error (e.g. with eprintln!).
+    #[serde(default)]
+    pub expected_stderr: Option<String>,
+    /// How many `#[test]` functions the player must write themselves.
+    #[serde(default)]
+    pub min_tests: usize,
 }
 
 fn default_check() -> Check {

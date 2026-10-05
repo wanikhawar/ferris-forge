@@ -392,6 +392,7 @@ ART.hint = (() => {
   return outlined(g);
 })();
 for (const [name, build] of Object.entries(BUILT)) ART[name] = build();
+ART.quiz = ART.book;
 // "back" is the orange "next" arrow, mirrored.
 ART.back = ART.next.map(row => [...row].reverse().join(""));
 
