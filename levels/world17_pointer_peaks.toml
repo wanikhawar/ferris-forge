@@ -2,46 +2,959 @@ id = 17
 name = "Pointer Peaks"
 blurb = "Smart pointers: Box, Rc, RefCell and friends."
 
-# Placeholder island: these levels are planned but not built yet.
-
-[[planned]]
+[[level]]
+id = "17.1"
 title = "Box it up"
 kind = "fill"
 book = ["15.1"]
-about = "Put data on the heap, and build a list that contains itself."
+xp = 45
+goal = "Make the trail list compile by boxing the rest of the list, then write sum and len."
+lesson = '''
+A **`Box<T>`** puts a value on the **heap** and keeps a small pointer to it on the stack:
 
-[[planned]]
+```rust
+let b = Box::new(5);
+println!("b = {b}");    // a Box is used just like the value inside
+```
+
+When the Box goes out of scope, the value on the heap is freed too.
+
+Boxes are essential for **recursive types**: types that contain themselves. Here's a list of numbers, where each item holds the rest of the list:
+
+```rust
+enum List {
+    Cons(i32, List),   // error[E0072]: recursive type has infinite size
+    Nil,
+}
+```
+
+To know how big a `List` is, Rust needs to know how big a `List` is... forever. A `Box` breaks the loop, because a pointer always has the same size, however big the thing it points to:
+
+```rust
+enum List {
+    Cons(i32, Box<List>),
+    Nil,
+}
+
+use List::{Cons, Nil};
+let list = Cons(1, Box::new(Cons(2, Box::new(Cons(3, Box::new(Nil))))));
+```
+
+Walking a list is a natural fit for recursion and `match`:
+
+```rust
+match self {
+    Cons(value, rest) => ... rest.something() ...,
+    Nil => ...,
+}
+```
+'''
+c_compare = '''
+This is the classic linked list: `struct Node { int value; struct Node *next; }`. A Box is the `next` pointer, except it can never be dangling, and the memory is freed automatically.
+'''
+py_compare = '''
+In Python, every object already lives on the heap behind a reference, so recursive classes just work. Rust stores values inline unless you ask for a Box.
+'''
+check = "tests"
+starter = '''
+#[derive(Debug)]
+enum List {
+    // TODO: this type is infinitely big. Box the rest of the list.
+    Cons(i32, List),
+    Nil,
+}
+
+use List::{Cons, Nil};
+
+impl List {
+    /// Adds up every number in the list.
+    fn sum(&self) -> i32 {
+        todo!()
+    }
+
+    /// How many numbers are in the list.
+    fn len(&self) -> usize {
+        todo!()
+    }
+}
+
+fn main() {
+    let trail = Cons(1, Box::new(Cons(2, Box::new(Cons(3, Box::new(Nil))))));
+    println!("{trail:?} adds up to {}", trail.sum());
+}
+'''
+solution = '''
+#[derive(Debug)]
+enum List {
+    Cons(i32, Box<List>),
+    Nil,
+}
+
+use List::{Cons, Nil};
+
+impl List {
+    /// Adds up every number in the list.
+    fn sum(&self) -> i32 {
+        match self {
+            Cons(value, rest) => value + rest.sum(),
+            Nil => 0,
+        }
+    }
+
+    /// How many numbers are in the list.
+    fn len(&self) -> usize {
+        match self {
+            Cons(_, rest) => 1 + rest.len(),
+            Nil => 0,
+        }
+    }
+}
+
+fn main() {
+    let trail = Cons(1, Box::new(Cons(2, Box::new(Cons(3, Box::new(Nil))))));
+    println!("{trail:?} adds up to {}", trail.sum());
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use super::*;
+
+    #[test]
+    fn sums_and_lengths() {
+        let list = Cons(1, Box::new(Cons(2, Box::new(Cons(3, Box::new(Nil))))));
+        assert_eq!(list.sum(), 6);
+        assert_eq!(list.len(), 3);
+        assert_eq!(Nil.sum(), 0);
+        assert_eq!(Nil.len(), 0);
+    }
+
+    #[test]
+    fn a_long_trail() {
+        let mut list = Nil;
+        for n in 1..=100 {
+            list = Cons(n, Box::new(list));
+        }
+        assert_eq!(list.sum(), 5050);
+        assert_eq!(list.len(), 100);
+    }
+}
+'''
+hints = [
+    "First the type: `Cons(i32, Box<List>)`. Then sum and len are both a `match self` with a `Cons` arm and a `Nil` arm.",
+    "In the Cons arm, the Box can be used like the List inside it: `rest.sum()` works directly. sum is `value + rest.sum()`, and len is `1 + rest.len()`. Nil gives 0.",
+    "```rust\nfn sum(&self) -> i32 {\n    match self {\n        Cons(value, rest) => value + rest.sum(),\n        Nil => 0,\n    }\n}\n\nfn len(&self) -> usize {\n    match self {\n        Cons(_, rest) => 1 + rest.len(),\n        Nil => 0,\n    }\n}\n```",
+]
+
+[[level]]
+id = "17.2"
 title = "Act like a reference"
 kind = "predict"
 book = ["15.2"]
-about = "Deref: make your own pointer work with *."
+xp = 25
+goal = "MyBox prints a line every time it is dereferenced. What does this print?"
+lesson = '''
+What makes a smart pointer act like a reference? The **`Deref`** trait. Implement it, and `*` works on your type:
 
-[[planned]]
+```rust
+use std::ops::Deref;
+
+struct MyBox<T>(T);
+
+impl<T> Deref for MyBox<T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        &self.0
+    }
+}
+```
+
+Writing `*y` on a `MyBox` really means `*(y.deref())`.
+
+Rust also does **deref coercion**: when you pass `&MyBox<String>` where a `&str` is wanted, it calls `deref` as many times as needed:
+
+```text
+&MyBox<String>  --MyBox's deref-->  &String  --String's deref-->  &str
+```
+
+That's why you can pass `&String` to a function that takes `&str`. It all happens at compile time, so it costs nothing while the program runs.
+
+(There's also `DerefMut` for `&mut`, used the same way.)
+'''
+c_compare = '''
+Like overloading `operator*` in C++. C has no way to make your own pointer types act like real pointers.
+'''
+py_compare = '''
+A bit like a proxy object that forwards to the value it wraps, but resolved by the compiler, not at runtime.
+'''
+starter = '''
+use std::ops::Deref;
+
+struct MyBox<T>(T);
+
+impl<T> MyBox<T> {
+    fn new(x: T) -> MyBox<T> {
+        MyBox(x)
+    }
+}
+
+impl<T> Deref for MyBox<T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        println!("deref!");
+        &self.0
+    }
+}
+
+fn hello(name: &str) {
+    println!("Hello, {name}!");
+}
+
+fn main() {
+    let y = MyBox::new(5);
+    println!("{}", *y + 1);
+
+    let m = MyBox::new(String::from("Ferris"));
+    hello(&m);
+}
+'''
+choices = [
+    "6 / Hello, Ferris!",
+    "deref! / 6 / deref! / Hello, Ferris!",
+    "deref! / 6 / deref! / deref! / Hello, Ferris!",
+    "It doesn't compile: hello wants a &str, not a &MyBox<String>",
+]
+answer = 1
+expected_output = '''
+deref!
+6
+deref!
+Hello, Ferris!
+'''
+explanation = "`*y` calls MyBox's `deref` once, so `deref!` prints before `6`. For `hello(&m)`, deref coercion turns `&MyBox<String>` into `&String` (MyBox's deref, printing once more) and then into `&str` using String's own deref, which prints nothing."
+
+[[level]]
+id = "17.3"
 title = "Cleaning up: Drop"
 kind = "predict"
 book = ["15.3"]
-about = "Run code when a value goes away."
+xp = 25
+goal = "Each flag announces when it's lowered. In what order do the lines print?"
+lesson = '''
+The **`Drop`** trait lets you run code when a value goes out of scope:
 
-[[planned]]
+```rust
+impl Drop for Flag {
+    fn drop(&mut self) {
+        println!("lowering {}", self.0);
+    }
+}
+```
+
+Rust calls `drop` for you, automatically:
+
+- at the end of the scope (the closing `}`) where the value lives,
+- in **reverse order** of creation: the last variable made is the first one dropped.
+
+You may **not** call `x.drop()` yourself (error E0040), because Rust would then drop it a second time at the end of the scope. To get rid of a value early, call **`std::mem::drop(x)`** (just `drop(x)`, it's in the prelude): it takes ownership, so the value can't be used again.
+
+This is how `Box` frees memory, how files close, and how locks unlock.
+'''
+c_compare = '''
+Like C++ destructors (RAII). In C you'd call `free` or `fclose` yourself, and forgetting it is a leak.
+'''
+py_compare = '''
+Similar to `__del__` or a `with` block's `__exit__`, but it runs at a known moment, exactly when the scope ends.
+'''
+starter = '''
+struct Flag(&'static str);
+
+impl Drop for Flag {
+    fn drop(&mut self) {
+        println!("lowering {}", self.0);
+    }
+}
+
+fn main() {
+    let _red = Flag("red");
+    let blue = Flag("blue");
+    {
+        let _green = Flag("green");
+        println!("inner done");
+    }
+    drop(blue);
+    println!("end of main");
+}
+'''
+choices = [
+    "inner done / end of main / lowering red / lowering blue / lowering green",
+    "inner done / lowering green / lowering blue / end of main / lowering red",
+    "inner done / lowering green / end of main / lowering blue / lowering red",
+    "It doesn't compile: you can't call drop yourself",
+]
+answer = 1
+expected_output = '''
+inner done
+lowering green
+lowering blue
+end of main
+lowering red
+'''
+explanation = "`green` is dropped at the end of its inner block. `drop(blue)` lowers blue right away (calling `std::mem::drop` is allowed; only `blue.drop()` isn't). `red` lives until the end of `main`."
+
+[[level]]
+id = "17.4"
 title = "Shared treasure: Rc"
 kind = "fill"
 book = ["15.4"]
-about = "Several owners, counted."
+xp = 50
+goal = "Share one map between several owners with Rc, and build two lists that share the same tail."
+lesson = '''
+Normally every value has exactly **one** owner. But sometimes data really has several: think of a node in a graph that many edges point to. Who should free it?
 
-[[planned]]
+**`Rc<T>`** (reference counted) allows several owners. It counts them, and frees the value when the last owner is gone:
+
+```rust
+use std::rc::Rc;
+
+let a = Rc::new(String::from("map"));
+let b = Rc::clone(&a);               // a second owner: count is 2
+println!("{}", Rc::strong_count(&a));  // 2
+```
+
+`Rc::clone` doesn't copy the data: it just adds one to the count. That's why the convention is `Rc::clone(&a)` rather than `a.clone()`: it makes the cheap clones easy to tell apart from expensive deep copies.
+
+Two lists that share a tail:
+
+```text
+b: 3 ─┐
+      ├─> a: 5 -> 10 -> Nil
+c: 4 ─┘
+```
+
+```rust
+enum List {
+    Cons(i32, Rc<List>),
+    Nil,
+}
+```
+
+An `Rc` gives **shared (read-only)** access to the value. It's also only for one thread. (The next levels deal with both.)
+'''
+c_compare = '''
+Manual reference counting, like `retain`/`release`, but the count goes up and down by itself, so you can't forget either one.
+'''
+py_compare = '''
+Python counts references on every object automatically (`sys.getrefcount`). In Rust you opt into counting only where you need it.
+'''
+check = "tests"
+starter = '''
+use std::rc::Rc;
+
+/// Hand out `n` more owners of the same map (don't copy the String!).
+fn share(map: &Rc<String>, n: usize) -> Vec<Rc<String>> {
+    todo!()
+}
+
+/// How many owners the map has right now.
+fn owners(map: &Rc<String>) -> usize {
+    todo!()
+}
+
+#[derive(Debug)]
+enum List {
+    Cons(i32, Rc<List>),
+    Nil,
+}
+
+use List::{Cons, Nil};
+
+/// A new list: `value`, followed by the shared `tail`.
+fn prepend(value: i32, tail: &Rc<List>) -> List {
+    todo!()
+}
+
+fn sum(list: &List) -> i32 {
+    match list {
+        Cons(value, rest) => value + sum(rest),
+        Nil => 0,
+    }
+}
+
+fn main() {
+    let map = Rc::new(String::from("X marks the spot"));
+    let copies = share(&map, 2);
+    println!("{} owners of {}", owners(&map), copies[0]);
+}
+'''
+solution = '''
+use std::rc::Rc;
+
+/// Hand out `n` more owners of the same map (don't copy the String!).
+fn share(map: &Rc<String>, n: usize) -> Vec<Rc<String>> {
+    (0..n).map(|_| Rc::clone(map)).collect()
+}
+
+/// How many owners the map has right now.
+fn owners(map: &Rc<String>) -> usize {
+    Rc::strong_count(map)
+}
+
+#[derive(Debug)]
+enum List {
+    Cons(i32, Rc<List>),
+    Nil,
+}
+
+use List::{Cons, Nil};
+
+/// A new list: `value`, followed by the shared `tail`.
+fn prepend(value: i32, tail: &Rc<List>) -> List {
+    Cons(value, Rc::clone(tail))
+}
+
+fn sum(list: &List) -> i32 {
+    match list {
+        Cons(value, rest) => value + sum(rest),
+        Nil => 0,
+    }
+}
+
+fn main() {
+    let map = Rc::new(String::from("X marks the spot"));
+    let copies = share(&map, 2);
+    println!("{} owners of {}", owners(&map), copies[0]);
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use super::*;
+
+    #[test]
+    fn sharing_the_map() {
+        let map = Rc::new(String::from("X marks the spot"));
+        assert_eq!(owners(&map), 1);
+        let copies = share(&map, 3);
+        assert_eq!(copies.len(), 3);
+        assert_eq!(owners(&map), 4);
+        assert!(copies.iter().all(|c| Rc::ptr_eq(c, &map)), "the copies must be the same map, not new Strings");
+        drop(copies);
+        assert_eq!(owners(&map), 1);
+    }
+
+    #[test]
+    fn shared_tails() {
+        let a = Rc::new(Cons(5, Rc::new(Cons(10, Rc::new(Nil)))));
+        let b = prepend(3, &a);
+        let c = prepend(4, &a);
+        assert_eq!(Rc::strong_count(&a), 3);
+        assert_eq!(sum(&b), 18);
+        assert_eq!(sum(&c), 19);
+        drop(b);
+        assert_eq!(Rc::strong_count(&a), 2);
+    }
+}
+'''
+hints = [
+    "Every new owner is made with `Rc::clone(map)`. The count is `Rc::strong_count(map)`.",
+    "share: make `n` clones and collect them, for example `(0..n).map(|_| Rc::clone(map)).collect()`. prepend: `Cons(value, Rc::clone(tail))`.",
+    "```rust\nfn share(map: &Rc<String>, n: usize) -> Vec<Rc<String>> {\n    (0..n).map(|_| Rc::clone(map)).collect()\n}\n\nfn owners(map: &Rc<String>) -> usize {\n    Rc::strong_count(map)\n}\n\nfn prepend(value: i32, tail: &Rc<List>) -> List {\n    Cons(value, Rc::clone(tail))\n}\n```",
+]
+
+[[level]]
+id = "17.5"
 title = "Change it anyway: RefCell"
 kind = "fix"
 book = ["15.5"]
-about = "Borrow rules checked while the program runs, and Rc<RefCell<T>>."
+xp = 55
+goal = "The fake messenger in the tests needs to record messages through a &self method. Fix it with RefCell, and fix the shared bank account too."
+lesson = '''
+Sometimes a value must be changed through a shared `&` reference. The classic case: a **mock** object in a test. The trait says `fn send(&self, msg: &str)`, but the mock wants to record every message in a Vec, which means changing itself.
 
-[[planned]]
+**`RefCell<T>`** allows this. It moves the borrowing rules from compile time to **run time**:
+
+```rust
+use std::cell::RefCell;
+
+struct MockMessenger {
+    sent: RefCell<Vec<String>>,
+}
+
+impl Messenger for MockMessenger {
+    fn send(&self, msg: &str) {
+        self.sent.borrow_mut().push(String::from(msg));   // fine through &self
+    }
+}
+
+// later: mock.sent.borrow().len()
+```
+
+| Method | Gives | Like |
+|---|---|---|
+| `.borrow()` | `Ref<T>` | `&T` |
+| `.borrow_mut()` | `RefMut<T>` | `&mut T` |
+
+The rules are the same (many readers **or** one writer), but they're checked while the program runs. Break them, and it **panics** with `already borrowed`. This is called **interior mutability**.
+
+Combine it with `Rc` to get data with **several owners that can all change it**:
+
+```rust
+let account = Rc::new(RefCell::new(100));
+let partner = Rc::clone(&account);
+*partner.borrow_mut() += 50;     // account sees 150 too
+```
+'''
+c_compare = '''
+A bit like casting away `const`, but safe: instead of trusting you, the RefCell keeps a borrow count and panics if two writers would ever overlap.
+'''
+py_compare = '''
+In Python, any method can change `self`. Rust needs `&mut self` for that, unless the field is a RefCell that checks the rules at runtime.
+'''
+check = "tests"
+starter = '''
+use std::cell::RefCell;
+use std::rc::Rc;
+
+pub trait Messenger {
+    fn send(&self, msg: &str);
+}
+
+pub struct LimitTracker<'a, T: Messenger> {
+    messenger: &'a T,
+    value: usize,
+    max: usize,
+}
+
+impl<'a, T: Messenger> LimitTracker<'a, T> {
+    pub fn new(messenger: &'a T, max: usize) -> LimitTracker<'a, T> {
+        LimitTracker { messenger, value: 0, max }
+    }
+
+    pub fn set_value(&mut self, value: usize) {
+        self.value = value;
+        let percent = self.value as f64 / self.max as f64;
+        if percent >= 1.0 {
+            self.messenger.send("Error: You are over your quota!");
+        } else if percent >= 0.9 {
+            self.messenger.send("Urgent warning: You've used up over 90% of your quota!");
+        } else if percent >= 0.75 {
+            self.messenger.send("Warning: You've used up over 75% of your quota!");
+        }
+    }
+}
+
+/// A fake messenger for the tests: it just remembers what was sent.
+pub struct MockMessenger {
+    pub sent_messages: Vec<String>,
+}
+
+impl MockMessenger {
+    pub fn new() -> MockMessenger {
+        MockMessenger { sent_messages: vec![] }
+    }
+}
+
+impl Messenger for MockMessenger {
+    fn send(&self, message: &str) {
+        self.sent_messages.push(String::from(message));
+    }
+}
+
+/// Two partners share one bank account. Both can pay in.
+pub fn joint_account(start: i32) -> (Rc<i32>, Rc<i32>) {
+    let account = Rc::new(start);
+    let partner = Rc::clone(&account);
+    (account, partner)
+}
+
+pub fn deposit(account: &Rc<i32>, amount: i32) {
+    *account += amount;
+}
+
+fn main() {
+    let mock = MockMessenger::new();
+    let mut tracker = LimitTracker::new(&mock, 100);
+    tracker.set_value(80);
+    println!("{:?}", mock.sent_messages);
+}
+'''
+solution = '''
+use std::cell::RefCell;
+use std::rc::Rc;
+
+pub trait Messenger {
+    fn send(&self, msg: &str);
+}
+
+pub struct LimitTracker<'a, T: Messenger> {
+    messenger: &'a T,
+    value: usize,
+    max: usize,
+}
+
+impl<'a, T: Messenger> LimitTracker<'a, T> {
+    pub fn new(messenger: &'a T, max: usize) -> LimitTracker<'a, T> {
+        LimitTracker { messenger, value: 0, max }
+    }
+
+    pub fn set_value(&mut self, value: usize) {
+        self.value = value;
+        let percent = self.value as f64 / self.max as f64;
+        if percent >= 1.0 {
+            self.messenger.send("Error: You are over your quota!");
+        } else if percent >= 0.9 {
+            self.messenger.send("Urgent warning: You've used up over 90% of your quota!");
+        } else if percent >= 0.75 {
+            self.messenger.send("Warning: You've used up over 75% of your quota!");
+        }
+    }
+}
+
+/// A fake messenger for the tests: it just remembers what was sent.
+pub struct MockMessenger {
+    pub sent_messages: RefCell<Vec<String>>,
+}
+
+impl MockMessenger {
+    pub fn new() -> MockMessenger {
+        MockMessenger { sent_messages: RefCell::new(vec![]) }
+    }
+}
+
+impl Messenger for MockMessenger {
+    fn send(&self, message: &str) {
+        self.sent_messages.borrow_mut().push(String::from(message));
+    }
+}
+
+/// Two partners share one bank account. Both can pay in.
+pub fn joint_account(start: i32) -> (Rc<RefCell<i32>>, Rc<RefCell<i32>>) {
+    let account = Rc::new(RefCell::new(start));
+    let partner = Rc::clone(&account);
+    (account, partner)
+}
+
+pub fn deposit(account: &Rc<RefCell<i32>>, amount: i32) {
+    *account.borrow_mut() += amount;
+}
+
+fn main() {
+    let mock = MockMessenger::new();
+    let mut tracker = LimitTracker::new(&mock, 100);
+    tracker.set_value(80);
+    println!("{:?}", mock.sent_messages.borrow());
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use super::*;
+
+    #[test]
+    fn sends_an_over_75_percent_warning() {
+        let mock = MockMessenger::new();
+        let mut tracker = LimitTracker::new(&mock, 100);
+        tracker.set_value(80);
+        assert_eq!(mock.sent_messages.borrow().len(), 1);
+        assert!(mock.sent_messages.borrow()[0].contains("75%"));
+    }
+
+    #[test]
+    fn no_message_when_low() {
+        let mock = MockMessenger::new();
+        let mut tracker = LimitTracker::new(&mock, 100);
+        tracker.set_value(10);
+        assert!(mock.sent_messages.borrow().is_empty());
+    }
+
+    #[test]
+    fn partners_share_the_money() {
+        let (mine, theirs) = joint_account(100);
+        deposit(&mine, 20);
+        deposit(&theirs, 30);
+        assert_eq!(*mine.borrow(), 150);
+        assert_eq!(*theirs.borrow(), 150);
+    }
+}
+'''
+hints = [
+    "`send` only gets `&self`, so `sent_messages` can't be pushed to. Wrap the Vec in a `RefCell`. The account has the same problem: an `Rc<i32>` is read-only.",
+    "Field type `RefCell<Vec<String>>`, made with `RefCell::new(vec![])`, and push with `self.sent_messages.borrow_mut().push(...)`. For the account, use `Rc<RefCell<i32>>` everywhere and add with `*account.borrow_mut() += amount`. (main then prints `mock.sent_messages.borrow()`.)",
+    "```rust\npub struct MockMessenger {\n    pub sent_messages: RefCell<Vec<String>>,\n}\n\nfn send(&self, message: &str) {\n    self.sent_messages.borrow_mut().push(String::from(message));\n}\n\npub fn joint_account(start: i32) -> (Rc<RefCell<i32>>, Rc<RefCell<i32>>) {\n    let account = Rc::new(RefCell::new(start));\n    let partner = Rc::clone(&account);\n    (account, partner)\n}\n\npub fn deposit(account: &Rc<RefCell<i32>>, amount: i32) {\n    *account.borrow_mut() += amount;\n}\n```",
+]
+
+[[level]]
+id = "17.6"
 title = "Round and round"
 kind = "predict"
 book = ["15.6"]
-about = "Rc loops leak memory; Weak breaks them."
+xp = 30
+goal = "A Weak pointer watches the treasure. What does it see before and after the treasure is dropped?"
+lesson = '''
+`Rc` frees a value when its count reaches zero. But what if two values point at **each other** with `Rc`?
 
-[[planned]]
+```text
+a ──Rc──> b
+^         │
+└───Rc────┘
+```
+
+Each keeps the other's count above zero, so neither is ever freed: a **memory leak**. Rust's safety rules don't prevent leaks (leaking isn't undefined behavior), so you have to design them away.
+
+The tool for that is **`Weak<T>`**: a pointer that **doesn't own** the value and doesn't keep it alive.
+
+```rust
+use std::rc::{Rc, Weak};
+
+let strong = Rc::new(5);
+let weak: Weak<i32> = Rc::downgrade(&strong);   // weak count + 1, strong count unchanged
+
+match weak.upgrade() {          // Option<Rc<i32>>
+    Some(rc) => println!("still here: {rc}"),
+    None => println!("it's gone"),
+}
+```
+
+Because the value might already be gone, `upgrade` returns an `Option`. Use `Rc` for "owns", and `Weak` for "knows about", like a child pointing back at its parent.
+'''
+c_compare = '''
+Like a pointer that knows when its target has been freed: instead of dangling, `upgrade()` just returns None.
+'''
+py_compare = '''
+The same idea as Python's `weakref.ref(obj)`, which returns None once the object is gone.
+'''
+starter = '''
+use std::rc::{Rc, Weak};
+
+fn main() {
+    let treasure = Rc::new(String::from("gold"));
+    let watcher: Weak<String> = Rc::downgrade(&treasure);
+
+    println!("strong {} weak {}", Rc::strong_count(&treasure), Rc::weak_count(&treasure));
+    println!("{:?}", watcher.upgrade());
+
+    drop(treasure);
+    println!("{:?}", watcher.upgrade());
+}
+'''
+choices = [
+    "strong 2 weak 0 / Some(\"gold\") / Some(\"gold\")",
+    "strong 1 weak 1 / Some(\"gold\") / Some(\"gold\")",
+    "strong 1 weak 1 / Some(\"gold\") / None",
+    "It doesn't compile: treasure is dropped while watcher still points to it",
+]
+answer = 2
+expected_output = '''
+strong 1 weak 1
+Some("gold")
+None
+'''
+explanation = "`Rc::downgrade` adds a weak reference, not an owner, so the counts are 1 and 1. Dropping `treasure` removes the only owner, so the String is freed even though `watcher` still exists, and `upgrade()` now returns `None`."
+
+[[level]]
+id = "17.7"
 title = "BOSS: The family tree"
 kind = "boss"
 book = ["15.1", "15.4", "15.5", "15.6"]
-about = "A tree where children know their parents."
+xp = 120
+goal = '''Build a tree where parents own their children (Rc) and children know their parent (Weak),
+without any memory leaks.'''
+lesson = '''
+**Boss fight!** A tree where you can walk **down** (parent to children) and **up** (child to parent).
+
+```rust
+struct Node {
+    value: i32,
+    parent: RefCell<Weak<Node>>,
+    children: RefCell<Vec<Rc<Node>>>,
+}
+```
+
+Why each piece:
+
+- **`Rc<Node>`**: a node can be owned by its parent and by your variables at the same time.
+- **`children: Vec<Rc<Node>>`**: a parent **owns** its children.
+- **`parent: Weak<Node>`**: a child only **knows** its parent. If it owned it, parent and child would keep each other alive forever.
+- **`RefCell`** around both: we change the links after the nodes are made, through shared `Rc`s.
+
+Write:
+
+1. `Node::new(value)` → an `Rc<Node>` with no parent and no children (`Weak::new()` is an empty Weak).
+2. `add_child(parent, child)`: set the child's parent (`Rc::downgrade`) and push the child into the parent's children.
+3. `parent_value(node)` → the parent's value, or `None` for the root.
+4. `ancestors(node)` → the values of the parent, grandparent, ... up to the root.
+5. `total(node)` → the sum of a node's value and all its descendants'.
+
+The tests also check the counts: adding a child must not add a **strong** owner to the parent.
+'''
+c_compare = '''
+In C you'd store a `parent` pointer and hope nobody frees the parent first. Here `Weak` makes the back-pointer safe, and `Rc` frees the whole tree when the root goes away.
+'''
+py_compare = '''
+Python's garbage collector can clean up parent/child cycles. Rust's `Rc` can't, which is why the back-pointer is a `Weak`.
+'''
+check = "tests"
+starter = '''
+use std::cell::RefCell;
+use std::rc::{Rc, Weak};
+
+#[derive(Debug)]
+struct Node {
+    value: i32,
+    parent: RefCell<Weak<Node>>,
+    children: RefCell<Vec<Rc<Node>>>,
+}
+
+impl Node {
+    fn new(value: i32) -> Rc<Node> {
+        todo!()
+    }
+}
+
+/// Make `child` a child of `parent`, and `parent` the parent of `child`.
+fn add_child(parent: &Rc<Node>, child: Rc<Node>) {
+    todo!()
+}
+
+/// The value of this node's parent, if it has one.
+fn parent_value(node: &Node) -> Option<i32> {
+    todo!()
+}
+
+/// The values from the parent up to the root: [parent, grandparent, ...].
+fn ancestors(node: &Node) -> Vec<i32> {
+    todo!()
+}
+
+/// This node's value plus the values of all its children, grandchildren, ...
+fn total(node: &Node) -> i32 {
+    todo!()
+}
+
+fn main() {
+    let grandma = Node::new(1);
+    let mom = Node::new(2);
+    let me = Node::new(3);
+    add_child(&grandma, Rc::clone(&mom));
+    add_child(&mom, Rc::clone(&me));
+    println!("my ancestors: {:?}", ancestors(&me));
+}
+'''
+solution = '''
+use std::cell::RefCell;
+use std::rc::{Rc, Weak};
+
+#[derive(Debug)]
+struct Node {
+    value: i32,
+    parent: RefCell<Weak<Node>>,
+    children: RefCell<Vec<Rc<Node>>>,
+}
+
+impl Node {
+    fn new(value: i32) -> Rc<Node> {
+        Rc::new(Node {
+            value,
+            parent: RefCell::new(Weak::new()),
+            children: RefCell::new(vec![]),
+        })
+    }
+}
+
+/// Make `child` a child of `parent`, and `parent` the parent of `child`.
+fn add_child(parent: &Rc<Node>, child: Rc<Node>) {
+    *child.parent.borrow_mut() = Rc::downgrade(parent);
+    parent.children.borrow_mut().push(child);
+}
+
+/// The value of this node's parent, if it has one.
+fn parent_value(node: &Node) -> Option<i32> {
+    node.parent.borrow().upgrade().map(|p| p.value)
+}
+
+/// The values from the parent up to the root: [parent, grandparent, ...].
+fn ancestors(node: &Node) -> Vec<i32> {
+    let mut values = Vec::new();
+    let mut current = node.parent.borrow().upgrade();
+    while let Some(p) = current {
+        values.push(p.value);
+        current = p.parent.borrow().upgrade();
+    }
+    values
+}
+
+/// This node's value plus the values of all its children, grandchildren, ...
+fn total(node: &Node) -> i32 {
+    node.value + node.children.borrow().iter().map(|c| total(c)).sum::<i32>()
+}
+
+fn main() {
+    let grandma = Node::new(1);
+    let mom = Node::new(2);
+    let me = Node::new(3);
+    add_child(&grandma, Rc::clone(&mom));
+    add_child(&mom, Rc::clone(&me));
+    println!("my ancestors: {:?}", ancestors(&me));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use super::*;
+
+    #[test]
+    fn a_new_node_is_alone() {
+        let n = Node::new(7);
+        assert_eq!(n.value, 7);
+        assert_eq!(parent_value(&n), None);
+        assert!(n.children.borrow().is_empty());
+        assert!(ancestors(&n).is_empty());
+    }
+
+    #[test]
+    fn three_generations() {
+        let grandma = Node::new(1);
+        let mom = Node::new(2);
+        let aunt = Node::new(4);
+        let me = Node::new(3);
+        add_child(&grandma, Rc::clone(&mom));
+        add_child(&grandma, Rc::clone(&aunt));
+        add_child(&mom, Rc::clone(&me));
+
+        assert_eq!(parent_value(&me), Some(2));
+        assert_eq!(parent_value(&aunt), Some(1));
+        assert_eq!(ancestors(&me), vec![2, 1]);
+        assert_eq!(grandma.children.borrow().len(), 2);
+        assert_eq!(total(&grandma), 10);
+        assert_eq!(total(&mom), 5);
+    }
+
+    #[test]
+    fn no_cycles() {
+        let parent = Node::new(1);
+        let child = Node::new(2);
+        add_child(&parent, Rc::clone(&child));
+        assert_eq!(Rc::strong_count(&parent), 1, "children must not own their parent");
+        assert_eq!(Rc::weak_count(&parent), 1, "the child should point back with a Weak");
+        assert_eq!(Rc::strong_count(&child), 2, "owned by the parent and by `child`");
+    }
+
+    #[test]
+    fn orphans_lose_their_parent() {
+        let child = Node::new(2);
+        {
+            let parent = Node::new(1);
+            add_child(&parent, Rc::clone(&child));
+            assert_eq!(parent_value(&child), Some(1));
+        }
+        assert_eq!(parent_value(&child), None, "the parent was dropped");
+    }
+}
+'''
+hints = [
+    "new: `Rc::new(Node { value, parent: RefCell::new(Weak::new()), children: RefCell::new(vec![]) })`. To read the parent, `node.parent.borrow().upgrade()` gives an `Option<Rc<Node>>`.",
+    "add_child: `*child.parent.borrow_mut() = Rc::downgrade(parent);` then push the child into `parent.children.borrow_mut()`. ancestors: loop with `while let Some(p) = current`, moving `current` up each time. total: `node.value` plus the totals of `node.children.borrow()`.",
+    "```rust\nfn add_child(parent: &Rc<Node>, child: Rc<Node>) {\n    *child.parent.borrow_mut() = Rc::downgrade(parent);\n    parent.children.borrow_mut().push(child);\n}\n\nfn ancestors(node: &Node) -> Vec<i32> {\n    let mut values = Vec::new();\n    let mut current = node.parent.borrow().upgrade();\n    while let Some(p) = current {\n        values.push(p.value);\n        current = p.parent.borrow().upgrade();\n    }\n    values\n}\n\nfn total(node: &Node) -> i32 {\n    node.value + node.children.borrow().iter().map(|c| total(c)).sum::<i32>()\n}\n```",
+]

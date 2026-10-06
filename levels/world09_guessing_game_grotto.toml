@@ -30,7 +30,7 @@ io::stdin()
 - It returns a `Result` (reading can fail), so we `expect` it.
 - The line ends with a newline; `.trim()` removes it.
 
-In this grotto, the game types the player's input for you. Check the **Expected** button to see it.
+In this grotto, the game types the player's input for you. Open **Output** and its **Expected** tab to see it.
 '''
 c_compare = '''
 Like `fgets(buf, sizeof buf, stdin)`, but the String grows to fit, so there's no buffer to overflow.

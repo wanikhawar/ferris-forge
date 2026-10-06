@@ -2,46 +2,945 @@ id = 22
 name = "Advanced Abyss"
 blurb = "The deep end of Rust."
 
-# Placeholder island: these levels are planned but not built yet.
-
-[[planned]]
+[[level]]
+id = "22.1"
 title = "Here be dragons: unsafe"
 kind = "predict"
 book = ["20.1"]
-about = "Raw pointers, and calling C code."
+xp = 30
+goal = "Two raw pointers to the same variable, one of them mutable, and a call into C. Does it compile? What does it print?"
+lesson = '''
+The borrow checker is careful: it rejects some programs that are actually fine. And some things, like talking to hardware or calling C code, can't be checked at all. For those, there's **`unsafe`**.
 
-[[planned]]
+An `unsafe` block unlocks five **superpowers**:
+
+1. Dereference a **raw pointer**.
+2. Call an **unsafe function** (including C functions).
+3. Read or write a **mutable static** variable.
+4. Implement an **unsafe trait**.
+5. Read the fields of a **union**.
+
+Nothing else changes: the borrow checker still checks references inside `unsafe`. You're just promising the compiler that *you* have checked these five things.
+
+**Raw pointers** (`*const T` and `*mut T`) are C pointers: they may be null, dangling or aliased, and they ignore the borrowing rules. Making one is safe; **using** one (`*ptr`) needs `unsafe`:
+
+```rust
+let mut num = 5;
+let r1 = &raw const num;   // *const i32
+let r2 = &raw mut num;     // *mut i32: both at once is allowed
+unsafe {
+    println!("{}", *r1);
+}
+```
+
+**Calling C**: declare the foreign functions in an `unsafe extern "C"` block. The compiler can't check C code, so every call is `unsafe`:
+
+```rust
+unsafe extern "C" {
+    fn abs(input: i32) -> i32;
+}
+```
+
+Good Rust keeps `unsafe` blocks small and hides them behind **safe functions** (like the standard library's `split_at_mut`), so the rest of the program can't misuse them.
+'''
+c_compare = '''
+An `unsafe` block is a small region of C rules inside Rust: raw pointers work exactly like C pointers there, and `extern "C"` declares the C functions you call.
+'''
+py_compare = '''
+Like calling C from Python with `ctypes`: possible and sometimes necessary, but mistakes can crash the whole program instead of raising an exception.
+'''
+starter = '''
+unsafe extern "C" {
+    fn abs(input: i32) -> i32;
+}
+
+fn main() {
+    let mut depth = 5;
+    let reader = &raw const depth;
+    let writer = &raw mut depth;
+
+    unsafe {
+        *writer += 1;
+        println!("reader sees {}", *reader);
+        println!("abs(-3) = {}", abs(-3));
+    }
+}
+'''
+choices = [
+    "It doesn't compile: depth is borrowed mutably and immutably at the same time",
+    "reader sees 5 / abs(-3) = 3",
+    "reader sees 6 / abs(-3) = 3",
+    "It doesn't compile: Rust can't call C functions",
+]
+answer = 2
+expected_output = '''
+reader sees 6
+abs(-3) = 3
+'''
+explanation = "Raw pointers aren't references, so the borrowing rules don't apply: having a `*const` and a `*mut` to `depth` at once is allowed. Both point to the same place, so the reader sees the change to 6. `abs` comes from the C standard library, and calling it inside `unsafe` is fine."
+
+[[level]]
+id = "22.2"
 title = "Dangerous globals"
 kind = "predict"
 book = ["20.1"]
-about = "static mut, unsafe traits and unions."
+xp = 30
+goal = "A global counter counts the dives. Does this compile? If so, what does it print?"
+lesson = '''
+**Global variables** in Rust are `static`s:
 
-[[planned]]
+```rust
+static GREETING: &str = "Ahoy";       // read-only: safe to use anywhere
+static mut DIVES: u32 = 0;            // changeable: dangerous
+```
+
+A `static` has one fixed address for the whole program (unlike a `const`, which is copied into every place it's used). Reading an ordinary `static` is safe.
+
+A **`static mut`** is different: any thread could change it at any moment, which is a data race waiting to happen. So **every** read and write needs `unsafe`:
+
+```rust
+unsafe {
+    DIVES += 1;
+}
+let n = unsafe { DIVES };   // copy the value out
+```
+
+Since the 2024 edition, Rust also refuses to make a **reference** to a `static mut` (`&DIVES`), even inside `unsafe`. Copy the value out instead. Better yet, avoid `static mut` entirely: use an atomic (`AtomicU32`) or a `Mutex`.
+
+Two more unsafe features, in short:
+
+- **Unsafe traits**: `unsafe impl Send for MyType {}` promises something the compiler can't check (here: that it's safe to send to another thread).
+- **Unions**: like C unions, several fields sharing the same memory. Reading a field is `unsafe`, because Rust can't know which one was written last. They exist mostly to talk to C.
+'''
+c_compare = '''
+A `static mut` is a C global. In C you can touch it from anywhere; in Rust every access is marked `unsafe`, so the risky spots are easy to find.
+'''
+py_compare = '''
+Like a module-level variable changed with `global`, except Rust makes you mark every access as unsafe, because threads could race on it.
+'''
+starter = '''
+static GREETING: &str = "Ahoy";
+static mut DIVES: u32 = 0;
+
+fn dive() {
+    unsafe {
+        DIVES += 1;
+    }
+}
+
+fn main() {
+    dive();
+    dive();
+    println!("{GREETING}! Dives so far: {}", DIVES);
+}
+'''
+choices = [
+    "Ahoy! Dives so far: 2",
+    "Ahoy! Dives so far: 0",
+    "It doesn't compile: reading GREETING needs unsafe",
+    "It doesn't compile: reading DIVES needs an unsafe block",
+]
+answer = 3
+compile_fails = true
+explanation = "Writing `DIVES` inside `dive` is fine, but `main` reads the `static mut` outside any `unsafe` block: error E0133. Reading the plain `static GREETING` is safe. The fix: `let n = unsafe { DIVES };` and then print `n`."
+
+[[level]]
+id = "22.3"
 title = "Trait wizardry"
 kind = "fill"
 book = ["20.2"]
-about = "Associated types, operator overloading and the newtype trick."
+xp = 60
+goal = "Overload + for points and for millimeters plus meters, give a Vec a Display through a newtype, outline a point with a supertrait, and call the right fly method."
+lesson = '''
+Some deeper trait tools:
 
-[[planned]]
+**Operator overloading.** `a + b` calls `std::ops::Add::add`. Implement `Add` and `+` works on your type:
+
+```rust
+use std::ops::Add;
+
+impl Add for Point {
+    type Output = Point;                       // an associated type
+    fn add(self, other: Point) -> Point {
+        Point { x: self.x + other.x, y: self.y + other.y }
+    }
+}
+```
+
+`Add` is really `trait Add<Rhs = Self>`: a **default type parameter**. To add a *different* type on the right, give it: `impl Add<Meters> for Millimeters`.
+
+**The newtype pattern.** You may only implement a trait for a type if the trait **or** the type is yours (the *orphan rule*), so `impl Display for Vec<String>` isn't allowed. Wrap the type in a one-field struct, and it's yours:
+
+```rust
+struct Wrapper(Vec<String>);
+
+impl fmt::Display for Wrapper {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "[{}]", self.0.join(", "))
+    }
+}
+```
+
+**Supertraits.** `trait OutlinePrint: fmt::Display` means "only types that are `Display` may implement `OutlinePrint`", so its methods can use `to_string()`.
+
+**Same method name, several traits.** If `Human` has its own `fly` and also gets `fly` from `Pilot` and `Wizard`, then `person.fly()` picks Human's own. Pick another with `Pilot::fly(&person)`, or the fully qualified `<Human as Pilot>::fly(&person)`.
+'''
+c_compare = '''
+C has no operator overloading at all. It's like C++'s `operator+`, but you only get `+` by implementing the `Add` trait, so the compiler always knows exactly which function runs.
+'''
+py_compare = '''
+`impl Add` is `__add__`, and `impl Display` is `__str__`. The orphan rule has no Python equivalent: there, you can monkey-patch anything.
+'''
+check = "tests"
+starter = '''
+use std::fmt;
+use std::ops::Add;
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+// TODO: impl Add for Point (add the x's and the y's)
+
+#[derive(Debug, PartialEq)]
+struct Millimeters(u32);
+
+#[derive(Debug, PartialEq)]
+struct Meters(u32);
+
+// TODO: impl Add<Meters> for Millimeters (the answer is in Millimeters)
+
+struct Wrapper(Vec<String>);
+
+// TODO: impl fmt::Display for Wrapper: "[hello, world]"
+
+trait OutlinePrint: fmt::Display {
+    /// The value inside a box of stars.
+    fn outline_print(&self) -> String {
+        let text = self.to_string();
+        let len = text.len();
+        let edge = "*".repeat(len + 4);
+        let blank = format!("*{}*", " ".repeat(len + 2));
+        format!("{edge}\n{blank}\n* {text} *\n{blank}\n{edge}")
+    }
+}
+
+// TODO: make Point printable as "(x, y)", and implement OutlinePrint for it
+
+trait Pilot {
+    fn fly(&self) -> String;
+}
+
+trait Wizard {
+    fn fly(&self) -> String;
+}
+
+struct Human;
+
+impl Pilot for Human {
+    fn fly(&self) -> String {
+        String::from("This is your captain speaking.")
+    }
+}
+
+impl Wizard for Human {
+    fn fly(&self) -> String {
+        String::from("Up!")
+    }
+}
+
+impl Human {
+    fn fly(&self) -> String {
+        String::from("*waving arms furiously*")
+    }
+}
+
+/// What the person says when flying as a PILOT.
+fn pilot_announcement(person: &Human) -> String {
+    person.fly()
+}
+
+fn main() {
+    println!("{}", pilot_announcement(&Human));
+}
+'''
+solution = '''
+use std::fmt;
+use std::ops::Add;
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Add for Point {
+    type Output = Point;
+
+    fn add(self, other: Point) -> Point {
+        Point { x: self.x + other.x, y: self.y + other.y }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+struct Millimeters(u32);
+
+#[derive(Debug, PartialEq)]
+struct Meters(u32);
+
+impl Add<Meters> for Millimeters {
+    type Output = Millimeters;
+
+    fn add(self, other: Meters) -> Millimeters {
+        Millimeters(self.0 + other.0 * 1000)
+    }
+}
+
+struct Wrapper(Vec<String>);
+
+impl fmt::Display for Wrapper {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "[{}]", self.0.join(", "))
+    }
+}
+
+trait OutlinePrint: fmt::Display {
+    /// The value inside a box of stars.
+    fn outline_print(&self) -> String {
+        let text = self.to_string();
+        let len = text.len();
+        let edge = "*".repeat(len + 4);
+        let blank = format!("*{}*", " ".repeat(len + 2));
+        format!("{edge}\n{blank}\n* {text} *\n{blank}\n{edge}")
+    }
+}
+
+impl fmt::Display for Point {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "({}, {})", self.x, self.y)
+    }
+}
+
+impl OutlinePrint for Point {}
+
+trait Pilot {
+    fn fly(&self) -> String;
+}
+
+trait Wizard {
+    fn fly(&self) -> String;
+}
+
+struct Human;
+
+impl Pilot for Human {
+    fn fly(&self) -> String {
+        String::from("This is your captain speaking.")
+    }
+}
+
+impl Wizard for Human {
+    fn fly(&self) -> String {
+        String::from("Up!")
+    }
+}
+
+impl Human {
+    fn fly(&self) -> String {
+        String::from("*waving arms furiously*")
+    }
+}
+
+/// What the person says when flying as a PILOT.
+fn pilot_announcement(person: &Human) -> String {
+    Pilot::fly(person)
+}
+
+fn main() {
+    println!("{}", pilot_announcement(&Human));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use super::*;
+
+    #[test]
+    fn adding_points() {
+        assert_eq!(Point { x: 1, y: 0 } + Point { x: 2, y: 3 }, Point { x: 3, y: 3 });
+    }
+
+    #[test]
+    fn adding_lengths() {
+        assert_eq!(Millimeters(500) + Meters(2), Millimeters(2500));
+    }
+
+    #[test]
+    fn newtype_display() {
+        let w = Wrapper(vec![String::from("hello"), String::from("world")]);
+        assert_eq!(w.to_string(), "[hello, world]");
+    }
+
+    #[test]
+    fn outlined_point() {
+        assert_eq!(Point { x: 1, y: 3 }.to_string(), "(1, 3)");
+        assert_eq!(
+            Point { x: 1, y: 3 }.outline_print(),
+            "**********\n*        *\n* (1, 3) *\n*        *\n**********"
+        );
+    }
+
+    #[test]
+    fn the_pilot_speaks() {
+        assert_eq!(pilot_announcement(&Human), "This is your captain speaking.");
+        assert_eq!(Human.fly(), "*waving arms furiously*");
+    }
+}
+'''
+hints = [
+    "Five small pieces: `impl Add for Point`, `impl Add<Meters> for Millimeters`, `impl fmt::Display for Wrapper`, `impl fmt::Display for Point` plus an empty `impl OutlinePrint for Point {}`, and a different call in pilot_announcement.",
+    "Each `Add` impl needs `type Output = ...;` and `fn add(self, other: ...) -> ...`. A meter is 1000 millimeters. The Display impls use `write!(f, ...)`. pilot_announcement must call the Pilot version: `Pilot::fly(person)`.",
+    "```rust\nimpl Add<Meters> for Millimeters {\n    type Output = Millimeters;\n\n    fn add(self, other: Meters) -> Millimeters {\n        Millimeters(self.0 + other.0 * 1000)\n    }\n}\n\nimpl fmt::Display for Wrapper {\n    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {\n        write!(f, \"[{}]\", self.0.join(\", \"))\n    }\n}\n\nimpl OutlinePrint for Point {}\n\nfn pilot_announcement(person: &Human) -> String {\n    Pilot::fly(person)\n}\n```",
+]
+
+[[level]]
+id = "22.4"
 title = "Strange types"
 kind = "predict"
 book = ["20.3"]
-about = "Type aliases, the never type !, and unsized types."
+xp = 30
+goal = "A type alias, a match arm that never returns, and the size of a &str. What does this print?"
+lesson = '''
+**Type aliases** give an existing type a second name:
 
-[[planned]]
+```rust
+type Kilometers = i32;
+type Thunk = Box<dyn Fn() + Send + 'static>;   // great for long types
+```
+
+An alias is **the same type**, not a new one: a `Kilometers` and an `i32` can be added together. (If you want the compiler to keep them apart, use a newtype, `struct Kilometers(i32)`, instead.)
+
+**The never type `!`** is the type of expressions that never finish: `panic!`, `loop` without `break`, `continue`, `return`, `process::exit`. Since a `!` value can never exist, it fits in **any** type. That's why this works, although the arms look different:
+
+```rust
+let guess: u32 = match guess.trim().parse() {
+    Ok(num) => num,       // u32
+    Err(_) => continue,   // ! : never produces a value, so it's fine
+};
+```
+
+**Dynamically sized types** (DSTs) like `str`, `[T]` and `dyn Trait` have no size known at compile time, so they always live behind a pointer: `&str`, `Box<dyn Trait>`. Such a pointer is **fat**: two words, the address plus the length (or plus the vtable).
+
+Generic functions assume `T: Sized` by default. To also accept DSTs, write `T: ?Sized` ("maybe sized") and take a `&T`.
+'''
+c_compare = '''
+A type alias is `typedef`. A `&str` is like passing a `char*` together with its length, which C makes you do by hand.
+'''
+py_compare = '''
+Like `Kilometers = int` (a `TypeAlias`): just another name. `!` is like a function annotated `-> NoReturn`.
+'''
+starter = '''
+type Meters = u32;
+
+fn main() {
+    let depth: u32 = 40;
+    let more: Meters = 2;
+    println!("{}", depth + more);
+
+    let readings = ["7", "deep", "30"];
+    let mut total = 0;
+    for r in readings {
+        let n: u32 = match r.parse() {
+            Ok(n) => n,
+            Err(_) => continue,
+        };
+        total += n;
+    }
+    println!("{total}");
+
+    let word: &str = "abyss";
+    println!("{}", std::mem::size_of_val(&word) == 2 * std::mem::size_of::<usize>());
+}
+'''
+choices = [
+    "It doesn't compile: Meters and u32 are different types",
+    "It doesn't compile: the match arms have different types (u32 and continue)",
+    "42 / 37 / false",
+    "42 / 37 / true",
+]
+answer = 3
+expected_output = '''
+42
+37
+true
+'''
+explanation = "`Meters` is only another name for `u32`, so they add up to 42. `continue` has the never type `!`, which fits where a `u32` is expected, so \"deep\" is just skipped: 7 + 30 = 37. A `&str` is a fat pointer, address plus length: two `usize`s."
+
+[[level]]
+id = "22.5"
 title = "Functions as values"
 kind = "fill"
 book = ["20.4"]
-about = "Function pointers, and returning closures."
+xp = 55
+goal = "Pass functions as fn pointers, use function names and enum variants in map, and return closures: one alone, and a whole pipeline of different ones."
+lesson = '''
+Functions are values too. Their type is a **function pointer**, `fn`:
 
-[[planned]]
+```rust
+fn add_one(x: i32) -> i32 { x + 1 }
+
+fn do_twice(f: fn(i32) -> i32, arg: i32) -> i32 {
+    f(arg) + f(arg)
+}
+
+do_twice(add_one, 5);   // 12
+```
+
+`fn` is a type (not a trait like `Fn`), and it implements all three closure traits, so you can pass a function anywhere a closure is expected. That makes some `map` calls very short:
+
+```rust
+let strings: Vec<String> = numbers.iter().map(ToString::to_string).collect();
+
+enum Status { Value(u32), Stop }
+let statuses: Vec<Status> = (0u32..20).map(Status::Value).collect();   // a variant is a function too
+```
+
+**Returning closures.** Every closure has its own unnamed type, so you can't write it. Return `impl Fn`:
+
+```rust
+fn make_adder(n: i32) -> impl Fn(i32) -> i32 {
+    move |x| x + n
+}
+```
+
+But `impl Fn` is still **one** specific type. If a function might return *different* closures, or you want several in a `Vec`, box them as trait objects:
+
+```rust
+let steps: Vec<Box<dyn Fn(i32) -> i32>> = vec![Box::new(|x| x * 2), Box::new(move |x| x + n)];
+```
+'''
+c_compare = '''
+`fn(i32) -> i32` is `int (*)(int)`. Returning a closure that captures `n` is what C does with a function pointer plus a heap-allocated context struct.
+'''
+py_compare = '''
+Functions are first-class in Python too. Returning `move |x| x + n` is like returning `lambda x: x + n`, but the captured `n` is copied in, not looked up later.
+'''
+check = "tests"
+starter = '''
+fn add_one(x: i32) -> i32 {
+    x + 1
+}
+
+/// Call f on arg twice and add the two results.
+fn do_twice(f: fn(i32) -> i32, arg: i32) -> i32 {
+    todo!()
+}
+
+/// Every number as a String (try .map(ToString::to_string)).
+fn to_strings(numbers: &[i32]) -> Vec<String> {
+    todo!()
+}
+
+#[derive(Debug, PartialEq)]
+enum Status {
+    Value(u32),
+    Stop,
+}
+
+/// Status::Value(0), Status::Value(1), ... up to (not including) n, then Status::Stop.
+fn statuses(n: u32) -> Vec<Status> {
+    todo!()
+}
+
+/// A closure that adds n to its argument.
+fn make_adder(n: i32) -> impl Fn(i32) -> i32 {
+    |x| x
+}
+
+/// One closure per step name: "double" (x * 2), "inc" (x + 1), "square" (x * x).
+/// Unknown names are skipped.
+fn make_pipeline(steps: &[&str]) -> Vec<Box<dyn Fn(i32) -> i32>> {
+    todo!()
+}
+
+/// Feed `start` through every step, in order.
+fn run_pipeline(pipeline: &[Box<dyn Fn(i32) -> i32>], start: i32) -> i32 {
+    todo!()
+}
+
+fn main() {
+    println!("{}", do_twice(add_one, 5));
+}
+'''
+solution = '''
+fn add_one(x: i32) -> i32 {
+    x + 1
+}
+
+/// Call f on arg twice and add the two results.
+fn do_twice(f: fn(i32) -> i32, arg: i32) -> i32 {
+    f(arg) + f(arg)
+}
+
+/// Every number as a String (try .map(ToString::to_string)).
+fn to_strings(numbers: &[i32]) -> Vec<String> {
+    numbers.iter().map(ToString::to_string).collect()
+}
+
+#[derive(Debug, PartialEq)]
+enum Status {
+    Value(u32),
+    Stop,
+}
+
+/// Status::Value(0), Status::Value(1), ... up to (not including) n, then Status::Stop.
+fn statuses(n: u32) -> Vec<Status> {
+    let mut list: Vec<Status> = (0..n).map(Status::Value).collect();
+    list.push(Status::Stop);
+    list
+}
+
+/// A closure that adds n to its argument.
+fn make_adder(n: i32) -> impl Fn(i32) -> i32 {
+    move |x| x + n
+}
+
+/// One closure per step name: "double" (x * 2), "inc" (x + 1), "square" (x * x).
+/// Unknown names are skipped.
+fn make_pipeline(steps: &[&str]) -> Vec<Box<dyn Fn(i32) -> i32>> {
+    let mut pipeline: Vec<Box<dyn Fn(i32) -> i32>> = Vec::new();
+    for step in steps {
+        match *step {
+            "double" => pipeline.push(Box::new(|x| x * 2)),
+            "inc" => pipeline.push(Box::new(|x| x + 1)),
+            "square" => pipeline.push(Box::new(|x| x * x)),
+            _ => {}
+        }
+    }
+    pipeline
+}
+
+/// Feed `start` through every step, in order.
+fn run_pipeline(pipeline: &[Box<dyn Fn(i32) -> i32>], start: i32) -> i32 {
+    pipeline.iter().fold(start, |value, step| step(value))
+}
+
+fn main() {
+    println!("{}", do_twice(add_one, 5));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use super::*;
+
+    fn triple(x: i32) -> i32 {
+        x * 3
+    }
+
+    #[test]
+    fn function_pointers() {
+        assert_eq!(do_twice(add_one, 5), 12);
+        assert_eq!(do_twice(triple, 2), 12);
+        assert_eq!(do_twice(|x| x - 1, 1), 0);
+    }
+
+    #[test]
+    fn functions_in_map() {
+        assert_eq!(to_strings(&[1, 22, -3]), vec!["1", "22", "-3"]);
+        assert_eq!(statuses(3), vec![Status::Value(0), Status::Value(1), Status::Value(2), Status::Stop]);
+        assert_eq!(statuses(0), vec![Status::Stop]);
+    }
+
+    #[test]
+    fn returned_closures() {
+        let add_five = make_adder(5);
+        assert_eq!(add_five(10), 15);
+        assert_eq!(make_adder(-1)(1), 0);
+    }
+
+    #[test]
+    fn pipelines() {
+        let p = make_pipeline(&["inc", "double", "square"]);
+        assert_eq!(p.len(), 3);
+        assert_eq!(run_pipeline(&p, 2), 36);
+        let q = make_pipeline(&["square", "nope", "inc"]);
+        assert_eq!(q.len(), 2);
+        assert_eq!(run_pipeline(&q, 3), 10);
+        assert_eq!(run_pipeline(&make_pipeline(&[]), 7), 7);
+    }
+}
+'''
+hints = [
+    "do_twice is `f(arg) + f(arg)`. to_strings and statuses use a function name in `map`: `.map(ToString::to_string)` and `.map(Status::Value)`. make_adder needs `move` and `+ n`.",
+    "make_pipeline: make a `Vec<Box<dyn Fn(i32) -> i32>>`, `match *step` and push `Box::new(|x| x * 2)` and friends. run_pipeline: `pipeline.iter().fold(start, |value, step| step(value))`.",
+    "```rust\nfn statuses(n: u32) -> Vec<Status> {\n    let mut list: Vec<Status> = (0..n).map(Status::Value).collect();\n    list.push(Status::Stop);\n    list\n}\n\nfn make_adder(n: i32) -> impl Fn(i32) -> i32 {\n    move |x| x + n\n}\n\nfn make_pipeline(steps: &[&str]) -> Vec<Box<dyn Fn(i32) -> i32>> {\n    let mut pipeline: Vec<Box<dyn Fn(i32) -> i32>> = Vec::new();\n    for step in steps {\n        match *step {\n            \"double\" => pipeline.push(Box::new(|x| x * 2)),\n            \"inc\" => pipeline.push(Box::new(|x| x + 1)),\n            \"square\" => pipeline.push(Box::new(|x| x * x)),\n            _ => {}\n        }\n    }\n    pipeline\n}\n```",
+]
+
+[[level]]
+id = "22.6"
 title = "Code that writes code"
 kind = "fill"
 book = ["20.5"]
-about = "macro_rules!, and the procedural macros."
+xp = 60
+goal = "Write three macros with macro_rules!: square!, maximum! (any number of arguments) and hashmap! { key => value, ... }."
+lesson = '''
+A **macro** is code that writes code. It runs at compile time, and its output is compiled like the rest of your program. You've used many: `println!`, `vec!`, `assert_eq!`.
 
-[[planned]]
+**Declarative macros** (`macro_rules!`) work like a `match` on **code**: each arm has a pattern and the code it turns into.
+
+```rust
+macro_rules! square {
+    ($x:expr) => {
+        $x * $x
+    };
+}
+```
+
+`$x:expr` matches any expression and names it `$x`. Other fragment kinds: `ident` (a name), `ty` (a type), `tt` (any single token tree), `literal`, `pat`...
+
+**Repetition**: `$( ... ),*` matches zero or more, separated by commas (`+` for one or more), and the same `$( ... )*` in the output repeats the code once per match:
+
+```rust
+macro_rules! my_vec {
+    ( $( $x:expr ),* ) => {
+        {
+            let mut temp_vec = Vec::new();
+            $( temp_vec.push($x); )*
+            temp_vec
+        }
+    };
+}
+```
+
+A macro can call itself, which is how you handle "the first one, then the rest":
+
+```rust
+($first:expr, $($rest:expr),+) => { ... maximum!($($rest),+) ... };
+```
+
+Macros must be defined **above** the code that uses them.
+
+**Procedural macros** are Rust functions that take code as tokens and return new code. They live in their own crate, in three kinds: **custom derive** (`#[derive(HelloMacro)]`), **attribute-like** (`#[route(GET, "/")]`) and **function-like** (`sql!(SELECT * FROM posts)`).
+'''
+c_compare = '''
+Like C's preprocessor macros, but they work on the syntax tree instead of on text: `square!(a + 1)` really is `(a + 1) * (a + 1)`, with no surprise from operator precedence.
+'''
+py_compare = '''
+Python has no macros. The nearest things are decorators (a bit like attribute macros) and code generation, but Rust macros run at compile time.
+'''
+check = "tests"
+starter = '''
+use std::collections::HashMap;
+
+// TODO: square!(x) => x * x
+// TODO: maximum!(a, b, c, ...) => the largest of one or more values
+// TODO: hashmap!{ k1 => v1, k2 => v2, ... } => a HashMap with those entries
+
+fn main() {
+    println!("{}", square!(7));
+}
+'''
+solution = '''
+use std::collections::HashMap;
+
+macro_rules! square {
+    ($x:expr) => {
+        $x * $x
+    };
+}
+
+macro_rules! maximum {
+    ($x:expr) => {
+        $x
+    };
+    ($first:expr, $($rest:expr),+) => {{
+        let rest = maximum!($($rest),+);
+        if $first > rest { $first } else { rest }
+    }};
+}
+
+macro_rules! hashmap {
+    ($($key:expr => $value:expr),* $(,)?) => {{
+        let mut map = HashMap::new();
+        $( map.insert($key, $value); )*
+        map
+    }};
+}
+
+fn main() {
+    println!("{}", square!(7));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use super::*;
+
+    #[test]
+    fn squares() {
+        assert_eq!(square!(7), 49);
+        assert_eq!(square!(2 + 1), 9, "the expression is matched as a whole: (2 + 1) * (2 + 1)");
+        assert_eq!(square!(1.5), 2.25);
+    }
+
+    #[test]
+    fn maximums() {
+        assert_eq!(maximum!(3), 3);
+        assert_eq!(maximum!(3, 9), 9);
+        assert_eq!(maximum!(4, 8, 1, 6), 8);
+        assert_eq!(maximum!("crab", "abyss"), "crab");
+    }
+
+    #[test]
+    fn hashmaps() {
+        let depths: HashMap<&str, u32> = hashmap! { "reef" => 20, "trench" => 11000 };
+        assert_eq!(depths.len(), 2);
+        assert_eq!(depths["trench"], 11000);
+        let empty: HashMap<String, i32> = hashmap! {};
+        assert!(empty.is_empty());
+    }
+}
+'''
+hints = [
+    "Each macro is `macro_rules! name { (pattern) => { output }; }`, written above main. square needs one arm with `$x:expr`.",
+    "maximum needs two arms: one value `($x:expr) => { $x }`, and `($first:expr, $($rest:expr),+)` which compares `$first` with `maximum!($($rest),+)`. hashmap matches `$($key:expr => $value:expr),*` and repeats `map.insert($key, $value);`. Use double braces `{{ ... }}` so the output is a block.",
+    "```rust\nmacro_rules! maximum {\n    ($x:expr) => {\n        $x\n    };\n    ($first:expr, $($rest:expr),+) => {{\n        let rest = maximum!($($rest),+);\n        if $first > rest { $first } else { rest }\n    }};\n}\n\nmacro_rules! hashmap {\n    ($($key:expr => $value:expr),* $(,)?) => {{\n        let mut map = HashMap::new();\n        $( map.insert($key, $value); )*\n        map\n    }};\n}\n```",
+]
+
+[[level]]
+id = "22.7"
 title = "BOSS: Build your own vec!"
 kind = "boss"
 book = ["20.5"]
-about = "Write a macro that builds lists."
+xp = 120
+goal = '''Write my_vec!, a full copy of vec!: empty, a list (with or without a trailing comma), and [value; count].
+Lists must reserve exactly the right capacity, using your own count! macro.'''
+lesson = '''
+**Boss fight!** The standard `vec!` has three forms. Rebuild all of them as `my_vec!`:
+
+```rust
+let a: Vec<i32> = my_vec![];          // empty
+let b = my_vec![1, 2, 3];             // a list
+let c = my_vec![1, 2, 3,];            // a trailing comma is fine
+let d = my_vec![0; 5];                // five zeros
+```
+
+Rules:
+
+1. **Lists reserve exactly the right space** up front: `Vec::with_capacity(n)`, then push. To know `n` at compile time, write a helper macro **`count!`** that counts token trees: `count!(a b c)` is `3`, `count!()` is `0`. The classic trick is recursion: one, plus the count of the rest.
+2. **`[value; count]`**: evaluate `value` only **once**, then clone it to fill the Vec (like `vec!`). `v.resize(count, value)` does exactly that.
+3. Each list element is evaluated exactly once, in order.
+4. It must work with any expressions, including other `my_vec!`s.
+
+The order of the arms matters: the first matching arm wins. Since `$x:expr` would also match the start of `0; 5`, put the `;` arm before the list arm.
+
+Optional repetition `$(,)?` matches zero or one trailing comma.
+'''
+c_compare = '''
+Like writing an array-initializer macro in C, but with real pattern matching, recursion, and hygiene: names inside the macro can't clash with the caller's variables.
+'''
+py_compare = '''
+Python builds lists at runtime with `[1, 2, 3]` or `[0] * 5`. `my_vec!` decides what code to generate at compile time, so `count!` costs nothing when the program runs.
+'''
+check = "tests"
+starter = '''
+// TODO: count!(a b c) counts the token trees it is given (here, 3)
+
+// TODO: my_vec![] / my_vec![a, b, c] / my_vec![a, b, c,] / my_vec![value; count]
+
+fn main() {
+    let v: Vec<i32> = my_vec![1, 2, 3];
+    println!("{v:?}");
+}
+'''
+solution = '''
+macro_rules! count {
+    () => { 0usize };
+    ($head:tt $($tail:tt)*) => { 1usize + count!($($tail)*) };
+}
+
+macro_rules! my_vec {
+    () => {
+        Vec::new()
+    };
+    ($value:expr; $n:expr) => {{
+        let mut v = Vec::new();
+        v.resize($n, $value);
+        v
+    }};
+    ($($x:expr),+ $(,)?) => {{
+        let mut v = Vec::with_capacity(count!($($x)*));
+        $( v.push($x); )+
+        v
+    }};
+}
+
+fn main() {
+    let v: Vec<i32> = my_vec![1, 2, 3];
+    println!("{v:?}");
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use std::cell::Cell;
+
+    #[test]
+    fn counting() {
+        assert_eq!(count!(), 0);
+        assert_eq!(count!(a), 1);
+        assert_eq!(count!(a b c), 3);
+        assert_eq!(count!(x y z w v), 5);
+    }
+
+    #[test]
+    fn empty_and_lists() {
+        let empty: Vec<i32> = my_vec![];
+        assert!(empty.is_empty());
+        assert_eq!(my_vec![1, 2, 3], vec![1, 2, 3]);
+        assert_eq!(my_vec![1, 2, 3,], vec![1, 2, 3]);
+        assert_eq!(my_vec![1 + 1, 2 * 3], vec![2, 6]);
+        assert_eq!(my_vec!["deep"], vec!["deep"]);
+    }
+
+    #[test]
+    fn exact_capacity() {
+        let v = my_vec![10, 20, 30, 40, 50];
+        assert_eq!(v.capacity(), 5, "reserve exactly count!(...) slots");
+    }
+
+    #[test]
+    fn repeated_values() {
+        assert_eq!(my_vec![0; 4], vec![0, 0, 0, 0]);
+        assert_eq!(my_vec![String::from("ab"); 2], vec!["ab".to_string(), "ab".to_string()]);
+        let none: Vec<u8> = my_vec![7; 0];
+        assert!(none.is_empty());
+    }
+
+    #[test]
+    fn evaluated_once_in_order() {
+        let calls = Cell::new(0);
+        let next = || {
+            calls.set(calls.get() + 1);
+            calls.get()
+        };
+        assert_eq!(my_vec![next(); 3], vec![1, 1, 1]);
+        assert_eq!(calls.get(), 1, "the value in [value; n] must be evaluated once");
+        assert_eq!(my_vec![next(), next(), next()], vec![2, 3, 4]);
+    }
+
+    #[test]
+    fn nested() {
+        let grid = my_vec![my_vec![1], my_vec![2, 3]];
+        assert_eq!(grid, vec![vec![1], vec![2, 3]]);
+    }
+}
+'''
+hints = [
+    "count! has two arms: nothing gives `0usize`, and `$head:tt $($tail:tt)*` gives `1usize + count!($($tail)*)`. my_vec! has three arms: `()`, `($value:expr; $n:expr)` and `($($x:expr),+ $(,)?)`, in that order.",
+    "The list arm makes `Vec::with_capacity(count!($($x)*))` and repeats `v.push($x);` with `$( ... )+`. The `;` arm makes an empty Vec and calls `v.resize($n, $value)`. Wrap each output in `{{ ... }}`.",
+    "```rust\nmacro_rules! count {\n    () => { 0usize };\n    ($head:tt $($tail:tt)*) => { 1usize + count!($($tail)*) };\n}\n\nmacro_rules! my_vec {\n    () => {\n        Vec::new()\n    };\n    ($value:expr; $n:expr) => {{\n        let mut v = Vec::new();\n        v.resize($n, $value);\n        v\n    }};\n    ($($x:expr),+ $(,)?) => {{\n        let mut v = Vec::with_capacity(count!($($x)*));\n        $( v.push($x); )+\n        v\n    }};\n}\n```",
+]

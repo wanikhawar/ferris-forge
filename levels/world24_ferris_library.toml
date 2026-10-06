@@ -3,40 +3,279 @@ name = "Ferris' Library"
 blurb = "A bonus island: the book's appendices as quick quizzes."
 tag = "bonus"
 
-# Placeholder island: these levels are planned but not built yet.
-
-[[planned]]
+[[level]]
+id = "24.1"
 title = "Rust's reserved words"
 kind = "predict"
 book = ["A"]
-about = "Every keyword and what it does."
+xp = 25
+goal = "A function called match and a variable called type. Does it compile? If so, what does it print?"
+lesson = '''
+**Keywords** are words the language reserves for itself, so you can't use them as names of functions, variables, types and so on.
 
-[[planned]]
+Keywords in use today include: `as`, `async`, `await`, `break`, `const`, `continue`, `crate`, `dyn`, `else`, `enum`, `extern`, `false`, `fn`, `for`, `if`, `impl`, `in`, `let`, `loop`, `match`, `mod`, `move`, `mut`, `pub`, `ref`, `return`, `self`, `Self`, `static`, `struct`, `super`, `trait`, `true`, `type`, `unsafe`, `use`, `where`, `while`.
+
+Some are **reserved for the future** and do nothing yet: `abstract`, `become`, `box`, `do`, `final`, `gen` (since the 2024 edition), `macro`, `override`, `priv`, `try`, `typeof`, `unsized`, `virtual`, `yield`.
+
+What if you really need one as a name? For example, a C library has a function called `match`, or an older crate (written before `try` was reserved) has a function called `try`. Use a **raw identifier**: put `r#` in front.
+
+```rust
+fn r#match(needle: &str, haystack: &str) -> bool {
+    haystack.contains(needle)
+}
+
+r#match("foo", "foobar");
+```
+'''
+c_compare = '''
+C has no escape hatch: a C library with a function named after a keyword simply can't be called by that name. Rust's `r#` makes any keyword usable as a name.
+'''
+py_compare = '''
+Python programmers write `class_` or `type_` to dodge keywords. Rust's `r#type` keeps the real name.
+'''
+starter = '''
+fn r#match(needle: &str, haystack: &str) -> bool {
+    haystack.contains(needle)
+}
+
+fn main() {
+    let r#type = "crab";
+    println!("{}", r#match("ra", r#type));
+
+    const LIMIT: u32 = 3;
+    let mut n = 0;
+    let found = loop {
+        n += 1;
+        if n == LIMIT {
+            break n * 10;
+        }
+    };
+    println!("{found}");
+}
+'''
+choices = [
+    "It doesn't compile: match and type are keywords",
+    "true / 30",
+    "false / 30",
+    "true / 3",
+]
+answer = 1
+expected_output = '''
+true
+30
+'''
+explanation = "`r#` turns a keyword into an ordinary name, so `r#match` and `r#type` work: \"crab\" contains \"ra\". `break n * 10` makes the loop's value 30 when `n` reaches 3."
+
+[[level]]
+id = "24.2"
 title = "Every symbol explained"
 kind = "predict"
 book = ["B"]
-about = "All the operators and symbols."
+xp = 25
+goal = "Five operators you may not use every day. What does this print?"
+lesson = '''
+Appendix B lists every operator and symbol in Rust. Some you use all the time; here are a few worth a second look:
 
-[[planned]]
+| Symbol | Meaning |
+|---|---|
+| `^` | bitwise XOR (not "to the power of": that's `.pow()`) |
+| `<<`, `>>` | shift bits left / right |
+| `&` | bitwise AND (and also borrowing: `&x`) |
+| `%` | remainder: it takes the **sign of the left side** |
+| `/` on integers | divides and drops the fraction |
+| `..`, `..=` | ranges: up to, and up to **including** |
+| `?` | pass an error up |
+| `!` | `not`, macro calls (`println!`), and the never type |
+| `'a` | a lifetime (or a loop label: `'outer: loop`) |
+| `::` | a path (`std::fs`, `String::new`) |
+| `=>` | match arms |
+| `->` | a function's return type |
+| `_` | "ignore this" in patterns, and digit separators: `1_000_000` |
+
+Operators work left to right within the same precedence: `7 / 2 * 2` is `(7 / 2) * 2`.
+'''
+c_compare = '''
+The arithmetic and bitwise operators are C's, with the same `%` sign rule. Rust adds `..=`, `?`, `=>`, `::` and lifetimes, and has no `++`, `--` or `?:`.
+'''
+py_compare = '''
+Careful: Python's `%` follows the sign of the right side (`-7 % 3` is 2 in Python), and `^` is XOR there too. Integer `/` in Rust is like Python's `//`, except it rounds toward zero.
+'''
+starter = '''
+fn main() {
+    let a = 6 ^ 3;
+    let b = 1 << 4;
+    let c: u32 = (1..=4).sum();
+    let d = -7 % 3;
+    let e = 7 / 2 * 2;
+    println!("{a} {b} {c} {d} {e}");
+}
+'''
+choices = [
+    "216 16 10 2 7",
+    "5 16 6 -1 6",
+    "5 16 10 -1 6",
+    "5 8 10 2 6",
+]
+answer = 2
+expected_output = "5 16 10 -1 6"
+explanation = "`6 ^ 3` is XOR: 110 ^ 011 = 101, which is 5. `1 << 4` is 16. `1..=4` includes 4: 1+2+3+4 = 10. `%` keeps the sign of the left side: -1. `7 / 2` is 3 (integer division), times 2 is 6."
+
+[[level]]
+id = "24.3"
 title = "Handy tools"
-kind = "predict"
+kind = "quiz"
 book = ["D"]
-about = "rustfmt, Clippy and rust-analyzer."
+xp = 20
+goal = "Which tool tells you that `if done == true` can just be `if done`, and that a `&Vec<String>` parameter should be `&[String]`?"
+lesson = '''
+Rust comes with tools that make everyday coding nicer:
 
-[[planned]]
+| Tool | Run it with | What it does |
+|---|---|---|
+| **rustfmt** | `cargo fmt` | reformats your code to the standard style, so nobody argues about spaces |
+| **rustfix** | `cargo fix` | applies the fixes the compiler suggests (great for warnings and edition upgrades) |
+| **Clippy** | `cargo clippy` | hundreds of extra checks ("lints") for common mistakes and code that could be simpler or more idiomatic |
+| **rust-analyzer** | your editor | the language server: completion, go to definition, inline types and errors as you type |
+
+Clippy catches things like:
+
+```rust
+let x = 3.1415;              // approximate value of PI found: use std::f64::consts::PI
+if done == true { }          // equality checks against true are unnecessary
+fn f(names: &Vec<String>)    // writing `&Vec` instead of `&[_]` involves a new object where a slice will do
+```
+
+The game's 🔍 Review button asks Ferris for a similar kind of review, but in your own terminal, `cargo clippy` is free and instant.
+'''
+c_compare = '''
+rustfmt is like clang-format, Clippy like clang-tidy, and rust-analyzer like clangd, all official and installed with rustup.
+'''
+py_compare = '''
+rustfmt is like Black (or `ruff format`), Clippy like pylint/ruff's lint rules, and rust-analyzer like Pylance.
+'''
+choices = [
+    "rustfmt: it rewrites code into the standard style",
+    "Clippy: it checks for code that is correct but could be simpler or more idiomatic",
+    "cargo fix: it only applies the compiler's own suggestions",
+    "The compiler warns about both by default",
+]
+answer = 1
+explanation = "Both programs compile without warnings; they're just not idiomatic. That's Clippy's job (`cargo clippy`). rustfmt only changes layout, never the code's meaning, and `cargo fix` applies compiler suggestions."
+
+[[level]]
+id = "24.4"
 title = "Rust's editions"
-kind = "predict"
+kind = "quiz"
 book = ["E"]
-about = "What editions are, and why they exist."
+xp = 20
+goal = "Your crate uses `edition = \"2021\"`, and it depends on a crate that uses `edition = \"2024\"`. What happens?"
+lesson = '''
+Rust ships a new release every six weeks, full of small improvements. Every few years, the changes that **aren't** backward compatible (like a new keyword) are bundled into an **edition**: 2015, 2018, 2021 and 2024.
 
-[[planned]]
+```toml
+[package]
+name = "treasure"
+edition = "2024"
+```
+
+- `cargo new` uses the newest edition. A crate without the setting is on 2015, for backward compatibility.
+- An edition only changes how **your** crate's code is read, for example whether `async` or `gen` is a keyword. The compiler is the same.
+- **Crates on different editions work together.** Each crate is compiled with its own edition, so your 2021 crate can use a 2024 library and the other way around. The ecosystem never splits.
+- `cargo fix --edition` updates most code to the next edition automatically.
+
+This game compiles everything with `--edition=2024`.
+'''
+c_compare = '''
+A bit like C's standards (C99, C11, C23) chosen per file with `-std=`, except you can always link crates from different editions together.
+'''
+py_compare = '''
+The opposite of Python 2 to 3: there, old and new code couldn't mix. Rust editions are designed so they always can.
+'''
+choices = [
+    "It doesn't compile: every crate in a build must use the same edition",
+    "It works: each crate is compiled with its own edition, and they link together",
+    "Your crate is upgraded to 2024 automatically",
+    "It works, but only if the dependency is compiled in release mode",
+]
+answer = 1
+explanation = "Editions are chosen per crate. The compiler reads each crate's code with that crate's edition, and the compiled crates fit together no matter which editions they used."
+
+[[level]]
+id = "24.5"
 title = "The book in other languages"
-kind = "predict"
+kind = "quiz"
 book = ["F"]
-about = "Where to read the book in other languages."
+xp = 15
+goal = "You'd like to read the Rust Book in your own language. What's true about the translations?"
+lesson = '''
+The Rust Book has been translated by volunteers into many languages: Português (Brasil), 简体中文, 正體中文, Українська, Español, Italiano, Русский, 한국어, 日本語, Français, Polski, Cebuano, Tagalog, Esperanto, ελληνική, Svenska, Farsi, Deutsch, हिंदी, ไทย, Danske and more.
 
-[[planned]]
+Appendix F links to all of them. A few things to keep in mind:
+
+- They're **community projects**, not official ones, kept up to date by volunteers.
+- Since the English book keeps changing, a translation may **lag behind** it by a few chapters or editions.
+- Each project welcomes help: if your language is missing or behind, you can join in.
+
+This game follows the Brown University edition (with its quizzes and the ownership chapters). Its lessons link to the English book.
+'''
+c_compare = '''
+Like the many translations of K&R's "The C Programming Language", except these are made openly online by volunteers.
+'''
+py_compare = '''
+Like docs.python.org's translations, maintained by community teams, which can also trail the English version.
+'''
+choices = [
+    "There are none: the book is only published in English",
+    "The Rust team translates every new chapter into every language on the same day",
+    "Volunteer translations exist in many languages; Appendix F lists them, and some may lag behind the English book",
+    "Translations are only available as paid printed books",
+]
+answer = 2
+explanation = "Appendix F points to community translations in many languages. They're volunteer-run, so a translation can be a bit behind the English original, and help is always welcome."
+
+[[level]]
+id = "24.6"
 title = "How Rust is made"
-kind = "predict"
+kind = "quiz"
 book = ["G"]
-about = "Stable, beta and nightly Rust."
+xp = 25
+goal = "A new feature is merged into Rust's main branch today, with no feature flag needed. Roughly when can it reach stable Rust at the earliest?"
+lesson = '''
+Rust is made on a **release train** with three channels:
+
+| Channel | How often | What's in it |
+|---|---|---|
+| **Nightly** | every night | everything merged so far, including unfinished features |
+| **Beta** | every 6 weeks | a copy of nightly, for testing |
+| **Stable** | every 6 weeks | the beta from 6 weeks ago, after its bugs were fixed |
+
+```text
+nightly: * - - * - - * - - * - - * - - * - - * - - * - - *
+                     |                       |
+beta:                * - - - - - - - - *     * - - - ...
+                                       |
+stable:                                *
+```
+
+Every six weeks, beta becomes the new stable release and a fresh beta branches off nightly. So a change merged today rides to the next beta (up to six weeks away), then spends six weeks there before becoming stable.
+
+**Unstable features**: brand-new language and library features stay behind a **feature flag** (`#![feature(...)]`) that only works on nightly, until they're stabilized. Stable Rust never lets you use them by accident.
+
+Big changes go through an **RFC** (Request For Comments): a public design document that anyone can discuss before the teams accept it.
+
+You can switch channels with rustup: `rustup toolchain install nightly`, then `cargo +nightly build`.
+'''
+c_compare = '''
+Much faster than C's standards process (a new standard every several years). Rust's compiler is released every six weeks, and an RFC plays the role of a standards proposal.
+'''
+py_compare = '''
+Python releases once a year and designs big changes in PEPs. Rust's RFCs are like PEPs, and the release train runs much more often.
+'''
+choices = [
+    "Tomorrow, in the next nightly and stable builds",
+    "Between 6 and 12 weeks from now: first the next beta, then six weeks later stable",
+    "Only in the next edition, which comes every three years",
+    "Never: new features only ever ship on nightly",
+]
+answer = 1
+explanation = "It's in nightly tomorrow. The next time a beta branches off (within six weeks) it's included, and that beta becomes stable six weeks later. Editions are only for changes that would break old code."

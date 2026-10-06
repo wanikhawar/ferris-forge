@@ -2,34 +2,517 @@ id = 21
 name = "Cargo Docks"
 blurb = "Ship your code to the world."
 
-# Placeholder island: these levels are planned but not built yet.
-
-[[planned]]
+[[level]]
+id = "21.1"
 title = "Fast mode"
-kind = "predict"
+kind = "quiz"
 book = ["14.1"]
-about = "Release builds and optimization levels."
+xp = 20
+goal = "You add `[profile.dev]` with `opt-level = 1` to Cargo.toml. What changes?"
+lesson = '''
+Cargo builds your code with a **profile**: a set of compiler settings. There are two main ones:
 
-[[planned]]
+| Command | Profile | Optimizations | For |
+|---|---|---|---|
+| `cargo build` | `dev` | `opt-level = 0` (none) | fast compiling while you work |
+| `cargo build --release` | `release` | `opt-level = 3` (maximum) | fast running when you ship |
+
+A release build can easily run 10 to 100 times faster than a dev build, but takes longer to compile. Always measure speed with `--release`!
+
+You can change any setting in `Cargo.toml`. Only the settings you write are changed; everything else keeps its default:
+
+```toml
+[profile.dev]
+opt-level = 1      # a little optimization, even while developing
+
+[profile.release]
+opt-level = 3
+```
+
+`opt-level` goes from 0 to 3. Other settings include `debug` (debug info), `lto` (link-time optimization) and `panic = "abort"`.
+'''
+c_compare = '''
+Like choosing between `gcc -O0 -g` while debugging and `gcc -O3` for the final build, except Cargo names the two setups and remembers them in Cargo.toml.
+'''
+py_compare = '''
+Python has nothing like it: the interpreter runs the same way every time. Rust compiles ahead of time, so you choose how hard the compiler works on speed.
+'''
+choices = [
+    "Nothing: opt-level can only be set on the command line",
+    "Release builds now use opt-level 1 too",
+    "`cargo build` now optimizes a little: the program runs faster, and compiling takes a bit longer",
+    "Every other dev setting is reset, so you lose debug info",
+]
+answer = 2
+explanation = "The `[profile.dev]` section changes only the dev profile that `cargo build` uses, and only the setting you wrote. Release builds keep their own `opt-level = 3`, and every other dev setting keeps its default."
+
+[[level]]
+id = "21.2"
 title = "Write the manual"
 kind = "fill"
 book = ["14.2"]
-about = "Doc comments, doc tests, and publishing on crates.io."
+xp = 50
+goal = '''Document the treasure crate: a crate-level //! comment at the top, and /// docs for both functions,
+with an # Examples section (with code), # Panics for share_loot, and # Errors for parse_coins.'''
+lesson = '''
+**Documentation comments** start with **three** slashes and use Markdown. They're turned into a website (the same kind you see on docs.rs) by `cargo doc --open`:
 
-[[planned]]
+```rust
+/// Adds one to the number given.
+///
+/// # Examples
+///
+/// ```
+/// let answer = my_crate::add_one(5);
+/// assert_eq!(6, answer);
+/// ```
+pub fn add_one(x: i32) -> i32 {
+    x + 1
+}
+```
+
+Common sections:
+
+| Heading | What it says |
+|---|---|
+| `# Examples` | how to use it, with code |
+| `# Panics` | when the function panics |
+| `# Errors` | when it returns `Err`, and why |
+| `# Safety` | for `unsafe` functions: what the caller must promise |
+
+The code in examples is **run as a test** by `cargo test` (a *doc test*), so your examples can never go out of date.
+
+**`//!`** documents the item that *contains* the comment. At the top of `lib.rs`, that's the whole crate:
+
+```rust
+//! # My Crate
+//!
+//! `my_crate` is a collection of utilities.
+```
+
+**Publishing** to crates.io: make an account, run `cargo login` with your API token, fill in `description` and `license` in `Cargo.toml`, and run `cargo publish`. A published version is **permanent**: it can never be deleted or overwritten. If a version is broken, `cargo yank --vers 1.0.1` stops new projects from picking it, while existing projects keep working.
+
+(The game can't run doc tests, so here Ferris' tests only read your comments.)
+'''
+c_compare = '''
+Like Doxygen comments, but built into the toolchain, with examples that are compiled and run on every `cargo test`.
+'''
+py_compare = '''
+Like docstrings with doctest examples, and `cargo doc` is like Sphinx, with no setup at all.
+'''
+check = "tests"
+starter = '''
+// TODO: crate-level documentation (//!) goes here, at the very top
+
+// TODO: document share_loot (with # Examples and # Panics)
+pub fn share_loot(total: u32, crew: u32) -> u32 {
+    if crew == 0 {
+        panic!("a crew needs at least one pirate");
+    }
+    total / crew
+}
+
+// TODO: document parse_coins (with # Examples and # Errors)
+pub fn parse_coins(text: &str) -> Result<u32, String> {
+    text.trim()
+        .trim_end_matches(" coins")
+        .parse()
+        .map_err(|_| format!("'{text}' is not an amount of coins"))
+}
+
+fn main() {
+    println!("{}", share_loot(100, 3));
+}
+'''
+solution = '''
+//! # Treasure
+//!
+//! Tools for pirates who want to share their loot fairly.
+
+/// Splits the loot evenly. Each pirate gets the same whole number of coins;
+/// the rest stays in the chest.
+///
+/// # Examples
+///
+/// ```
+/// let each = treasure::share_loot(100, 3);
+/// assert_eq!(each, 33);
+/// ```
+///
+/// # Panics
+///
+/// Panics if `crew` is 0.
+pub fn share_loot(total: u32, crew: u32) -> u32 {
+    if crew == 0 {
+        panic!("a crew needs at least one pirate");
+    }
+    total / crew
+}
+
+/// Reads an amount like `"12"` or `"12 coins"`.
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(treasure::parse_coins("12 coins"), Ok(12));
+/// ```
+///
+/// # Errors
+///
+/// Returns an error if the text isn't a whole number of coins.
+pub fn parse_coins(text: &str) -> Result<u32, String> {
+    text.trim()
+        .trim_end_matches(" coins")
+        .parse()
+        .map_err(|_| format!("'{text}' is not an amount of coins"))
+}
+
+fn main() {
+    println!("{}", share_loot(100, 3));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use super::*;
+
+    const SOURCE: &str = include_str!("main.rs");
+
+    /// The /// lines right above the line that starts with `item`.
+    fn docs_above(item: &str) -> String {
+        let lines: Vec<&str> = SOURCE.lines().collect();
+        let at = lines
+            .iter()
+            .position(|l| l.trim_start().starts_with(item))
+            .unwrap_or_else(|| panic!("couldn't find `{item}`"));
+        let mut docs: Vec<&str> = lines[..at]
+            .iter()
+            .rev()
+            .map(|l| l.trim())
+            .take_while(|l| l.starts_with("///") || l.starts_with("#["))
+            .filter(|l| l.starts_with("///"))
+            .collect();
+        docs.reverse();
+        docs.join("\n")
+    }
+
+    #[test]
+    fn crate_docs() {
+        let first = SOURCE.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+        assert!(first.starts_with("//!"), "the file should start with //! crate documentation");
+        assert!(!first.contains("TODO"), "replace the TODO with real documentation");
+    }
+
+    #[test]
+    fn share_loot_docs() {
+        let docs = docs_above("pub fn share_loot");
+        assert!(!docs.is_empty(), "share_loot needs /// documentation right above it");
+        assert!(docs.contains("# Examples"), "share_loot's docs need an # Examples section");
+        assert!(docs.contains("```"), "the example needs a code block (```)");
+        assert!(docs.contains("share_loot("), "the example should call share_loot");
+        assert!(docs.contains("# Panics"), "share_loot can panic: add a # Panics section");
+    }
+
+    #[test]
+    fn parse_coins_docs() {
+        let docs = docs_above("pub fn parse_coins");
+        assert!(docs.contains("# Examples"), "parse_coins' docs need an # Examples section");
+        assert!(docs.contains("```"), "the example needs a code block (```)");
+        assert!(docs.contains("# Errors"), "parse_coins returns a Result: add an # Errors section");
+    }
+
+    #[test]
+    fn the_code_still_works() {
+        assert_eq!(share_loot(100, 3), 33);
+        assert_eq!(parse_coins("12 coins"), Ok(12));
+        assert!(parse_coins("lots").is_err());
+    }
+}
+'''
+hints = [
+    "Replace the `// TODO` comments: the first one with `//!` lines, the other two with `///` lines right above each `pub fn`.",
+    "Inside a `///` block, sections are Markdown headings: `/// # Examples`, `/// # Panics`, `/// # Errors`. A code block starts with a line that is `///` plus three backticks, then the code (each line starting with `///`), and ends with another `///` plus three backticks.",
+    "```rust\n//! # Treasure\n//!\n//! Tools for pirates who want to share their loot fairly.\n\n/// Splits the loot evenly.\n///\n/// # Examples\n///\n/// ```\n/// assert_eq!(treasure::share_loot(100, 3), 33);\n/// ```\n///\n/// # Panics\n///\n/// Panics if `crew` is 0.\npub fn share_loot(total: u32, crew: u32) -> u32 {\n```",
+]
+
+[[level]]
+id = "21.3"
 title = "Many crates, one workspace"
-kind = "predict"
+kind = "quiz"
 book = ["14.3"]
-about = "Several crates that build together."
+xp = 20
+goal = "A workspace holds two crates, `adder` and `add_one`, and both depend on `rand`. How many Cargo.lock files and target folders does it have?"
+lesson = '''
+As a project grows, you may split it into several crates that are developed together. A **workspace** groups them:
 
-[[planned]]
+```text
+add/
+├── Cargo.toml        # the workspace
+├── Cargo.lock        # ONE lock file for everything
+├── target/           # ONE build folder for everything
+├── adder/            # a binary crate
+│   ├── Cargo.toml
+│   └── src/main.rs
+└── add_one/          # a library crate
+    ├── Cargo.toml
+    └── src/lib.rs
+```
+
+The top `Cargo.toml` has no `[package]`, just the members:
+
+```toml
+[workspace]
+resolver = "3"
+members = ["adder", "add_one"]
+```
+
+One crate uses another through a **path** dependency, in `adder/Cargo.toml`:
+
+```toml
+[dependencies]
+add_one = { path = "../add_one" }
+```
+
+Because there's only one `Cargo.lock`, every crate in the workspace uses the **same version** of each dependency, and shared code is compiled only once into the shared `target/`. Commands work on everything, or on one crate with `-p`: `cargo test -p add_one`, `cargo run -p adder`.
+'''
+c_compare = '''
+Like a top-level Makefile or CMake project that builds several libraries and programs together, with one shared build folder.
+'''
+py_compare = '''
+Like a monorepo of several packages managed together, with one shared lock file (similar to a uv or Poetry workspace).
+'''
+choices = [
+    "Two of each: every crate keeps its own Cargo.lock and target folder",
+    "One Cargo.lock and one target folder, at the workspace root",
+    "One Cargo.lock, but a target folder inside each crate",
+    "None: workspaces don't use lock files",
+]
+answer = 1
+explanation = "A workspace has a single `Cargo.lock` and a single `target/` at the top. That keeps all the crates on the same version of `rand`, and each dependency is compiled only once."
+
+[[level]]
+id = "21.4"
 title = "New tools for Cargo"
-kind = "predict"
+kind = "quiz"
 book = ["14.4", "14.5"]
-about = "cargo install, and adding your own cargo commands."
+xp = 20
+goal = "`cargo install` puts a program called `cargo-treasure` into ~/.cargo/bin, which is on your PATH. What can you type now?"
+lesson = '''
+**`cargo install`** downloads a crate from crates.io, builds it in release mode, and puts its programs into `~/.cargo/bin`:
 
-[[planned]]
+```text
+$ cargo install ripgrep
+...
+Installed package `ripgrep v14.1.0` (executable `rg`)
+```
+
+- It only works for crates that have a **binary** target (a `main.rs`). A library alone has nothing to install.
+- `~/.cargo/bin` must be in your `PATH` to run the programs by name.
+- It's meant for tools for developers, not as a general package manager for your system.
+
+**Extending Cargo**: if a program on your `PATH` is called **`cargo-something`**, you can run it as **`cargo something`**. It even shows up in `cargo --list`. That's how tools like `cargo-watch`, `cargo-edit` or `cargo-expand` add new subcommands without changing Cargo itself.
+'''
+c_compare = '''
+Like `make install` for a project downloaded from a central registry, into a folder in your home directory instead of `/usr/local/bin`.
+'''
+py_compare = '''
+Like `pipx install` (or `uv tool install`): command-line tools in their own place, separate from your projects.
+'''
+choices = [
+    "Only `cargo-treasure`: Cargo doesn't know about other programs",
+    "`cargo treasure`: any `cargo-something` program on your PATH becomes a Cargo subcommand",
+    "Nothing until you add it to Cargo.toml under [subcommands]",
+    "`cargo run treasure`",
+]
+answer = 1
+explanation = "Cargo looks for `cargo-<name>` on your PATH when you type `cargo <name>`, so `cargo treasure` runs it (and `cargo-treasure` still works too). No configuration is needed."
+
+[[level]]
+id = "21.5"
 title = "BOSS: Ready to ship"
 kind = "boss"
-book = ["14.1", "14.2", "14.3"]
-about = "Document and organize a library like a real crate."
+book = ["14.2"]
+xp = 110
+goal = '''Get the art crate ready for crates.io: implement mix, document the crate and mix,
+and re-export the important items at the top so users can write art::mix and art::PrimaryColor.'''
+lesson = '''
+**Boss fight!** The art crate works, but it isn't ready to publish:
+
+1. **`mix`** isn't written: two different primary colors make a secondary color (red + yellow = orange, yellow + blue = green, red + blue = purple), in either order. Mixing a color with itself gives `None`.
+2. **No docs.** Add crate-level docs (`//!`) at the top, and `///` docs for `mix` with an `# Examples` section and a code block.
+3. **An awkward API.** Inside, the crate is organized in modules, so users have to write:
+
+```rust
+use art::kinds::PrimaryColor;
+use art::utils::mix;
+```
+
+They shouldn't need to know how the crate is organized inside. **Re-export** the important items at the top with `pub use`:
+
+```rust
+pub use self::kinds::PrimaryColor;
+pub use self::kinds::SecondaryColor;
+pub use self::utils::mix;
+```
+
+Now `use art::mix;` and `use art::PrimaryColor;` work, and the docs list them on the front page. The modules stay as they are, and the old paths still work too.
+
+Here, the crate's root is `main.rs`, so `art::mix` is written `crate::mix` in the tests.
+'''
+c_compare = '''
+Like a single public header that includes the headers users need, so they don't have to know the internal file layout.
+'''
+py_compare = '''
+Like importing the main names into a package's `__init__.py`, so users can write `from art import mix` instead of `from art.utils import mix`.
+'''
+check = "tests"
+starter = '''
+//! TODO: describe the crate here
+
+pub mod kinds {
+    /// The primary colors according to the RYB color model.
+    #[derive(Debug, PartialEq, Clone, Copy)]
+    pub enum PrimaryColor {
+        Red,
+        Yellow,
+        Blue,
+    }
+
+    /// The secondary colors according to the RYB color model.
+    #[derive(Debug, PartialEq, Clone, Copy)]
+    pub enum SecondaryColor {
+        Orange,
+        Green,
+        Purple,
+    }
+}
+
+pub mod utils {
+    use crate::kinds::*;
+
+    // TODO: document mix (with an # Examples section)
+    pub fn mix(c1: PrimaryColor, c2: PrimaryColor) -> Option<SecondaryColor> {
+        todo!()
+    }
+}
+
+// TODO: re-export PrimaryColor, SecondaryColor and mix here
+
+fn main() {
+    use kinds::PrimaryColor::*;
+    println!("{:?}", utils::mix(Red, Yellow));
+}
+'''
+solution = '''
+//! # Art
+//!
+//! A library for modeling artistic concepts: mixing the RYB primary colors
+//! into secondary colors.
+
+pub use self::kinds::PrimaryColor;
+pub use self::kinds::SecondaryColor;
+pub use self::utils::mix;
+
+pub mod kinds {
+    /// The primary colors according to the RYB color model.
+    #[derive(Debug, PartialEq, Clone, Copy)]
+    pub enum PrimaryColor {
+        Red,
+        Yellow,
+        Blue,
+    }
+
+    /// The secondary colors according to the RYB color model.
+    #[derive(Debug, PartialEq, Clone, Copy)]
+    pub enum SecondaryColor {
+        Orange,
+        Green,
+        Purple,
+    }
+}
+
+pub mod utils {
+    use crate::kinds::*;
+
+    /// Combines two different primary colors into the secondary color between
+    /// them. Mixing a color with itself gives `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use art::{mix, PrimaryColor, SecondaryColor};
+    ///
+    /// assert_eq!(mix(PrimaryColor::Red, PrimaryColor::Yellow), Some(SecondaryColor::Orange));
+    /// ```
+    pub fn mix(c1: PrimaryColor, c2: PrimaryColor) -> Option<SecondaryColor> {
+        use PrimaryColor::*;
+        match (c1, c2) {
+            (Red, Yellow) | (Yellow, Red) => Some(SecondaryColor::Orange),
+            (Yellow, Blue) | (Blue, Yellow) => Some(SecondaryColor::Green),
+            (Red, Blue) | (Blue, Red) => Some(SecondaryColor::Purple),
+            _ => None,
+        }
+    }
+}
+
+fn main() {
+    use kinds::PrimaryColor::*;
+    println!("{:?}", utils::mix(Red, Yellow));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    const SOURCE: &str = include_str!("main.rs");
+
+    fn docs_above(item: &str) -> String {
+        let lines: Vec<&str> = SOURCE.lines().collect();
+        let at = lines
+            .iter()
+            .position(|l| l.trim_start().starts_with(item))
+            .unwrap_or_else(|| panic!("couldn't find `{item}`"));
+        let mut docs: Vec<&str> = lines[..at]
+            .iter()
+            .rev()
+            .map(|l| l.trim())
+            .take_while(|l| l.starts_with("///") || l.starts_with("#["))
+            .filter(|l| l.starts_with("///"))
+            .collect();
+        docs.reverse();
+        docs.join("\n")
+    }
+
+    #[test]
+    fn a_flat_public_api() {
+        use crate::{mix, PrimaryColor, SecondaryColor};
+        assert_eq!(mix(PrimaryColor::Red, PrimaryColor::Yellow), Some(SecondaryColor::Orange));
+    }
+
+    #[test]
+    fn mixing() {
+        use crate::kinds::PrimaryColor::*;
+        use crate::kinds::SecondaryColor::*;
+        use crate::utils::mix;
+        assert_eq!(mix(Red, Yellow), Some(Orange));
+        assert_eq!(mix(Yellow, Red), Some(Orange));
+        assert_eq!(mix(Yellow, Blue), Some(Green));
+        assert_eq!(mix(Blue, Red), Some(Purple));
+        assert_eq!(mix(Blue, Blue), None);
+    }
+
+    #[test]
+    fn documented() {
+        let first = SOURCE.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+        assert!(first.starts_with("//!"), "start the file with //! crate docs");
+        assert!(!first.contains("TODO"), "replace the TODO with real crate docs");
+        let docs = docs_above("pub fn mix");
+        assert!(docs.contains("# Examples"), "mix needs /// docs with an # Examples section");
+        assert!(docs.contains("```"), "the example needs a code block");
+    }
+}
+'''
+hints = [
+    "Three jobs: write the `match` in mix, add the docs (`//!` at the top, `///` above `pub fn mix`), and add three `pub use` lines at the top level.",
+    "mix: match on the pair `(c1, c2)`, e.g. `(Red, Yellow) | (Yellow, Red) => Some(SecondaryColor::Orange)`, and `_ => None` for the rest. Re-exports: `pub use self::kinds::PrimaryColor;` and the same for `SecondaryColor` and `self::utils::mix`.",
+    "```rust\npub use self::kinds::PrimaryColor;\npub use self::kinds::SecondaryColor;\npub use self::utils::mix;\n\n// in utils:\npub fn mix(c1: PrimaryColor, c2: PrimaryColor) -> Option<SecondaryColor> {\n    use PrimaryColor::*;\n    match (c1, c2) {\n        (Red, Yellow) | (Yellow, Red) => Some(SecondaryColor::Orange),\n        (Yellow, Blue) | (Blue, Yellow) => Some(SecondaryColor::Green),\n        (Red, Blue) | (Blue, Red) => Some(SecondaryColor::Purple),\n        _ => None,\n    }\n}\n```",
+]

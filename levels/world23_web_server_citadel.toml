@@ -3,40 +3,1225 @@ name = "Web Server Citadel"
 blurb = "The final project: a multithreaded web server."
 tag = "project"
 
-# Placeholder island: these levels are planned but not built yet.
-
-[[planned]]
+[[level]]
+id = "23.1"
 title = "Knock knock: TCP"
 kind = "fill"
 book = ["21.1"]
-about = "Listen for connections and read a request."
+xp = 50
+goal = "Accept a connection from a browser and read its HTTP request, line by line, up to the blank line that ends it."
+lesson = '''
+The final project: a real **web server**, built from the standard library alone.
 
-[[planned]]
+The web runs on two protocols:
+
+- **TCP** carries the bytes: a browser *connects* to a server, and both sides read and write a stream.
+- **HTTP** says what the bytes mean: requests and responses in a simple text format.
+
+Listening for connections:
+
+```rust
+use std::net::TcpListener;
+
+let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+
+for stream in listener.incoming() {      // waits for each new connection
+    let stream = stream.unwrap();        // a TcpStream
+    handle_connection(stream);
+}
+```
+
+`listener.accept()` takes just one connection: it returns `(stream, address)`.
+
+An HTTP request is lines of text, ending with an **empty line**:
+
+```text
+GET / HTTP/1.1
+Host: 127.0.0.1:7878
+User-Agent: Mozilla/5.0 ...
+
+```
+
+Wrap the stream in a `BufReader` to read it line by line, and stop at the empty line:
+
+```rust
+let buf_reader = BufReader::new(&stream);
+let request: Vec<String> = buf_reader
+    .lines()
+    .map(|result| result.unwrap())
+    .take_while(|line| !line.is_empty())
+    .collect();
+```
+
+Why stop there? The browser keeps the connection open, waiting for an answer. Reading "until the end" would wait forever.
+
+(The game's server uses port 0, which means "any free port", and a pretend browser in a thread.)
+'''
+c_compare = '''
+`TcpListener::bind` is `socket` + `bind` + `listen`, and `incoming()` is a loop around `accept`. The stream closes itself when it's dropped: no `close()` to forget.
+'''
+py_compare = '''
+Like `socket.create_server(("127.0.0.1", 7878))` and `conn.makefile().readline()` in a loop, with errors as Results instead of exceptions.
+'''
+check = "tests"
+starter = '''
+use std::io::{BufRead, BufReader, Write};
+use std::net::{TcpListener, TcpStream};
+use std::thread;
+
+/// Every line of the HTTP request, up to (not including) the empty line that ends it.
+fn read_request(stream: &TcpStream) -> Vec<String> {
+    todo!()
+}
+
+/// Wait for one connection and return its request lines.
+fn accept_one(listener: &TcpListener) -> Vec<String> {
+    todo!()
+}
+
+fn main() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+
+    // A pretend browser.
+    thread::spawn(move || {
+        let mut browser = TcpStream::connect(address).unwrap();
+        browser.write_all(b"GET / HTTP/1.1\r\nHost: citadel\r\n\r\n").unwrap();
+    });
+
+    println!("{:#?}", accept_one(&listener));
+}
+'''
+solution = '''
+use std::io::{BufRead, BufReader, Write};
+use std::net::{TcpListener, TcpStream};
+use std::thread;
+
+/// Every line of the HTTP request, up to (not including) the empty line that ends it.
+fn read_request(stream: &TcpStream) -> Vec<String> {
+    BufReader::new(stream)
+        .lines()
+        .map(|result| result.unwrap())
+        .take_while(|line| !line.is_empty())
+        .collect()
+}
+
+/// Wait for one connection and return its request lines.
+fn accept_one(listener: &TcpListener) -> Vec<String> {
+    let (stream, _address) = listener.accept().unwrap();
+    read_request(&stream)
+}
+
+fn main() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+
+    // A pretend browser.
+    thread::spawn(move || {
+        let mut browser = TcpStream::connect(address).unwrap();
+        browser.write_all(b"GET / HTTP/1.1\r\nHost: citadel\r\n\r\n").unwrap();
+    });
+
+    println!("{:#?}", accept_one(&listener));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use super::*;
+    use std::time::{Duration, Instant};
+
+    /// A browser that sends `request` and then keeps the connection open for a while.
+    fn browser(listener: &TcpListener, request: &'static str) {
+        let address = listener.local_addr().unwrap();
+        thread::spawn(move || {
+            let mut s = TcpStream::connect(address).unwrap();
+            s.write_all(request.as_bytes()).unwrap();
+            thread::sleep(Duration::from_secs(3));
+        });
+    }
+
+    #[test]
+    fn reads_a_request() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        browser(&listener, "GET /castle HTTP/1.1\r\nHost: citadel\r\nUser-Agent: ferris\r\n\r\n");
+        let start = Instant::now();
+        let request = accept_one(&listener);
+        assert_eq!(request, vec!["GET /castle HTTP/1.1", "Host: citadel", "User-Agent: ferris"]);
+        assert!(
+            start.elapsed() < Duration::from_secs(1),
+            "stop reading at the empty line: the browser keeps the connection open"
+        );
+    }
+
+    #[test]
+    fn two_visitors() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        browser(&listener, "GET /a HTTP/1.1\r\n\r\n");
+        assert_eq!(accept_one(&listener), vec!["GET /a HTTP/1.1"]);
+        browser(&listener, "POST /b HTTP/1.1\r\nContent-Length: 0\r\n\r\n");
+        assert_eq!(accept_one(&listener), vec!["POST /b HTTP/1.1", "Content-Length: 0"]);
+    }
+}
+'''
+hints = [
+    "accept_one: `let (stream, _) = listener.accept().unwrap();` and pass `&stream` to read_request. read_request wraps the stream in `BufReader::new(stream)` and goes through its `.lines()`.",
+    "Each line is a `Result`, so `.map(|result| result.unwrap())`. Then `.take_while(|line| !line.is_empty())` stops at the empty line, and `.collect()` builds the Vec.",
+    "```rust\nfn read_request(stream: &TcpStream) -> Vec<String> {\n    BufReader::new(stream)\n        .lines()\n        .map(|result| result.unwrap())\n        .take_while(|line| !line.is_empty())\n        .collect()\n}\n\nfn accept_one(listener: &TcpListener) -> Vec<String> {\n    let (stream, _address) = listener.accept().unwrap();\n    read_request(&stream)\n}\n```",
+]
+
+[[level]]
+id = "23.2"
 title = "Sending a page back"
 kind = "fill"
 book = ["21.1"]
-about = "Write a response and serve an HTML page."
+xp = 55
+goal = "Answer each request: GET / gets hello.html with 200 OK, everything else gets 404.html with 404 NOT FOUND."
+lesson = '''
+An HTTP **response** looks like this:
 
-[[planned]]
+```text
+HTTP/1.1 200 OK\r\n                    <- status line
+Content-Length: 120\r\n                <- headers
+\r\n                                   <- empty line
+<!DOCTYPE html>...                     <- the body
+```
+
+Lines end with `\r\n` (carriage return + line feed). `Content-Length` is the size of the body **in bytes**, so the browser knows where it ends.
+
+```rust
+let status_line = "HTTP/1.1 200 OK";
+let contents = fs::read_to_string("hello.html").unwrap();
+let length = contents.len();
+
+let response = format!("{status_line}\r\nContent-Length: {length}\r\n\r\n{contents}");
+stream.write_all(response.as_bytes()).unwrap();
+```
+
+**Routing**: look at the first line of the request to choose what to send back. Only the exact request `GET / HTTP/1.1` gets the home page; anything else gets a "404 not found" page:
+
+```rust
+let (status_line, filename) = if request_line == "GET / HTTP/1.1" {
+    ("HTTP/1.1 200 OK", "hello.html")
+} else {
+    ("HTTP/1.1 404 NOT FOUND", "404.html")
+};
+```
+
+`hello.html` and `404.html` are next to your program.
+'''
+c_compare = '''
+The same as building the response with `snprintf` and `write()`-ing it to the socket, without worrying about the buffer size.
+'''
+py_compare = '''
+What frameworks like Flask do for you: pick a handler from the request line, then send a status line, headers and body.
+'''
+check = "tests"
+starter = '''
+use std::fs;
+use std::io::{BufRead, BufReader, Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::thread;
+
+/// A full HTTP response: status line, Content-Length header, empty line, body.
+fn response(status_line: &str, contents: &str) -> String {
+    todo!()
+}
+
+/// Which status line and file answer this request line.
+fn route(request_line: &str) -> (&'static str, &'static str) {
+    todo!()
+}
+
+/// Read the request line, pick the page, and send the response.
+fn handle_connection(mut stream: TcpStream) {
+    let request_line = BufReader::new(&stream).lines().next().unwrap().unwrap();
+    // TODO: route it, read the file, and write the response to the stream
+}
+
+fn main() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        handle_connection(stream);
+    });
+
+    let mut browser = TcpStream::connect(address).unwrap();
+    browser.write_all(b"GET / HTTP/1.1\r\n\r\n").unwrap();
+    let mut page = String::new();
+    browser.read_to_string(&mut page).unwrap();
+    println!("{page}");
+}
+'''
+solution = '''
+use std::fs;
+use std::io::{BufRead, BufReader, Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::thread;
+
+/// A full HTTP response: status line, Content-Length header, empty line, body.
+fn response(status_line: &str, contents: &str) -> String {
+    let length = contents.len();
+    format!("{status_line}\r\nContent-Length: {length}\r\n\r\n{contents}")
+}
+
+/// Which status line and file answer this request line.
+fn route(request_line: &str) -> (&'static str, &'static str) {
+    if request_line == "GET / HTTP/1.1" {
+        ("HTTP/1.1 200 OK", "hello.html")
+    } else {
+        ("HTTP/1.1 404 NOT FOUND", "404.html")
+    }
+}
+
+/// Read the request line, pick the page, and send the response.
+fn handle_connection(mut stream: TcpStream) {
+    let request_line = BufReader::new(&stream).lines().next().unwrap().unwrap();
+    let (status_line, filename) = route(&request_line);
+    let contents = fs::read_to_string(filename).unwrap();
+    stream.write_all(response(status_line, &contents).as_bytes()).unwrap();
+}
+
+fn main() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        handle_connection(stream);
+    });
+
+    let mut browser = TcpStream::connect(address).unwrap();
+    browser.write_all(b"GET / HTTP/1.1\r\n\r\n").unwrap();
+    let mut page = String::new();
+    browser.read_to_string(&mut page).unwrap();
+    println!("{page}");
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use super::*;
+
+    fn visit(request: &str) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            handle_connection(stream);
+        });
+        let mut browser = TcpStream::connect(address).unwrap();
+        browser.write_all(request.as_bytes()).unwrap();
+        let mut page = String::new();
+        browser.read_to_string(&mut page).unwrap();
+        server.join().unwrap();
+        page
+    }
+
+    #[test]
+    fn building_responses() {
+        assert_eq!(response("HTTP/1.1 200 OK", "hi"), "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi");
+        assert_eq!(response("HTTP/1.1 200 OK", ""), "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+        assert_eq!(response("X", "🦀").len(), "X\r\nContent-Length: 4\r\n\r\n🦀".len(), "the length counts bytes");
+    }
+
+    #[test]
+    fn routing() {
+        assert_eq!(route("GET / HTTP/1.1"), ("HTTP/1.1 200 OK", "hello.html"));
+        assert_eq!(route("GET /treasure HTTP/1.1"), ("HTTP/1.1 404 NOT FOUND", "404.html"));
+        assert_eq!(route("POST / HTTP/1.1"), ("HTTP/1.1 404 NOT FOUND", "404.html"));
+    }
+
+    #[test]
+    fn serving_pages() {
+        let hello = fs::read_to_string("hello.html").unwrap();
+        let page = visit("GET / HTTP/1.1\r\nHost: citadel\r\n\r\n");
+        assert_eq!(page, response("HTTP/1.1 200 OK", &hello));
+
+        let missing = fs::read_to_string("404.html").unwrap();
+        let page = visit("GET /dungeon HTTP/1.1\r\n\r\n");
+        assert_eq!(page, response("HTTP/1.1 404 NOT FOUND", &missing));
+    }
+}
+'''
+hints = [
+    "response is one `format!` with `\\r\\n` line endings, using `contents.len()` for the length. route is an `if request_line == \"GET / HTTP/1.1\"` returning a pair of string literals.",
+    "In handle_connection: `let (status_line, filename) = route(&request_line);`, then `fs::read_to_string(filename).unwrap()`, then `stream.write_all(response(status_line, &contents).as_bytes()).unwrap();`.",
+    "```rust\nfn response(status_line: &str, contents: &str) -> String {\n    let length = contents.len();\n    format!(\"{status_line}\\r\\nContent-Length: {length}\\r\\n\\r\\n{contents}\")\n}\n\nfn route(request_line: &str) -> (&'static str, &'static str) {\n    if request_line == \"GET / HTTP/1.1\" {\n        (\"HTTP/1.1 200 OK\", \"hello.html\")\n    } else {\n        (\"HTTP/1.1 404 NOT FOUND\", \"404.html\")\n    }\n}\n```",
+]
+
+[level.files]
+"hello.html" = '''
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Hello!</title>
+  </head>
+  <body>
+    <h1>Hello!</h1>
+    <p>Hi from Rust</p>
+  </body>
+</html>
+'''
+"404.html" = '''
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Hello!</title>
+  </head>
+  <body>
+    <h1>Oops!</h1>
+    <p>Sorry, I don't know what you're asking for.</p>
+  </body>
+</html>
+'''
+
+[[level]]
+id = "23.3"
 title = "The slow customer"
-kind = "predict"
+kind = "quiz"
 book = ["21.2"]
-about = "Why one slow request stalls a single-threaded server."
+xp = 20
+goal = "The server handles one connection at a time. Someone opens /sleep, which takes 5 seconds; a moment later, you open /. How long do you wait?"
+lesson = '''
+Our server handles connections in a simple loop:
 
-[[planned]]
+```rust
+for stream in listener.incoming() {
+    handle_connection(stream.unwrap());   // must finish before the next one starts
+}
+```
+
+Let's add a slow page, to stand in for any request that takes a while:
+
+```rust
+match &request_line[..] {
+    "GET / HTTP/1.1" => ("HTTP/1.1 200 OK", "hello.html"),
+    "GET /sleep HTTP/1.1" => {
+        thread::sleep(Duration::from_secs(5));
+        ("HTTP/1.1 200 OK", "hello.html")
+    }
+    _ => ("HTTP/1.1 404 NOT FOUND", "404.html"),
+}
+```
+
+Then open `/sleep` in one browser tab, and `/` in another right after.
+
+Ways out, from the book:
+
+- **A thread per request**: simple, but a flood of requests creates a flood of threads and can bring the server down.
+- **A thread pool**: a fixed number of worker threads wait for jobs. Requests queue up, and up to N are handled at once. That's what we'll build.
+- Others: fork/join, single-threaded async I/O, multithreaded async I/O (Chapter 17).
+'''
+c_compare = '''
+The classic iterative server from network programming books, before you add `fork()` or `pthread_create` per connection, or a worker pool.
+'''
+py_compare = '''
+Like Python's plain `socketserver.TCPServer`, which handles one request at a time, versus `ThreadingTCPServer`.
+'''
+choices = [
+    "Almost no time: the two requests don't affect each other",
+    "About 5 seconds: / waits in line until /sleep has been answered",
+    "About 10 seconds: each request now takes 5 seconds",
+    "Forever: the server deadlocks",
+]
+answer = 1
+explanation = "The loop handles one connection at a time. Your `/` request waits in the listener's queue until `/sleep` finishes its 5 seconds, and is then answered right away. One slow request blocks everyone behind it."
+
+[[level]]
+id = "23.4"
 title = "Hiring workers"
 kind = "fill"
 book = ["21.2"]
-about = "Build a thread pool with workers and channels."
+xp = 70
+goal = "Build a ThreadPool: a fixed number of worker threads that take jobs from a shared channel and run them."
+lesson = '''
+A **thread pool** starts its threads once, up front. Each **worker** waits for a job, runs it, and waits for the next.
 
-[[planned]]
+```rust
+let pool = ThreadPool::new(4);
+for stream in listener.incoming() {
+    let stream = stream.unwrap();
+    pool.execute(|| handle_connection(stream));
+}
+```
+
+How it fits together:
+
+```text
+              execute(job)
+ThreadPool ───── sender ─────> channel ──> Arc<Mutex<Receiver>>
+                                              │       │       │
+                                          Worker 0 Worker 1 Worker 2
+```
+
+- A **job** is a closure, boxed so different closures fit in one channel: `type Job = Box<dyn FnOnce() + Send + 'static>;`. `FnOnce`: it runs once. `Send`: it moves to another thread. `'static`: it may not borrow anything temporary.
+- There's only **one** receiver, shared by all workers: `Arc<Mutex<mpsc::Receiver<Job>>>`. A worker locks it to take the next job.
+- **`execute`** boxes the closure and sends it.
+
+Each worker's thread loops forever:
+
+```rust
+let thread = thread::spawn(move || loop {
+    let job = receiver.lock().unwrap().recv().unwrap();
+    job();
+});
+```
+
+Careful: `let job = ...;` releases the lock at the end of that statement, **before** the job runs, so other workers can take jobs meanwhile.
+
+`ThreadPool::new(0)` makes no sense, so it should panic (with `assert!`).
+'''
+c_compare = '''
+The classic pthreads worker pool: a queue protected by a mutex, and workers that block on it. The channel replaces the queue and condition variable.
+'''
+py_compare = '''
+This is what `concurrent.futures.ThreadPoolExecutor` does inside: a fixed set of threads taking callables from a shared queue.
+'''
+check = "tests"
+starter = '''
+use std::sync::{mpsc, Arc, Mutex};
+use std::thread;
+
+type Job = Box<dyn FnOnce() + Send + 'static>;
+
+pub struct ThreadPool {
+    workers: Vec<Worker>,
+    sender: mpsc::Sender<Job>,
+}
+
+impl ThreadPool {
+    /// Create a pool with `size` workers.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `size` is zero.
+    pub fn new(size: usize) -> ThreadPool {
+        todo!()
+    }
+
+    /// Run `f` on one of the workers.
+    pub fn execute<F>(&self, f: F)
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        todo!()
+    }
+}
+
+struct Worker {
+    id: usize,
+    thread: thread::JoinHandle<()>,
+}
+
+impl Worker {
+    /// Start a thread that keeps taking jobs from the receiver and running them.
+    fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
+        todo!()
+    }
+}
+
+fn main() {
+    let pool = ThreadPool::new(2);
+    let (tx, rx) = mpsc::channel();
+    for i in 0..4 {
+        let tx = tx.clone();
+        pool.execute(move || tx.send(i * i).unwrap());
+    }
+    drop(tx);
+    println!("{}", rx.iter().sum::<i32>());
+}
+'''
+solution = '''
+use std::sync::{mpsc, Arc, Mutex};
+use std::thread;
+
+type Job = Box<dyn FnOnce() + Send + 'static>;
+
+pub struct ThreadPool {
+    workers: Vec<Worker>,
+    sender: mpsc::Sender<Job>,
+}
+
+impl ThreadPool {
+    /// Create a pool with `size` workers.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `size` is zero.
+    pub fn new(size: usize) -> ThreadPool {
+        assert!(size > 0);
+
+        let (sender, receiver) = mpsc::channel();
+        let receiver = Arc::new(Mutex::new(receiver));
+
+        let mut workers = Vec::with_capacity(size);
+        for id in 0..size {
+            workers.push(Worker::new(id, Arc::clone(&receiver)));
+        }
+
+        ThreadPool { workers, sender }
+    }
+
+    /// Run `f` on one of the workers.
+    pub fn execute<F>(&self, f: F)
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        let job = Box::new(f);
+        self.sender.send(job).unwrap();
+    }
+}
+
+struct Worker {
+    id: usize,
+    thread: thread::JoinHandle<()>,
+}
+
+impl Worker {
+    /// Start a thread that keeps taking jobs from the receiver and running them.
+    fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
+        let thread = thread::spawn(move || loop {
+            let message = receiver.lock().unwrap().recv();
+            match message {
+                Ok(job) => job(),
+                Err(_) => break,
+            }
+        });
+        Worker { id, thread }
+    }
+}
+
+fn main() {
+    let pool = ThreadPool::new(2);
+    let (tx, rx) = mpsc::channel();
+    for i in 0..4 {
+        let tx = tx.clone();
+        pool.execute(move || tx.send(i * i).unwrap());
+    }
+    drop(tx);
+    println!("{}", rx.iter().sum::<i32>());
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use super::*;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn hires_the_right_number_of_workers() {
+        let pool = ThreadPool::new(4);
+        assert_eq!(pool.workers.len(), 4);
+        let ids: Vec<usize> = pool.workers.iter().map(|w| w.id).collect();
+        assert_eq!(ids, vec![0, 1, 2, 3]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn no_workers_is_a_mistake() {
+        ThreadPool::new(0);
+    }
+
+    #[test]
+    fn runs_every_job() {
+        let pool = ThreadPool::new(3);
+        let (tx, rx) = mpsc::channel();
+        for i in 1..=8 {
+            let tx = tx.clone();
+            pool.execute(move || tx.send(i).unwrap());
+        }
+        drop(tx);
+        let mut got: Vec<i32> = rx.iter().take(8).collect();
+        got.sort();
+        assert_eq!(got, (1..=8).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn workers_run_side_by_side() {
+        let pool = ThreadPool::new(4);
+        let (tx, rx) = mpsc::channel();
+        let start = Instant::now();
+        for _ in 0..4 {
+            let tx = tx.clone();
+            pool.execute(move || {
+                thread::sleep(Duration::from_millis(200));
+                tx.send(()).unwrap();
+            });
+        }
+        for _ in 0..4 {
+            rx.recv_timeout(Duration::from_secs(2)).expect("a job never finished");
+        }
+        let took = start.elapsed();
+        assert!(took < Duration::from_millis(500), "took {took:?}: 4 workers should run 4 jobs at once");
+    }
+}
+'''
+hints = [
+    "new: `assert!(size > 0)`, make a channel, wrap the receiver in `Arc::new(Mutex::new(receiver))`, and create `size` workers, each with an `Arc::clone` of it. execute: `self.sender.send(Box::new(f)).unwrap()`.",
+    "Worker::new spawns a thread with `thread::spawn(move || loop { ... })`. Inside: `let job = receiver.lock().unwrap().recv().unwrap();` then `job();`. Return `Worker { id, thread }`.",
+    "```rust\npub fn new(size: usize) -> ThreadPool {\n    assert!(size > 0);\n    let (sender, receiver) = mpsc::channel();\n    let receiver = Arc::new(Mutex::new(receiver));\n    let mut workers = Vec::with_capacity(size);\n    for id in 0..size {\n        workers.push(Worker::new(id, Arc::clone(&receiver)));\n    }\n    ThreadPool { workers, sender }\n}\n\nfn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {\n    let thread = thread::spawn(move || loop {\n        let job = receiver.lock().unwrap().recv().unwrap();\n        job();\n    });\n    Worker { id, thread }\n}\n```",
+]
+
+[[level]]
+id = "23.5"
 title = "Closing time"
 kind = "fix"
 book = ["21.3"]
-about = "Shut the server down cleanly with Drop."
+xp = 65
+goal = "Give the ThreadPool a clean shutdown: when it's dropped, it must finish the jobs already sent, stop every worker, and wait for them."
+lesson = '''
+When the pool is dropped, its worker threads should finish what they're doing and stop, and the drop should **wait** for them. Otherwise the program may exit halfway through answering a request.
 
-[[planned]]
+The first attempt doesn't compile:
+
+```rust
+impl Drop for ThreadPool {
+    fn drop(&mut self) {
+        for worker in &mut self.workers {
+            worker.thread.join().unwrap();   // error[E0507]: cannot move out of `worker.thread`
+        }
+    }
+}
+```
+
+`join` takes the `JoinHandle` by value, but `drop` only has `&mut self`. Take the workers **out** of the Vec instead: `self.workers.drain(..)` hands them over one by one, by value.
+
+Even then, the workers loop forever waiting for jobs, so `join` would wait forever. They need a signal to stop. **Dropping the sender** is that signal: once no sender is left, `recv()` returns `Err`, and the worker can `break` out of its loop:
+
+```rust
+pub struct ThreadPool {
+    workers: Vec<Worker>,
+    sender: Option<mpsc::Sender<Job>>,   // an Option, so drop can take it
+}
+
+fn drop(&mut self) {
+    drop(self.sender.take());            // close the channel
+    for worker in self.workers.drain(..) {
+        worker.thread.join().unwrap();   // wait for each worker to finish
+    }
+}
+```
+
+In the worker:
+
+```rust
+match receiver.lock().unwrap().recv() {
+    Ok(job) => job(),
+    Err(_) => break,      // the pool is shutting down
+}
+```
+
+Jobs already in the channel are still handed out before `recv` reports the end, so no work is lost.
+'''
+c_compare = '''
+The pthreads version: set a "shutting down" flag, signal the condition variable, and `pthread_join` every worker. Here closing the channel is the flag, and Drop makes sure it happens.
+'''
+py_compare = '''
+Like `executor.shutdown(wait=True)`, except it runs automatically when the pool goes out of scope.
+'''
+check = "tests"
+starter = '''
+use std::sync::{mpsc, Arc, Mutex};
+use std::thread;
+
+type Job = Box<dyn FnOnce() + Send + 'static>;
+
+pub struct ThreadPool {
+    workers: Vec<Worker>,
+    sender: mpsc::Sender<Job>,
+}
+
+impl ThreadPool {
+    pub fn new(size: usize) -> ThreadPool {
+        assert!(size > 0);
+        let (sender, receiver) = mpsc::channel();
+        let receiver = Arc::new(Mutex::new(receiver));
+        let mut workers = Vec::with_capacity(size);
+        for id in 0..size {
+            workers.push(Worker::new(id, Arc::clone(&receiver)));
+        }
+        ThreadPool { workers, sender }
+    }
+
+    pub fn execute<F>(&self, f: F)
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        self.sender.send(Box::new(f)).unwrap();
+    }
+}
+
+impl Drop for ThreadPool {
+    fn drop(&mut self) {
+        for worker in &mut self.workers {
+            println!("Shutting down worker {}", worker.id);
+            worker.thread.join().unwrap();
+        }
+    }
+}
+
+struct Worker {
+    id: usize,
+    thread: thread::JoinHandle<()>,
+}
+
+impl Worker {
+    fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
+        let thread = thread::spawn(move || loop {
+            let job = receiver.lock().unwrap().recv().unwrap();
+            job();
+        });
+        Worker { id, thread }
+    }
+}
+
+fn main() {
+    let pool = ThreadPool::new(2);
+    for i in 0..3 {
+        pool.execute(move || println!("job {i} done"));
+    }
+    drop(pool);
+    println!("all workers have gone home");
+}
+'''
+solution = '''
+use std::sync::{mpsc, Arc, Mutex};
+use std::thread;
+
+type Job = Box<dyn FnOnce() + Send + 'static>;
+
+pub struct ThreadPool {
+    workers: Vec<Worker>,
+    sender: Option<mpsc::Sender<Job>>,
+}
+
+impl ThreadPool {
+    pub fn new(size: usize) -> ThreadPool {
+        assert!(size > 0);
+        let (sender, receiver) = mpsc::channel();
+        let receiver = Arc::new(Mutex::new(receiver));
+        let mut workers = Vec::with_capacity(size);
+        for id in 0..size {
+            workers.push(Worker::new(id, Arc::clone(&receiver)));
+        }
+        ThreadPool { workers, sender: Some(sender) }
+    }
+
+    pub fn execute<F>(&self, f: F)
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        self.sender.as_ref().unwrap().send(Box::new(f)).unwrap();
+    }
+}
+
+impl Drop for ThreadPool {
+    fn drop(&mut self) {
+        drop(self.sender.take());
+        for worker in self.workers.drain(..) {
+            println!("Shutting down worker {}", worker.id);
+            worker.thread.join().unwrap();
+        }
+    }
+}
+
+struct Worker {
+    id: usize,
+    thread: thread::JoinHandle<()>,
+}
+
+impl Worker {
+    fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
+        let thread = thread::spawn(move || loop {
+            let message = receiver.lock().unwrap().recv();
+            match message {
+                Ok(job) => job(),
+                Err(_) => break,
+            }
+        });
+        Worker { id, thread }
+    }
+}
+
+fn main() {
+    let pool = ThreadPool::new(2);
+    for i in 0..3 {
+        pool.execute(move || println!("job {i} done"));
+    }
+    drop(pool);
+    println!("all workers have gone home");
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::time::Duration;
+
+    #[test]
+    fn drop_finishes_every_job() {
+        let done = Arc::new(AtomicUsize::new(0));
+        let pool = ThreadPool::new(3);
+        for _ in 0..6 {
+            let done = Arc::clone(&done);
+            pool.execute(move || {
+                thread::sleep(Duration::from_millis(50));
+                done.fetch_add(1, Ordering::SeqCst);
+            });
+        }
+        drop(pool);
+        assert_eq!(done.load(Ordering::SeqCst), 6, "dropping the pool must wait for every job");
+    }
+
+    #[test]
+    fn workers_really_stop() {
+        let pool = ThreadPool::new(2);
+        let (tx, rx) = mpsc::channel();
+        let handle = thread::spawn(move || {
+            drop(pool);
+            tx.send(()).unwrap();
+        });
+        rx.recv_timeout(Duration::from_secs(2))
+            .expect("drop never finished: do the workers know when to stop?");
+        handle.join().unwrap();
+    }
+}
+'''
+hints = [
+    "Two problems. Drop can't move `worker.thread` out of a borrowed Vec (use `self.workers.drain(..)`), and the workers never stop, so joining them waits forever.",
+    "Make the field `sender: Option<mpsc::Sender<Job>>` (with `Some(sender)` in new and `self.sender.as_ref().unwrap()` in execute). In drop, first `drop(self.sender.take());`. In the worker, `match` on `recv()` and `break` on `Err`.",
+    "```rust\nimpl Drop for ThreadPool {\n    fn drop(&mut self) {\n        drop(self.sender.take());\n        for worker in self.workers.drain(..) {\n            println!(\"Shutting down worker {}\", worker.id);\n            worker.thread.join().unwrap();\n        }\n    }\n}\n\n// in Worker::new:\nlet thread = thread::spawn(move || loop {\n    let message = receiver.lock().unwrap().recv();\n    match message {\n        Ok(job) => job(),\n        Err(_) => break,\n    }\n});\n```",
+]
+
+[[level]]
+id = "23.6"
 title = "FINAL BOSS: The web server"
 kind = "boss"
 book = ["21.1", "21.2", "21.3"]
-about = "A working multithreaded web server. You're a Rustacean!"
+xp = 200
+goal = '''Build the whole multithreaded web server: a thread pool with a clean shutdown, routes for /, /sleep and 404,
+and a serve function that answers a fixed number of requests and then shuts down gracefully.'''
+lesson = '''
+**Final boss!** Everything from this island, in one program.
+
+1. **`ThreadPool`**: `new` (panics on 0), `execute`, and a `Drop` that closes the channel and joins every worker.
+2. **`route(request_line)`** → `(status line, file name)`:
+   - `GET / HTTP/1.1` → `HTTP/1.1 200 OK`, `hello.html`
+   - `GET /sleep HTTP/1.1` → the same, but **sleep 300 ms first** (a slow page)
+   - anything else → `HTTP/1.1 404 NOT FOUND`, `404.html`
+3. **`handle_connection(stream)`**: read the request line, route it, read the file, and write the response (status line, `Content-Length`, empty line, body).
+4. **`serve(listener, workers, max_requests)`**: make a pool, hand each of the first `max_requests` connections to it (`listener.incoming().take(n)`), and then return, after **every** request has been answered. (That's the pool's Drop, at the end of the function.)
+
+The tests act as browsers. While three `/sleep` requests are being handled, a request for `/` must be answered right away, and `serve` must not return until every answer has been sent.
+
+When it all passes, you've built a real web server from scratch, with only the standard library. You're a Rustacean! 🦀
+'''
+c_compare = '''
+A pthreads web server in C is hundreds of lines with many ways to leak or race. Yours is short, and the compiler checked every shared value.
+'''
+py_compare = '''
+What `http.server.ThreadingHTTPServer` does, built yourself from sockets, threads, channels and a mutex, with no garbage collector.
+'''
+check = "tests"
+starter = '''
+use std::fs;
+use std::io::{BufRead, BufReader, Write};
+use std::net::{TcpListener, TcpStream};
+use std::sync::{mpsc, Arc, Mutex};
+use std::thread;
+use std::time::Duration;
+
+type Job = Box<dyn FnOnce() + Send + 'static>;
+
+pub struct ThreadPool {
+    workers: Vec<Worker>,
+    sender: Option<mpsc::Sender<Job>>,
+}
+
+impl ThreadPool {
+    pub fn new(size: usize) -> ThreadPool {
+        todo!()
+    }
+
+    pub fn execute<F>(&self, f: F)
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        todo!()
+    }
+}
+
+// TODO: impl Drop for ThreadPool
+
+struct Worker {
+    id: usize,
+    thread: thread::JoinHandle<()>,
+}
+
+impl Worker {
+    fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
+        todo!()
+    }
+}
+
+/// The status line and file for a request line. /sleep waits 300 ms first.
+fn route(request_line: &str) -> (&'static str, &'static str) {
+    todo!()
+}
+
+/// Answer one browser.
+fn handle_connection(mut stream: TcpStream) {
+    todo!()
+}
+
+/// Answer the first `max_requests` connections with `workers` threads,
+/// then shut down cleanly.
+pub fn serve(listener: TcpListener, workers: usize, max_requests: usize) {
+    todo!()
+}
+
+fn main() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    println!("Listening on http://{address}");
+    let server = thread::spawn(move || serve(listener, 4, 1));
+
+    // A pretend browser asks for the home page.
+    let mut browser = TcpStream::connect(address).unwrap();
+    browser.write_all(b"GET / HTTP/1.1\r\n\r\n").unwrap();
+    let mut page = String::new();
+    std::io::Read::read_to_string(&mut browser, &mut page).unwrap();
+    println!("{page}");
+
+    server.join().unwrap();
+    println!("Shutting down.");
+}
+'''
+solution = '''
+use std::fs;
+use std::io::{BufRead, BufReader, Write};
+use std::net::{TcpListener, TcpStream};
+use std::sync::{mpsc, Arc, Mutex};
+use std::thread;
+use std::time::Duration;
+
+type Job = Box<dyn FnOnce() + Send + 'static>;
+
+pub struct ThreadPool {
+    workers: Vec<Worker>,
+    sender: Option<mpsc::Sender<Job>>,
+}
+
+impl ThreadPool {
+    pub fn new(size: usize) -> ThreadPool {
+        assert!(size > 0);
+        let (sender, receiver) = mpsc::channel();
+        let receiver = Arc::new(Mutex::new(receiver));
+        let mut workers = Vec::with_capacity(size);
+        for id in 0..size {
+            workers.push(Worker::new(id, Arc::clone(&receiver)));
+        }
+        ThreadPool { workers, sender: Some(sender) }
+    }
+
+    pub fn execute<F>(&self, f: F)
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        self.sender.as_ref().unwrap().send(Box::new(f)).unwrap();
+    }
+}
+
+impl Drop for ThreadPool {
+    fn drop(&mut self) {
+        drop(self.sender.take());
+        for worker in self.workers.drain(..) {
+            worker.thread.join().unwrap();
+        }
+    }
+}
+
+struct Worker {
+    id: usize,
+    thread: thread::JoinHandle<()>,
+}
+
+impl Worker {
+    fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
+        let thread = thread::spawn(move || loop {
+            let message = receiver.lock().unwrap().recv();
+            match message {
+                Ok(job) => job(),
+                Err(_) => break,
+            }
+        });
+        Worker { id, thread }
+    }
+}
+
+/// The status line and file for a request line. /sleep waits 300 ms first.
+fn route(request_line: &str) -> (&'static str, &'static str) {
+    match request_line {
+        "GET / HTTP/1.1" => ("HTTP/1.1 200 OK", "hello.html"),
+        "GET /sleep HTTP/1.1" => {
+            thread::sleep(Duration::from_millis(300));
+            ("HTTP/1.1 200 OK", "hello.html")
+        }
+        _ => ("HTTP/1.1 404 NOT FOUND", "404.html"),
+    }
+}
+
+/// Answer one browser.
+fn handle_connection(mut stream: TcpStream) {
+    let request_line = match BufReader::new(&stream).lines().next() {
+        Some(Ok(line)) => line,
+        _ => return,
+    };
+    let (status_line, filename) = route(&request_line);
+    let contents = fs::read_to_string(filename).unwrap();
+    let length = contents.len();
+    let response = format!("{status_line}\r\nContent-Length: {length}\r\n\r\n{contents}");
+    stream.write_all(response.as_bytes()).unwrap();
+}
+
+/// Answer the first `max_requests` connections with `workers` threads,
+/// then shut down cleanly.
+pub fn serve(listener: TcpListener, workers: usize, max_requests: usize) {
+    let pool = ThreadPool::new(workers);
+    for stream in listener.incoming().take(max_requests) {
+        let stream = stream.unwrap();
+        pool.execute(|| handle_connection(stream));
+    }
+}
+
+fn main() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    println!("Listening on http://{address}");
+    let server = thread::spawn(move || serve(listener, 4, 1));
+
+    // A pretend browser asks for the home page.
+    let mut browser = TcpStream::connect(address).unwrap();
+    browser.write_all(b"GET / HTTP/1.1\r\n\r\n").unwrap();
+    let mut page = String::new();
+    std::io::Read::read_to_string(&mut browser, &mut page).unwrap();
+    println!("{page}");
+
+    server.join().unwrap();
+    println!("Shutting down.");
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use super::*;
+    use std::io::Read;
+    use std::net::SocketAddr;
+    use std::time::Instant;
+
+    fn start(workers: usize, max_requests: usize) -> (SocketAddr, thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || serve(listener, workers, max_requests));
+        (address, server)
+    }
+
+    fn get(address: SocketAddr, path: &str) -> String {
+        let mut browser = TcpStream::connect(address).unwrap();
+        browser.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+        browser
+            .write_all(format!("GET {path} HTTP/1.1\r\nHost: citadel\r\n\r\n").as_bytes())
+            .unwrap();
+        let mut page = String::new();
+        browser.read_to_string(&mut page).unwrap();
+        page
+    }
+
+    fn expected(status: &str, file: &str) -> String {
+        let contents = fs::read_to_string(file).unwrap();
+        format!("{status}\r\nContent-Length: {}\r\n\r\n{contents}", contents.len())
+    }
+
+    #[test]
+    #[should_panic]
+    fn a_pool_needs_workers() {
+        ThreadPool::new(0);
+    }
+
+    #[test]
+    fn routes() {
+        let (address, server) = start(2, 2);
+        assert_eq!(get(address, "/"), expected("HTTP/1.1 200 OK", "hello.html"));
+        assert_eq!(get(address, "/vault"), expected("HTTP/1.1 404 NOT FOUND", "404.html"));
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn slow_pages_dont_block_fast_ones() {
+        let (address, server) = start(4, 4);
+        let sleepers: Vec<_> = (0..3).map(|_| thread::spawn(move || get(address, "/sleep"))).collect();
+        thread::sleep(Duration::from_millis(50));
+        let start = Instant::now();
+        let home = get(address, "/");
+        let took = start.elapsed();
+        assert_eq!(home, expected("HTTP/1.1 200 OK", "hello.html"));
+        assert!(took < Duration::from_millis(200), "/ took {took:?}: it waited for the slow pages");
+        for s in sleepers {
+            assert_eq!(s.join().unwrap(), expected("HTTP/1.1 200 OK", "hello.html"));
+        }
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn graceful_shutdown() {
+        let (address, server) = start(2, 2);
+        let a = thread::spawn(move || get(address, "/sleep"));
+        let b = thread::spawn(move || get(address, "/sleep"));
+        let start = Instant::now();
+        server.join().unwrap();
+        assert!(
+            start.elapsed() >= Duration::from_millis(250),
+            "serve returned before the slow requests were answered"
+        );
+        assert!(a.join().unwrap().starts_with("HTTP/1.1 200 OK"));
+        assert!(b.join().unwrap().starts_with("HTTP/1.1 200 OK"));
+    }
+}
+'''
+hints = [
+    "Start with the ThreadPool from the last two levels: `new` with `assert!`, a shared `Arc<Mutex<Receiver>>`, workers that `break` when `recv` fails, and a Drop that takes the sender and drains the workers. Then route (a `match` on the request line) and handle_connection (from 23.2).",
+    "serve: `let pool = ThreadPool::new(workers);` then `for stream in listener.incoming().take(max_requests) { let stream = stream.unwrap(); pool.execute(|| handle_connection(stream)); }`. The pool is dropped when serve ends, which waits for every request.",
+    "```rust\nfn route(request_line: &str) -> (&'static str, &'static str) {\n    match request_line {\n        \"GET / HTTP/1.1\" => (\"HTTP/1.1 200 OK\", \"hello.html\"),\n        \"GET /sleep HTTP/1.1\" => {\n            thread::sleep(Duration::from_millis(300));\n            (\"HTTP/1.1 200 OK\", \"hello.html\")\n        }\n        _ => (\"HTTP/1.1 404 NOT FOUND\", \"404.html\"),\n    }\n}\n\npub fn serve(listener: TcpListener, workers: usize, max_requests: usize) {\n    let pool = ThreadPool::new(workers);\n    for stream in listener.incoming().take(max_requests) {\n        let stream = stream.unwrap();\n        pool.execute(|| handle_connection(stream));\n    }\n}\n```",
+]
+
+[level.files]
+"hello.html" = '''
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Hello!</title>
+  </head>
+  <body>
+    <h1>Hello!</h1>
+    <p>Hi from Rust</p>
+  </body>
+</html>
+'''
+"404.html" = '''
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Hello!</title>
+  </head>
+  <body>
+    <h1>Oops!</h1>
+    <p>Sorry, I don't know what you're asking for.</p>
+  </body>
+</html>
+'''

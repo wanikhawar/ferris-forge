@@ -2,40 +2,707 @@ id = 19
 name = "Thread Volcano"
 blurb = "Doing many things at once, safely."
 
-# Placeholder island: these levels are planned but not built yet.
-
-[[planned]]
+[[level]]
+id = "19.1"
 title = "Two things at once"
 kind = "fill"
 book = ["16.1"]
-about = "Start threads and wait for them with join."
+xp = 50
+goal = "Split the work across threads: add up each half of a list on its own thread, and greet everyone from their own thread."
+lesson = '''
+A **thread** runs code at the same time as the rest of your program. Start one with `thread::spawn` and a closure:
 
-[[planned]]
+```rust
+use std::thread;
+
+let handle = thread::spawn(|| {
+    println!("hi from the new thread");
+    42                                   // the thread's result
+});
+
+let answer = handle.join().unwrap();     // wait for it to finish: 42
+```
+
+- `spawn` returns a **`JoinHandle`**. Calling **`join`** waits for the thread and gives back its result (in a `Result`, which is `Err` if the thread panicked).
+- If `main` ends first, every other thread is stopped, finished or not.
+- Threads run in an **unpredictable order**. Never rely on one finishing before another unless you `join` it.
+
+A thread may outlive the function that started it, so it can't borrow that function's local variables. Use **`move`** to give the closure ownership of what it uses:
+
+```rust
+let v = vec![1, 2, 3];
+let handle = thread::spawn(move || v.iter().sum::<i32>());   // v moves into the thread
+```
+'''
+c_compare = '''
+`thread::spawn` + `join` is `pthread_create` + `pthread_join`, but the result comes back typed (no `void*`), and the compiler stops you from sharing a local that could disappear.
+'''
+py_compare = '''
+Like `threading.Thread(target=...).start()` and `.join()`, except Rust threads run truly in parallel (no GIL) and can return a value directly.
+'''
+check = "tests"
+starter = '''
+use std::thread;
+
+/// Add up the first half on one new thread and the second half on another, then
+/// combine the two results.
+fn sum_in_halves(numbers: Vec<u64>) -> u64 {
+    let middle = numbers.len() / 2;
+    let first: Vec<u64> = numbers[..middle].to_vec();
+    let second: Vec<u64> = numbers[middle..].to_vec();
+    // TODO: spawn two threads (one per half), join both, and add the results
+    todo!()
+}
+
+/// Start one thread per name. Each thread returns "Hello from <name>!".
+/// Return the greetings in the same order as the names.
+fn greet_all(names: Vec<String>) -> Vec<String> {
+    todo!()
+}
+
+fn main() {
+    println!("{}", sum_in_halves((1..=10).collect()));
+}
+'''
+solution = '''
+use std::thread;
+
+/// Add up the first half on one new thread and the second half on another, then
+/// combine the two results.
+fn sum_in_halves(numbers: Vec<u64>) -> u64 {
+    let middle = numbers.len() / 2;
+    let first: Vec<u64> = numbers[..middle].to_vec();
+    let second: Vec<u64> = numbers[middle..].to_vec();
+    let a = thread::spawn(move || first.iter().sum::<u64>());
+    let b = thread::spawn(move || second.iter().sum::<u64>());
+    a.join().unwrap() + b.join().unwrap()
+}
+
+/// Start one thread per name. Each thread returns "Hello from <name>!".
+/// Return the greetings in the same order as the names.
+fn greet_all(names: Vec<String>) -> Vec<String> {
+    let handles: Vec<_> = names
+        .into_iter()
+        .map(|name| thread::spawn(move || format!("Hello from {name}!")))
+        .collect();
+    handles.into_iter().map(|h| h.join().unwrap()).collect()
+}
+
+fn main() {
+    println!("{}", sum_in_halves((1..=10).collect()));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use super::*;
+
+    #[test]
+    fn halves() {
+        assert_eq!(sum_in_halves((1..=10).collect()), 55);
+        assert_eq!(sum_in_halves(vec![7]), 7);
+        assert_eq!(sum_in_halves(vec![]), 0);
+        assert_eq!(sum_in_halves((1..=100_000).collect()), 5_000_050_000);
+    }
+
+    #[test]
+    fn greetings_in_order() {
+        let names: Vec<String> = ["Ferris", "Corro", "Bonnie"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(
+            greet_all(names),
+            vec!["Hello from Ferris!", "Hello from Corro!", "Hello from Bonnie!"]
+        );
+    }
+}
+'''
+hints = [
+    "Each thread needs to own its half: `thread::spawn(move || first.iter().sum::<u64>())`. Keep the handles and call `.join().unwrap()` on each.",
+    "For greet_all, first start **all** the threads (collect the handles into a Vec), then join them in order. Joining right after each spawn would make them run one at a time.",
+    "```rust\nlet a = thread::spawn(move || first.iter().sum::<u64>());\nlet b = thread::spawn(move || second.iter().sum::<u64>());\na.join().unwrap() + b.join().unwrap()\n\n// greet_all:\nlet handles: Vec<_> = names\n    .into_iter()\n    .map(|name| thread::spawn(move || format!(\"Hello from {name}!\")))\n    .collect();\nhandles.into_iter().map(|h| h.join().unwrap()).collect()\n```",
+]
+
+[[level]]
+id = "19.2"
 title = "Passing notes"
 kind = "fill"
 book = ["16.2"]
-about = "Send messages between threads with channels."
+xp = 55
+goal = "Send messages between threads through channels: one sender first, then several."
+lesson = '''
+> Do not communicate by sharing memory; instead, share memory by communicating.
 
-[[planned]]
+A **channel** is a one-way pipe between threads. `mpsc` stands for *multiple producer, single consumer*: many senders, one receiver.
+
+```rust
+use std::sync::mpsc;
+
+let (tx, rx) = mpsc::channel();
+
+thread::spawn(move || {
+    tx.send(String::from("hi")).unwrap();   // the String moves into the channel
+});
+
+let msg = rx.recv().unwrap();               // waits for a message
+```
+
+- `send` **moves** the value: the sending thread can't use it afterwards. No sharing, no races.
+- `recv()` waits for the next message. It returns `Err` once **every sender is gone** and the channel is empty.
+- The receiver is also an iterator: `for msg in rx { ... }` runs until all senders are dropped.
+
+More producers? Clone the sender: `let tx2 = tx.clone();`.
+
+⚠ A loop over `rx` only ends when **every** `tx` is dropped, including the original one in `main`. If you clone it for each thread, `drop(tx)` the original yourself, or the loop waits forever.
+'''
+c_compare = '''
+Like a thread-safe queue (a pipe between threads) with the locking built in, and ownership of each message handed over with it.
+'''
+py_compare = '''
+Like `queue.Queue` between threads, except the channel knows when every sender is gone and ends the loop by itself.
+'''
+check = "tests"
+starter = '''
+use std::sync::mpsc;
+use std::thread;
+
+/// A helper thread sends each word in capitals through a channel.
+/// Collect what arrives, in order.
+fn shout_through_channel(words: Vec<String>) -> Vec<String> {
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        // TODO: send each word, uppercased
+    });
+    // TODO: receive every message
+    vec![]
+}
+
+/// Start `workers` threads. Worker number i (0, 1, 2, ...) sends i * 10.
+/// Add up everything that arrives.
+fn total_from_workers(workers: u32) -> u32 {
+    todo!()
+}
+
+fn main() {
+    println!("{:?}", shout_through_channel(vec!["hi".to_string(), "there".to_string()]));
+}
+'''
+solution = '''
+use std::sync::mpsc;
+use std::thread;
+
+/// A helper thread sends each word in capitals through a channel.
+/// Collect what arrives, in order.
+fn shout_through_channel(words: Vec<String>) -> Vec<String> {
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        for word in words {
+            tx.send(word.to_uppercase()).unwrap();
+        }
+    });
+    rx.iter().collect()
+}
+
+/// Start `workers` threads. Worker number i (0, 1, 2, ...) sends i * 10.
+/// Add up everything that arrives.
+fn total_from_workers(workers: u32) -> u32 {
+    let (tx, rx) = mpsc::channel();
+    for i in 0..workers {
+        let tx = tx.clone();
+        thread::spawn(move || {
+            tx.send(i * 10).unwrap();
+        });
+    }
+    drop(tx);
+    rx.iter().sum()
+}
+
+fn main() {
+    println!("{:?}", shout_through_channel(vec!["hi".to_string(), "there".to_string()]));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use super::*;
+
+    #[test]
+    fn one_sender() {
+        let words = vec!["hot".to_string(), "lava".to_string(), "ahead".to_string()];
+        assert_eq!(shout_through_channel(words), vec!["HOT", "LAVA", "AHEAD"]);
+        assert!(shout_through_channel(vec![]).is_empty());
+    }
+
+    #[test]
+    fn many_senders() {
+        assert_eq!(total_from_workers(4), 60);
+        assert_eq!(total_from_workers(1), 0);
+        assert_eq!(total_from_workers(10), 450);
+    }
+}
+'''
+hints = [
+    "In the helper thread: `for word in words { tx.send(word.to_uppercase()).unwrap(); }`. In the main thread, the receiver is an iterator: `rx.iter().collect()` gathers everything until the sender hangs up.",
+    "For the workers: clone `tx` for each thread (`let tx = tx.clone();` before `thread::spawn(move || ...)`). Then **drop the original** `tx`, or `rx.iter()` waits forever. Finish with `rx.iter().sum()`.",
+    "```rust\nlet (tx, rx) = mpsc::channel();\nfor i in 0..workers {\n    let tx = tx.clone();\n    thread::spawn(move || {\n        tx.send(i * 10).unwrap();\n    });\n}\ndrop(tx);\nrx.iter().sum()\n```",
+]
+
+[[level]]
+id = "19.3"
 title = "One at a time, please"
 kind = "fix"
 book = ["16.3"]
-about = "Lock shared data with a Mutex."
+xp = 45
+goal = '''This program freezes forever. Fix it so it prints:
+score = 15'''
+lesson = '''
+Sometimes threads really do need the same data. A **`Mutex<T>`** (mutual exclusion) guards it, so only one thread at a time can get in:
 
-[[planned]]
+```rust
+use std::sync::Mutex;
+
+let m = Mutex::new(5);
+{
+    let mut num = m.lock().unwrap();   // wait for the lock, then get access
+    *num = 6;
+}                                      // num goes out of scope: the lock is released
+println!("m = {m:?}");
+```
+
+- `lock()` waits until no one else holds the lock, and returns a **`MutexGuard`**, which works like a `&mut` to the data.
+- The lock is released when the guard is **dropped**, at the end of its scope (or with `drop(guard)`).
+- `lock()` returns a `Result`: it's `Err` if another thread panicked while holding the lock.
+
+The classic bug: asking for a lock you're still holding. The second `lock()` waits for the first guard to be dropped... which never happens. That's a **deadlock**, and Rust can't detect it at compile time.
+'''
+c_compare = '''
+`lock()` is `pthread_mutex_lock`, but the unlock is automatic when the guard goes away, and the data can only be reached through the lock: you can't forget to take it.
+'''
+py_compare = '''
+Like `with lock:`. The difference: in Rust the data lives *inside* the Mutex, so touching it without the lock doesn't compile.
+'''
+check = "output"
+expected_output = "score = 15"
+starter = '''
+use std::sync::Mutex;
+
+fn main() {
+    let score = Mutex::new(0);
+
+    let mut first = score.lock().unwrap();
+    *first += 10;
+
+    let mut second = score.lock().unwrap();
+    *second += 5;
+
+    println!("score = {}", *score.lock().unwrap());
+}
+'''
+solution = '''
+use std::sync::Mutex;
+
+fn main() {
+    let score = Mutex::new(0);
+
+    {
+        let mut first = score.lock().unwrap();
+        *first += 10;
+    }
+
+    {
+        let mut second = score.lock().unwrap();
+        *second += 5;
+    }
+
+    println!("score = {}", *score.lock().unwrap());
+}
+'''
+hints = [
+    "`first` is still alive (still holding the lock) when `second` asks for it. A guard only lets go when it's dropped.",
+    "Put each guard in its own `{ ... }` block, or call `drop(first);` before locking again (and the same for `second` before the print).",
+    "```rust\n{\n    let mut first = score.lock().unwrap();\n    *first += 10;\n}\n{\n    let mut second = score.lock().unwrap();\n    *second += 5;\n}\n```",
+]
+
+[[level]]
+id = "19.4"
 title = "Sharing across threads"
 kind = "fill"
 book = ["16.3"]
-about = "Arc<Mutex<T>> for data that many threads use."
+xp = 60
+goal = "Count with many threads at once using Arc<Mutex<T>>, and tally words from several threads into one shared HashMap."
+lesson = '''
+To share a `Mutex` between threads, each thread needs to **own** a handle to it. Several owners sounds like `Rc`... but `Rc` isn't safe across threads: its count isn't updated atomically.
 
-[[planned]]
+**`Arc<T>`** (atomically reference counted) is the thread-safe `Rc`:
+
+```rust
+use std::sync::{Arc, Mutex};
+use std::thread;
+
+let counter = Arc::new(Mutex::new(0));
+let mut handles = vec![];
+
+for _ in 0..10 {
+    let counter = Arc::clone(&counter);       // one owner per thread
+    let handle = thread::spawn(move || {
+        let mut num = counter.lock().unwrap();
+        *num += 1;
+    });
+    handles.push(handle);
+}
+
+for handle in handles {
+    handle.join().unwrap();
+}
+println!("Result: {}", *counter.lock().unwrap());   // 10
+```
+
+| Single thread | Many threads |
+|---|---|
+| `Rc<T>` | `Arc<T>` |
+| `RefCell<T>` | `Mutex<T>` |
+
+`Arc<Mutex<T>>` is to threads what `Rc<RefCell<T>>` is to one thread.
+'''
+c_compare = '''
+Like a heap-allocated struct with a `pthread_mutex_t` and an atomic refcount, freed by the last thread to let go. Rust builds that for you, and won't compile code that touches the data without the lock.
+'''
+py_compare = '''
+Python objects are shared between threads by default and protected (partly) by the GIL. Rust makes sharing explicit: `Arc` for owning, `Mutex` for changing.
+'''
+check = "tests"
+starter = '''
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::thread;
+
+/// Start `threads` threads; each adds 1 to a shared counter `per_thread` times.
+/// Wait for them all and return the final count.
+fn count_with_threads(threads: usize, per_thread: usize) -> usize {
+    todo!()
+}
+
+/// One thread per line of text. Each thread counts the words in its line into
+/// ONE shared HashMap. Return the finished map.
+fn tally_words(lines: Vec<&'static str>) -> HashMap<String, usize> {
+    todo!()
+}
+
+fn main() {
+    println!("{}", count_with_threads(10, 100));
+}
+'''
+solution = '''
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::thread;
+
+/// Start `threads` threads; each adds 1 to a shared counter `per_thread` times.
+/// Wait for them all and return the final count.
+fn count_with_threads(threads: usize, per_thread: usize) -> usize {
+    let counter = Arc::new(Mutex::new(0));
+    let mut handles = vec![];
+    for _ in 0..threads {
+        let counter = Arc::clone(&counter);
+        handles.push(thread::spawn(move || {
+            for _ in 0..per_thread {
+                *counter.lock().unwrap() += 1;
+            }
+        }));
+    }
+    for handle in handles {
+        handle.join().unwrap();
+    }
+    *counter.lock().unwrap()
+}
+
+/// One thread per line of text. Each thread counts the words in its line into
+/// ONE shared HashMap. Return the finished map.
+fn tally_words(lines: Vec<&'static str>) -> HashMap<String, usize> {
+    let tally = Arc::new(Mutex::new(HashMap::new()));
+    let handles: Vec<_> = lines
+        .into_iter()
+        .map(|line| {
+            let tally = Arc::clone(&tally);
+            thread::spawn(move || {
+                for word in line.split_whitespace() {
+                    *tally.lock().unwrap().entry(word.to_string()).or_insert(0) += 1;
+                }
+            })
+        })
+        .collect();
+    for handle in handles {
+        handle.join().unwrap();
+    }
+    let map = tally.lock().unwrap().clone();
+    map
+}
+
+fn main() {
+    println!("{}", count_with_threads(10, 100));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use super::*;
+
+    #[test]
+    fn counting() {
+        assert_eq!(count_with_threads(10, 1), 10);
+        assert_eq!(count_with_threads(8, 1000), 8000);
+        assert_eq!(count_with_threads(0, 5), 0);
+    }
+
+    #[test]
+    fn tallying() {
+        let t = tally_words(vec!["lava is hot", "hot hot lava", "run"]);
+        assert_eq!(t["hot"], 3);
+        assert_eq!(t["lava"], 2);
+        assert_eq!(t["is"], 1);
+        assert_eq!(t["run"], 1);
+        assert_eq!(t.len(), 4);
+    }
+}
+'''
+hints = [
+    "Make the shared value once: `Arc::new(Mutex::new(0))`. For each thread, `let counter = Arc::clone(&counter);` and move that clone into the thread. Keep the handles and join them all before reading the result.",
+    "Inside a thread, `*counter.lock().unwrap() += 1;`. For the words, share `Arc<Mutex<HashMap<String, usize>>>` and do `*tally.lock().unwrap().entry(word.to_string()).or_insert(0) += 1;`. At the end, `tally.lock().unwrap().clone()` gives you the map.",
+    "```rust\nlet counter = Arc::new(Mutex::new(0));\nlet mut handles = vec![];\nfor _ in 0..threads {\n    let counter = Arc::clone(&counter);\n    handles.push(thread::spawn(move || {\n        for _ in 0..per_thread {\n            *counter.lock().unwrap() += 1;\n        }\n    }));\n}\nfor handle in handles {\n    handle.join().unwrap();\n}\n*counter.lock().unwrap()\n```",
+]
+
+[[level]]
+id = "19.5"
 title = "Safe to send?"
 kind = "predict"
 book = ["16.4"]
-about = "Send and Sync: how Rust rules out data races."
+xp = 30
+goal = "Ten threads share a counter through an Rc. Does this compile? If so, what does it print?"
+lesson = '''
+How does Rust know that `Rc` can't go to another thread but `Arc` can? Two **marker traits**, with no methods at all:
 
-[[planned]]
+| Trait | Means | Not for |
+|---|---|---|
+| **`Send`** | ownership can move to another thread | `Rc<T>` (two threads could change the count at once) |
+| **`Sync`** | `&T` can be shared between threads | `RefCell<T>`, `Cell<T>` |
+
+You almost never implement them. The compiler does it **automatically**: a type made only of `Send` parts is `Send`, and the same for `Sync`.
+
+`thread::spawn` requires its closure (and everything it captures) to be `Send`. So if something unsafe to share slips into a thread, you get a **compile error**, not a rare bug that shows up once a week in production.
+
+Implementing them by hand needs `unsafe`, because then *you* promise the compiler it's safe.
+'''
+c_compare = '''
+In C, nothing stops you from passing a non-thread-safe struct to `pthread_create`. Rust checks every value that crosses into a thread.
+'''
+py_compare = '''
+Python lets any object go to any thread and relies on the GIL. Rust checks at compile time that each type is safe to send or share.
+'''
+starter = '''
+use std::rc::Rc;
+use std::sync::Mutex;
+use std::thread;
+
+fn main() {
+    let counter = Rc::new(Mutex::new(0));
+    let mut handles = vec![];
+
+    for _ in 0..10 {
+        let counter = Rc::clone(&counter);
+        let handle = thread::spawn(move || {
+            *counter.lock().unwrap() += 1;
+        });
+        handles.push(handle);
+    }
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+    println!("Result: {}", *counter.lock().unwrap());
+}
+'''
+choices = [
+    "Result: 10",
+    "A number between 1 and 10: the threads race on the counter",
+    "It doesn't compile: Rc<Mutex<i32>> cannot be sent between threads safely",
+    "It doesn't compile: a Mutex can't be put inside an Rc",
+]
+answer = 2
+compile_fails = true
+explanation = "`Rc` is not `Send`: its reference count isn't updated atomically, so two threads cloning or dropping it at once could corrupt it. `thread::spawn` requires everything the closure captures to be `Send`, so this is error E0277. Swap `Rc` for `Arc` and it prints `Result: 10`."
+
+[[level]]
+id = "19.6"
 title = "BOSS: The parallel downloader"
 kind = "boss"
 book = ["16.1", "16.2", "16.3"]
-about = "Split work across threads and gather the results."
+xp = 130
+goal = '''Download every page using a few worker threads at once, count the words on each page,
+and gather the results. Six slow pages must be done in well under the time of one-by-one.'''
+lesson = '''
+**Boss fight!** The volcano observatory has to fetch readings from six stations. Each fetch is slow (the `fetch` function waits 150 ms, like a network request). Doing them one by one takes almost a second. Do them **in parallel**.
+
+Write **`download_all(urls, workers)`**:
+
+1. Start `workers` threads.
+2. Hand out the URLs so every URL is fetched **exactly once**. A good way: a shared queue of work, `Arc<Mutex<Vec<&str>>>` (or `VecDeque`), that each worker `pop`s from until it's empty.
+3. Each worker fetches its page and counts its words, and **sends** `(url, word_count)` back through a **channel**.
+4. Gather everything from the channel and return it **sorted by URL**.
+
+Also write **`busiest(results)`**: the URL with the most words (`None` if there are no results).
+
+Watch out for:
+
+- Holding a lock while fetching. `let url = queue.lock().unwrap().pop();` releases the lock at the end of the line; a `while let Some(url) = queue.lock().unwrap().pop()` keeps it for the whole loop body!
+- Forgetting to `drop` the original sender, so the gathering loop never ends.
+'''
+c_compare = '''
+The classic worker-pool pattern: a locked queue of jobs and a queue of results. In Rust the compiler checks that every shared piece is protected.
+'''
+py_compare = '''
+Like `concurrent.futures.ThreadPoolExecutor(max_workers=3).map(fetch, urls)`, built by hand from threads, a lock and a queue.
+'''
+check = "tests"
+starter = '''
+use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
+
+/// Pretend to download a page: slow, like a real network request.
+fn fetch(url: &str) -> String {
+    thread::sleep(Duration::from_millis(150));
+    match url {
+        "station/north" => "ash level low wind calm".to_string(),
+        "station/south" => "lava flow steady".to_string(),
+        "station/east" => "all quiet".to_string(),
+        "station/west" => "small tremor felt near the old crater rim".to_string(),
+        "station/peak" => "steam vent active".to_string(),
+        _ => String::new(),
+    }
+}
+
+/// Fetch every URL using `workers` threads at once.
+/// Returns (url, number of words on the page), sorted by url.
+fn download_all(urls: Vec<&'static str>, workers: usize) -> Vec<(String, usize)> {
+    todo!()
+}
+
+/// The URL whose page has the most words.
+fn busiest(results: &[(String, usize)]) -> Option<String> {
+    todo!()
+}
+
+fn main() {
+    let results = download_all(vec!["station/north", "station/south", "station/east"], 3);
+    println!("{results:?}");
+}
+'''
+solution = '''
+use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
+
+/// Pretend to download a page: slow, like a real network request.
+fn fetch(url: &str) -> String {
+    thread::sleep(Duration::from_millis(150));
+    match url {
+        "station/north" => "ash level low wind calm".to_string(),
+        "station/south" => "lava flow steady".to_string(),
+        "station/east" => "all quiet".to_string(),
+        "station/west" => "small tremor felt near the old crater rim".to_string(),
+        "station/peak" => "steam vent active".to_string(),
+        _ => String::new(),
+    }
+}
+
+/// Fetch every URL using `workers` threads at once.
+/// Returns (url, number of words on the page), sorted by url.
+fn download_all(urls: Vec<&'static str>, workers: usize) -> Vec<(String, usize)> {
+    let queue = Arc::new(Mutex::new(urls));
+    let (tx, rx) = mpsc::channel();
+    let mut handles = Vec::new();
+    for _ in 0..workers {
+        let queue = Arc::clone(&queue);
+        let tx = tx.clone();
+        handles.push(thread::spawn(move || loop {
+            let next = queue.lock().unwrap().pop();
+            let Some(url) = next else { break };
+            let words = fetch(url).split_whitespace().count();
+            tx.send((url.to_string(), words)).unwrap();
+        }));
+    }
+    drop(tx);
+    let mut results: Vec<(String, usize)> = rx.iter().collect();
+    for handle in handles {
+        handle.join().unwrap();
+    }
+    results.sort();
+    results
+}
+
+/// The URL whose page has the most words.
+fn busiest(results: &[(String, usize)]) -> Option<String> {
+    results.iter().max_by_key(|(_, words)| *words).map(|(url, _)| url.clone())
+}
+
+fn main() {
+    let results = download_all(vec!["station/north", "station/south", "station/east"], 3);
+    println!("{results:?}");
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use super::*;
+    use std::time::Instant;
+
+    const ALL: [&str; 6] = [
+        "station/north", "station/south", "station/east",
+        "station/west", "station/peak", "station/lost",
+    ];
+
+    #[test]
+    fn gets_everything_once() {
+        let results = download_all(ALL.to_vec(), 3);
+        let expected: Vec<(String, usize)> = vec![
+            ("station/east".into(), 2),
+            ("station/lost".into(), 0),
+            ("station/north".into(), 5),
+            ("station/peak".into(), 3),
+            ("station/south".into(), 3),
+            ("station/west".into(), 8),
+        ];
+        assert_eq!(results, expected);
+    }
+
+    #[test]
+    fn workers_run_in_parallel() {
+        let start = Instant::now();
+        let results = download_all(ALL.to_vec(), 3);
+        let took = start.elapsed();
+        assert_eq!(results.len(), 6);
+        assert!(
+            took < Duration::from_millis(600),
+            "took {took:?}: one by one would take 900 ms, 3 workers should need about 300 ms"
+        );
+    }
+
+    #[test]
+    fn one_worker_still_works() {
+        let results = download_all(vec!["station/east", "station/peak"], 1);
+        assert_eq!(results, vec![("station/east".into(), 2), ("station/peak".into(), 3)]);
+    }
+
+    #[test]
+    fn the_busiest_station() {
+        let results = vec![("a".to_string(), 2), ("b".to_string(), 9), ("c".to_string(), 4)];
+        assert_eq!(busiest(&results), Some("b".to_string()));
+        assert_eq!(busiest(&[]), None);
+    }
+}
+'''
+hints = [
+    "Put the URLs in an `Arc<Mutex<Vec<&str>>>` and make a channel. Start `workers` threads, each with its own `Arc::clone` of the queue and its own `tx.clone()`.",
+    "Each worker loops: `let next = queue.lock().unwrap().pop();` (the lock is released at the end of that line), stop when it's None, otherwise fetch, count with `split_whitespace().count()`, and send `(url.to_string(), count)`. After starting the workers, `drop(tx)`, collect `rx.iter()`, and sort.",
+    "```rust\nlet queue = Arc::new(Mutex::new(urls));\nlet (tx, rx) = mpsc::channel();\nfor _ in 0..workers {\n    let queue = Arc::clone(&queue);\n    let tx = tx.clone();\n    thread::spawn(move || loop {\n        let next = queue.lock().unwrap().pop();\n        let Some(url) = next else { break };\n        let words = fetch(url).split_whitespace().count();\n        tx.send((url.to_string(), words)).unwrap();\n    });\n}\ndrop(tx);\nlet mut results: Vec<(String, usize)> = rx.iter().collect();\nresults.sort();\nresults\n```",
+]

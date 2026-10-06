@@ -2,40 +2,798 @@ id = 18
 name = "Object Observatory"
 blurb = "Objects, Rust style."
 
-# Placeholder island: these levels are planned but not built yet.
-
-[[planned]]
+[[level]]
+id = "18.1"
 title = "Is Rust object-oriented?"
-kind = "predict"
+kind = "quiz"
 book = ["18.1"]
-about = "Objects and hiding details, but no inheritance."
+xp = 20
+goal = "Rust has objects and hides their details. Which classic object-oriented feature does it leave out?"
+lesson = '''
+Is Rust an object-oriented language? It depends on what you mean. The usual checklist:
 
-[[planned]]
+**1. Objects bundle data with behavior.** ✔ Structs and enums have methods in `impl` blocks.
+
+**2. Encapsulation: hide the details.** ✔ Fields are private unless marked `pub`. Here only methods can touch the list, so the cached average can never be wrong:
+
+```rust
+pub struct AveragedCollection {
+    list: Vec<i32>,      // private
+    average: f64,        // private
+}
+
+impl AveragedCollection {
+    pub fn add(&mut self, value: i32) {
+        self.list.push(value);
+        self.update_average();
+    }
+    pub fn average(&self) -> f64 {
+        self.average
+    }
+    fn update_average(&mut self) { /* ... */ }
+}
+```
+
+**3. Inheritance: a type reuses another type's fields and code.** ✘ There's no `class Dog extends Animal`. Rust offers other tools for the two reasons people use inheritance:
+
+- **Reusing code**: a trait can have **default methods** that every implementor gets for free.
+- **Polymorphism** (one piece of code working with many types): **generics** with trait bounds, or **trait objects** (`dyn Trait`), which are next.
+
+Many languages have moved away from inheritance anyway: it tends to share more than you wanted, and makes designs rigid.
+'''
+c_compare = '''
+C has none of the three built in; people fake objects with structs plus function pointers. Rust has the first two directly and replaces the third with traits.
+'''
+py_compare = '''
+Python has all three, including multiple inheritance. In Rust, the shared behavior goes into traits instead of base classes.
+'''
+choices = [
+    "Methods: functions attached to a type",
+    "Encapsulation: private fields that only the type's own methods can touch",
+    "Inheritance: a struct taking over the fields and methods of a parent struct",
+    "Polymorphism: one function working with values of different types",
+]
+answer = 2
+explanation = "Rust has methods (`impl`), encapsulation (`pub` vs private) and polymorphism (generics and trait objects). It has no inheritance: shared behavior comes from traits and their default methods instead."
+
+[[level]]
+id = "18.2"
 title = "Many shapes, one list"
 kind = "fill"
 book = ["18.2"]
-about = "Trait objects: Box<dyn Trait>, like a vtable in C."
+xp = 55
+goal = "Let the Screen hold any mix of components (buttons, select boxes, ...), and draw them all."
+lesson = '''
+A `Vec` holds values of **one** type. So how do you keep a list of buttons, text boxes and pictures together, when you can't know every type a user of your library will invent?
 
-[[planned]]
+With a **trait object**: `Box<dyn Draw>` means "some value, of any type that implements `Draw`".
+
+```rust
+pub trait Draw {
+    fn draw(&self) -> String;
+}
+
+pub struct Screen {
+    pub components: Vec<Box<dyn Draw>>,
+}
+
+impl Screen {
+    pub fn run(&self) {
+        for component in self.components.iter() {
+            component.draw();   // calls Button's or SelectBox's draw
+        }
+    }
+}
+
+let screen = Screen {
+    components: vec![
+        Box::new(SelectBox { /* ... */ }),
+        Box::new(Button { /* ... */ }),
+    ],
+};
+```
+
+Which `draw` runs is decided **while the program runs** (dynamic dispatch). The trait object is a pointer to the value plus a pointer to a table of its methods.
+
+Compare with generics: `Vec<T>` where `T: Draw` would allow only **one** type per screen, but each call is resolved at compile time (static dispatch), which is a little faster.
+'''
+c_compare = '''
+A trait object is the classic C trick of a struct with a pointer to a table of function pointers (a vtable), built and checked by the compiler.
+'''
+py_compare = '''
+This is duck typing, but checked: anything in the list is guaranteed to have a `draw` method, or it doesn't compile.
+'''
+check = "tests"
+starter = '''
+pub trait Draw {
+    fn draw(&self) -> String;
+}
+
+pub struct Button {
+    pub width: u32,
+    pub label: String,
+}
+
+pub struct SelectBox {
+    pub options: Vec<String>,
+}
+
+// TODO: implement Draw for Button: "[ label ]" (the label with a space and a bracket on each side)
+// TODO: implement Draw for SelectBox: "<option1|option2|...>"
+
+pub struct Screen {
+    // TODO: hold any components that implement Draw, not just buttons
+    pub components: Vec<Button>,
+}
+
+impl Screen {
+    /// Each component's drawing, in order.
+    pub fn run(&self) -> Vec<String> {
+        todo!()
+    }
+}
+
+fn main() {
+    let screen = Screen {
+        components: vec![Button { width: 50, label: String::from("OK") }],
+    };
+    println!("{:?}", screen.run());
+}
+'''
+solution = '''
+pub trait Draw {
+    fn draw(&self) -> String;
+}
+
+pub struct Button {
+    pub width: u32,
+    pub label: String,
+}
+
+pub struct SelectBox {
+    pub options: Vec<String>,
+}
+
+impl Draw for Button {
+    fn draw(&self) -> String {
+        format!("[ {} ]", self.label)
+    }
+}
+
+impl Draw for SelectBox {
+    fn draw(&self) -> String {
+        format!("<{}>", self.options.join("|"))
+    }
+}
+
+pub struct Screen {
+    pub components: Vec<Box<dyn Draw>>,
+}
+
+impl Screen {
+    /// Each component's drawing, in order.
+    pub fn run(&self) -> Vec<String> {
+        self.components.iter().map(|c| c.draw()).collect()
+    }
+}
+
+fn main() {
+    let screen = Screen {
+        components: vec![Box::new(Button { width: 50, label: String::from("OK") })],
+    };
+    println!("{:?}", screen.run());
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use super::*;
+
+    struct Star;
+
+    impl Draw for Star {
+        fn draw(&self) -> String {
+            "*".to_string()
+        }
+    }
+
+    #[test]
+    fn draws_each_kind() {
+        assert_eq!(Button { width: 10, label: "OK".into() }.draw(), "[ OK ]");
+        let sb = SelectBox { options: vec!["Yes".into(), "Maybe".into(), "No".into()] };
+        assert_eq!(sb.draw(), "<Yes|Maybe|No>");
+    }
+
+    #[test]
+    fn a_mixed_screen() {
+        let screen = Screen {
+            components: vec![
+                Box::new(SelectBox { options: vec!["A".into(), "B".into()] }),
+                Box::new(Button { width: 50, label: "Go".into() }),
+                Box::new(Star),
+            ],
+        };
+        assert_eq!(screen.run(), vec!["<A|B>", "[ Go ]", "*"]);
+    }
+}
+'''
+hints = [
+    "Three jobs: `impl Draw for Button`, `impl Draw for SelectBox`, and change `components` to a Vec of trait objects. Then write run.",
+    "The field type is `Vec<Box<dyn Draw>>`. Button draws `format!(\"[ {} ]\", self.label)`, SelectBox draws `format!(\"<{}>\", self.options.join(\"|\"))`. run maps each component to `c.draw()` and collects. (main must now box its button too.)",
+    "```rust\nimpl Draw for Button {\n    fn draw(&self) -> String {\n        format!(\"[ {} ]\", self.label)\n    }\n}\n\nimpl Draw for SelectBox {\n    fn draw(&self) -> String {\n        format!(\"<{}>\", self.options.join(\"|\"))\n    }\n}\n\npub struct Screen {\n    pub components: Vec<Box<dyn Draw>>,\n}\n\npub fn run(&self) -> Vec<String> {\n    self.components.iter().map(|c| c.draw()).collect()\n}\n```",
+]
+
+[[level]]
+id = "18.3"
 title = "Draft, review, publish"
 kind = "fill"
 book = ["18.3"]
-about = "The state pattern, done two ways."
+xp = 60
+goal = "Finish the blog post's state machine: a post is a draft, then pending review, then published. Only published posts show their text."
+lesson = '''
+The **state pattern**: a value's behavior depends on its state, and each state is its own type that knows what comes next.
 
-[[planned]]
+A blog post goes **Draft → PendingReview → Published**, and `content()` returns the text only once it's published.
+
+```rust
+pub struct Post {
+    state: Option<Box<dyn State>>,
+    content: String,
+}
+
+trait State {
+    fn request_review(self: Box<Self>) -> Box<dyn State>;
+    fn approve(self: Box<Self>) -> Box<dyn State>;
+    fn content<'a>(&self, post: &'a Post) -> &'a str {
+        ""                                   // default: show nothing
+    }
+}
+```
+
+Two new things:
+
+- **`self: Box<Self>`**: the method takes ownership of the boxed state and returns the next one. The old state is used up, which is exactly what a state change means.
+- **`Option` + `take()`**: Rust doesn't allow a struct field to be empty, even for a moment. `self.state.take()` moves the state out and leaves `None` behind, then we put the new state back in:
+
+```rust
+pub fn request_review(&mut self) {
+    if let Some(s) = self.state.take() {
+        self.state = Some(s.request_review())
+    }
+}
+```
+
+Each state decides what each action does. `Draft` is done for you; write `PendingReview` and `Published`, and `Post::approve`.
+'''
+c_compare = '''
+In C you'd write an `enum state` and a `switch` in every function. Here each state's rules live together in one `impl`, and adding a state doesn't mean editing every switch.
+'''
+py_compare = '''
+The classic "State" design pattern from object-oriented books: each state is a class, and the post delegates to its current state object.
+'''
+check = "tests"
+starter = '''
+pub struct Post {
+    state: Option<Box<dyn State>>,
+    content: String,
+}
+
+impl Post {
+    pub fn new() -> Post {
+        Post { state: Some(Box::new(Draft {})), content: String::new() }
+    }
+
+    pub fn add_text(&mut self, text: &str) {
+        self.content.push_str(text);
+    }
+
+    pub fn content(&self) -> &str {
+        self.state.as_ref().unwrap().content(self)
+    }
+
+    pub fn request_review(&mut self) {
+        if let Some(s) = self.state.take() {
+            self.state = Some(s.request_review())
+        }
+    }
+
+    pub fn approve(&mut self) {
+        // TODO: like request_review, but calling approve
+    }
+}
+
+trait State {
+    fn request_review(self: Box<Self>) -> Box<dyn State>;
+    fn approve(self: Box<Self>) -> Box<dyn State>;
+    fn content<'a>(&self, _post: &'a Post) -> &'a str {
+        ""
+    }
+}
+
+struct Draft {}
+
+impl State for Draft {
+    fn request_review(self: Box<Self>) -> Box<dyn State> {
+        Box::new(PendingReview {})
+    }
+
+    fn approve(self: Box<Self>) -> Box<dyn State> {
+        self // a draft can't be approved yet
+    }
+}
+
+struct PendingReview {}
+
+// TODO: impl State for PendingReview (request_review: stay, approve: become Published)
+
+struct Published {}
+
+// TODO: impl State for Published (stay published; content shows the post's text)
+
+fn main() {
+    let mut post = Post::new();
+    post.add_text("I ate a salad for lunch today");
+    post.request_review();
+    post.approve();
+    println!("{}", post.content());
+}
+'''
+solution = '''
+pub struct Post {
+    state: Option<Box<dyn State>>,
+    content: String,
+}
+
+impl Post {
+    pub fn new() -> Post {
+        Post { state: Some(Box::new(Draft {})), content: String::new() }
+    }
+
+    pub fn add_text(&mut self, text: &str) {
+        self.content.push_str(text);
+    }
+
+    pub fn content(&self) -> &str {
+        self.state.as_ref().unwrap().content(self)
+    }
+
+    pub fn request_review(&mut self) {
+        if let Some(s) = self.state.take() {
+            self.state = Some(s.request_review())
+        }
+    }
+
+    pub fn approve(&mut self) {
+        if let Some(s) = self.state.take() {
+            self.state = Some(s.approve())
+        }
+    }
+}
+
+trait State {
+    fn request_review(self: Box<Self>) -> Box<dyn State>;
+    fn approve(self: Box<Self>) -> Box<dyn State>;
+    fn content<'a>(&self, _post: &'a Post) -> &'a str {
+        ""
+    }
+}
+
+struct Draft {}
+
+impl State for Draft {
+    fn request_review(self: Box<Self>) -> Box<dyn State> {
+        Box::new(PendingReview {})
+    }
+
+    fn approve(self: Box<Self>) -> Box<dyn State> {
+        self // a draft can't be approved yet
+    }
+}
+
+struct PendingReview {}
+
+impl State for PendingReview {
+    fn request_review(self: Box<Self>) -> Box<dyn State> {
+        self
+    }
+
+    fn approve(self: Box<Self>) -> Box<dyn State> {
+        Box::new(Published {})
+    }
+}
+
+struct Published {}
+
+impl State for Published {
+    fn request_review(self: Box<Self>) -> Box<dyn State> {
+        self
+    }
+
+    fn approve(self: Box<Self>) -> Box<dyn State> {
+        self
+    }
+
+    fn content<'a>(&self, post: &'a Post) -> &'a str {
+        &post.content
+    }
+}
+
+fn main() {
+    let mut post = Post::new();
+    post.add_text("I ate a salad for lunch today");
+    post.request_review();
+    post.approve();
+    println!("{}", post.content());
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use super::*;
+
+    #[test]
+    fn the_whole_workflow() {
+        let mut post = Post::new();
+        post.add_text("I ate a salad for lunch today");
+        assert_eq!("", post.content());
+
+        post.request_review();
+        assert_eq!("", post.content());
+
+        post.approve();
+        assert_eq!("I ate a salad for lunch today", post.content());
+    }
+
+    #[test]
+    fn no_shortcuts() {
+        let mut post = Post::new();
+        post.add_text("sneaky");
+        post.approve();
+        assert_eq!("", post.content(), "a draft can't be published without review");
+        post.request_review();
+        post.request_review();
+        assert_eq!("", post.content());
+        post.approve();
+        post.approve();
+        post.request_review();
+        assert_eq!("sneaky", post.content(), "published posts stay published");
+    }
+}
+'''
+hints = [
+    "Post::approve looks just like Post::request_review. Then each new state needs an `impl State for ...` with `request_review` and `approve`.",
+    "PendingReview: `request_review` returns `self` (no change), `approve` returns `Box::new(Published {})`. Published: both return `self`, and it overrides `content` to return `&post.content`.",
+    "```rust\nimpl State for PendingReview {\n    fn request_review(self: Box<Self>) -> Box<dyn State> {\n        self\n    }\n    fn approve(self: Box<Self>) -> Box<dyn State> {\n        Box::new(Published {})\n    }\n}\n\nimpl State for Published {\n    fn request_review(self: Box<Self>) -> Box<dyn State> {\n        self\n    }\n    fn approve(self: Box<Self>) -> Box<dyn State> {\n        self\n    }\n    fn content<'a>(&self, post: &'a Post) -> &'a str {\n        &post.content\n    }\n}\n```",
+]
+
+[[level]]
+id = "18.4"
 title = "Ownership Inventory #4"
 kind = "predict"
 book = ["18.4"]
-about = "The final checkpoint quiz."
+xp = 30
+goal = "Does this compile? If so, what does it print?"
+lesson = '''
+**Ownership Inventory #4**: the last checkpoint from the Brown edition of the Rust Book, about trait objects and what they're allowed to borrow.
 
-[[planned]]
+A trait object hides the real type, so it also hides **what that type borrows**. Rust needs to know how long a `dyn Trait` value may live, so every trait object has a lifetime bound, written `dyn Trait + 'a`.
+
+When you don't write one, Rust picks a default:
+
+| Written | Means |
+|---|---|
+| `Box<dyn Fn()>` (in a function signature) | `Box<dyn Fn() + 'static>`: may not borrow anything temporary |
+| `&'a dyn Fn()` | `&'a (dyn Fn() + 'a)` |
+| `Box<dyn Fn() + '_>` | may borrow from the function's arguments |
+'''
+c_compare = '''
+In C, a callback struct holding a pointer to the caller's data can easily outlive that data. Rust tracks the borrow even through the type-erased object.
+'''
+py_compare = '''
+A Python closure keeps whatever it captures alive. A Rust closure that borrows must not outlive what it borrows, and the type says how long that is.
+'''
+starter = '''
+fn make_greeter(name: &String) -> Box<dyn Fn() -> String> {
+    Box::new(move || format!("Hello, {name}!"))
+}
+
+fn main() {
+    let name = String::from("Ferris");
+    let greet = make_greeter(&name);
+    println!("{}", greet());
+}
+'''
+choices = [
+    "Hello, Ferris!",
+    "It doesn't compile: `move` can't be used on a reference",
+    "It doesn't compile: Box<dyn Fn() -> String> means 'static, but the closure holds a borrowed &String",
+    "It compiles, but panics because name was moved into the closure",
+]
+answer = 2
+compile_fails = true
+explanation = "In a function signature, `Box<dyn Fn() -> String>` means `Box<dyn Fn() -> String + 'static>`. The closure captures `name`, a reference with a shorter lifetime, so it isn't `'static`. Rust doesn't look at `main` to see that `name` would live long enough; the signature must say so: `Box<dyn Fn() -> String + '_>`."
+
+[[level]]
+id = "18.5"
 title = "Which design wins?"
-kind = "predict"
+kind = "quiz"
 book = ["18.5"]
-about = "Compare designs and their trade-offs."
+xp = 25
+goal = "The blog post could also use a different type for each state. What does that design catch that the trait-object version can't?"
+lesson = '''
+The state pattern from 18.3 works, but the compiler can't help much: calling `content()` on a draft quietly returns `""`, and calling `approve()` on a draft quietly does nothing. Mistakes show up as wrong behavior at runtime.
 
-[[planned]]
+There's a more Rust-flavored design: **encode the states as types**.
+
+```rust
+pub struct DraftPost { content: String }
+pub struct PendingReviewPost { content: String }
+pub struct Post { content: String }
+
+impl DraftPost {
+    pub fn add_text(&mut self, text: &str) { ... }
+    pub fn request_review(self) -> PendingReviewPost { ... }   // consumes the draft
+}
+
+impl PendingReviewPost {
+    pub fn approve(self) -> Post { ... }
+}
+
+impl Post {
+    pub fn content(&self) -> &str { &self.content }   // only published posts have this
+}
+```
+
+```rust
+let mut post = Post::new();          // a DraftPost
+post.add_text("I ate a salad");
+let post = post.request_review();    // now a PendingReviewPost
+let post = post.approve();           // now a Post
+```
+
+The trade-offs:
+
+| | Trait objects (18.3) | States as types |
+|---|---|---|
+| Wrong action | silently ignored at runtime | **compile error** |
+| Changing state | `post.approve()` changes it in place | `let post = post.approve();` makes a new value |
+| Adding a state | add one struct and impl | change the methods that lead to and from it |
+
+Object-oriented patterns work in Rust, but using the type system often catches more bugs.
+'''
+c_compare = '''
+C programs often keep a `state` field and check it in every function. Making each state a separate type turns those runtime checks into compile-time ones.
+'''
+py_compare = '''
+Python can't easily check this before running. In Rust, a draft simply has no `content` method, so the mistake can't be compiled.
+'''
+choices = [
+    "Nothing: both designs behave the same and catch the same mistakes",
+    "It frees memory sooner, because there are no Boxes",
+    "Calling content() on a draft becomes a compile error instead of quietly returning an empty string",
+    "It lets one post be a draft and published at the same time",
+]
+answer = 2
+explanation = "With separate types, `DraftPost` simply has no `content` (or `approve`) method, so misuse doesn't compile. The trait-object version must accept every call at runtime and can only ignore the wrong ones."
+
+[[level]]
+id = "18.6"
 title = "BOSS: The blog workflow"
 kind = "boss"
-book = ["18.2", "18.3"]
-about = "Posts that move from draft to published."
+book = ["18.2", "18.3", "18.5"]
+xp = 120
+goal = '''Build the blog workflow with states as types: drafts go to review, reviews can be
+rejected back to drafts, and a post needs two approvals before it's published.'''
+lesson = '''
+**Boss fight!** The editors want a stricter workflow, built with the **states as types** design:
+
+```text
+DraftPost --request_review--> PendingReviewPost --approve--> (1 approval, still pending)
+    ^                              |                --approve--> Post (published)
+    └──────────reject──────────────┘
+```
+
+Write:
+
+1. **`Post::new()`** → an empty `DraftPost`.
+2. **`DraftPost::add_text(&mut self, text)`** and **`DraftPost::request_review(self)`** → a `PendingReviewPost` with 0 approvals.
+3. **`PendingReviewPost::reject(self)`** → back to a `DraftPost` with the same text. Approvals are lost.
+4. **`PendingReviewPost::approve(self)`** → an `Approval`: still `Pending` (with one more approval) after the first one, `Published` after the second.
+5. **`Post::content(&self)`** → the text.
+
+Since `approve` can lead to two different types, it returns an enum:
+
+```rust
+pub enum Approval {
+    Pending(PendingReviewPost),
+    Published(Post),
+}
+```
+
+All the structs and signatures are there; fill in the bodies. Remember: a method that takes `self` uses up the old value, so a rejected or approved post can't be used by accident.
+'''
+c_compare = '''
+Each state is a separate struct, so passing a draft where a published post is needed is a type error, not a bug hunt.
+'''
+py_compare = '''
+Like having separate `Draft`, `Pending` and `Published` classes where each method returns a new object, except the old object can't be used after its method is called.
+'''
+check = "tests"
+starter = '''
+pub struct Post {
+    content: String,
+}
+
+pub struct DraftPost {
+    content: String,
+}
+
+pub struct PendingReviewPost {
+    content: String,
+    approvals: u32,
+}
+
+pub enum Approval {
+    Pending(PendingReviewPost),
+    Published(Post),
+}
+
+impl Post {
+    pub fn new() -> DraftPost {
+        todo!()
+    }
+
+    pub fn content(&self) -> &str {
+        todo!()
+    }
+}
+
+impl DraftPost {
+    pub fn add_text(&mut self, text: &str) {
+        todo!()
+    }
+
+    pub fn request_review(self) -> PendingReviewPost {
+        todo!()
+    }
+}
+
+impl PendingReviewPost {
+    /// Two approvals publish the post.
+    pub fn approve(self) -> Approval {
+        todo!()
+    }
+
+    /// Back to a draft; the approvals so far are lost.
+    pub fn reject(self) -> DraftPost {
+        todo!()
+    }
+}
+
+fn main() {
+    let mut post = Post::new();
+    post.add_text("I ate a salad for lunch today");
+    let post = post.request_review();
+    if let Approval::Pending(post) = post.approve() {
+        if let Approval::Published(post) = post.approve() {
+            println!("{}", post.content());
+        }
+    }
+}
+'''
+solution = '''
+pub struct Post {
+    content: String,
+}
+
+pub struct DraftPost {
+    content: String,
+}
+
+pub struct PendingReviewPost {
+    content: String,
+    approvals: u32,
+}
+
+pub enum Approval {
+    Pending(PendingReviewPost),
+    Published(Post),
+}
+
+impl Post {
+    pub fn new() -> DraftPost {
+        DraftPost { content: String::new() }
+    }
+
+    pub fn content(&self) -> &str {
+        &self.content
+    }
+}
+
+impl DraftPost {
+    pub fn add_text(&mut self, text: &str) {
+        self.content.push_str(text);
+    }
+
+    pub fn request_review(self) -> PendingReviewPost {
+        PendingReviewPost { content: self.content, approvals: 0 }
+    }
+}
+
+impl PendingReviewPost {
+    /// Two approvals publish the post.
+    pub fn approve(self) -> Approval {
+        let approvals = self.approvals + 1;
+        if approvals >= 2 {
+            Approval::Published(Post { content: self.content })
+        } else {
+            Approval::Pending(PendingReviewPost { content: self.content, approvals })
+        }
+    }
+
+    /// Back to a draft; the approvals so far are lost.
+    pub fn reject(self) -> DraftPost {
+        DraftPost { content: self.content }
+    }
+}
+
+fn main() {
+    let mut post = Post::new();
+    post.add_text("I ate a salad for lunch today");
+    let post = post.request_review();
+    if let Approval::Pending(post) = post.approve() {
+        if let Approval::Published(post) = post.approve() {
+            println!("{}", post.content());
+        }
+    }
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use super::*;
+
+    fn pending(a: Approval) -> PendingReviewPost {
+        match a {
+            Approval::Pending(p) => p,
+            Approval::Published(_) => panic!("published too early: it needs two approvals"),
+        }
+    }
+
+    fn published(a: Approval) -> Post {
+        match a {
+            Approval::Published(p) => p,
+            Approval::Pending(_) => panic!("still pending after two approvals"),
+        }
+    }
+
+    #[test]
+    fn two_approvals_publish() {
+        let mut draft = Post::new();
+        draft.add_text("I ate a salad");
+        draft.add_text(" for lunch today");
+        let review = draft.request_review();
+        let review = pending(review.approve());
+        let post = published(review.approve());
+        assert_eq!(post.content(), "I ate a salad for lunch today");
+    }
+
+    #[test]
+    fn rejecting_starts_over() {
+        let mut draft = Post::new();
+        draft.add_text("first try");
+        let review = pending(draft.request_review().approve());
+        let mut draft = review.reject();
+        draft.add_text(", fixed");
+        let review = draft.request_review();
+        let review = pending(review.approve());
+        let post = published(review.approve());
+        assert_eq!(post.content(), "first try, fixed");
+    }
+}
+'''
+hints = [
+    "Each method builds the next struct and moves `self.content` into it. `request_review` starts at 0 approvals and `reject` forgets them.",
+    "approve: add one to `self.approvals`. If that's 2 or more, return `Approval::Published(Post { content: self.content })`, otherwise `Approval::Pending(PendingReviewPost { content: self.content, approvals })`.",
+    "```rust\npub fn approve(self) -> Approval {\n    let approvals = self.approvals + 1;\n    if approvals >= 2 {\n        Approval::Published(Post { content: self.content })\n    } else {\n        Approval::Pending(PendingReviewPost { content: self.content, approvals })\n    }\n}\n\npub fn reject(self) -> DraftPost {\n    DraftPost { content: self.content }\n}\n```",
+]

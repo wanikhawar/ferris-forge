@@ -3,52 +3,1108 @@ name = "Minigrep Harbor"
 blurb = "A project island: build a real command-line search tool."
 tag = "project"
 
-# Placeholder island: these levels are planned but not built yet.
-
-[[planned]]
+[[level]]
+id = "16.1"
 title = "Orders from the command line"
 kind = "fill"
 book = ["12.1"]
-about = "Read command-line arguments."
+xp = 40
+goal = '''The harbor runs your program as `minigrep frog poem.txt`. Read the two arguments so it prints:
+Searching for frog
+In file poem.txt'''
+lesson = '''
+Welcome to the harbor! Over this island you'll build **minigrep**, a small version of the classic `grep` tool: give it a word and a file, and it prints every line of the file that contains the word.
 
-[[planned]]
+```text
+$ minigrep frog poem.txt
+How public, like a frog
+```
+
+Step one: read the **command-line arguments**. `std::env::args()` returns an iterator over them, and `collect` turns it into a `Vec<String>`:
+
+```rust
+use std::env;
+
+let args: Vec<String> = env::args().collect();
+```
+
+The first item, `args[0]`, is the program's own name. The arguments the user typed come after it:
+
+| Index | Value |
+|---|---|
+| `args[0]` | `minigrep` (the program) |
+| `args[1]` | `frog` |
+| `args[2]` | `poem.txt` |
+
+`collect` can build many kinds of collections, so you have to say which one you want with the type annotation.
+
+Here, the game passes the arguments for you (see the **Expected** tab under **Output**).
+'''
+c_compare = '''
+Exactly `argc`/`argv` from `int main(int argc, char **argv)`, as a Vec of real Strings. `args[0]` is the program name, just like `argv[0]`.
+'''
+py_compare = '''
+Like `sys.argv`: `sys.argv[0]` is the script, and the user's arguments follow.
+'''
+check = "output"
+args = ["frog", "poem.txt"]
+expected_output = '''
+Searching for frog
+In file poem.txt
+'''
+starter = '''
+use std::env;
+
+fn main() {
+    // TODO: collect the command-line arguments from env::args()
+    let args: Vec<String> = Vec::new();
+
+    let query = &args[1];
+    let file_path = &args[2];
+
+    println!("Searching for {query}");
+    println!("In file {file_path}");
+}
+'''
+solution = '''
+use std::env;
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+
+    let query = &args[1];
+    let file_path = &args[2];
+
+    println!("Searching for {query}");
+    println!("In file {file_path}");
+}
+'''
+hints = [
+    "The Vec is empty, so `args[1]` panics: index out of bounds. Fill it from `env::args()`.",
+    "`env::args()` is an iterator. Turn it into a Vec with `.collect()`.",
+    "`let args: Vec<String> = env::args().collect();`",
+]
+
+[[level]]
+id = "16.2"
 title = "Opening the treasure map"
 kind = "fill"
 book = ["12.2"]
-about = "Read a whole file into a String."
+xp = 40
+goal = "Read the whole file named in the second argument and print it after `With text:`."
+lesson = '''
+Next, read the file. `std::fs::read_to_string` opens a file, reads all of it into a `String`, and closes it again:
 
-[[planned]]
+```rust
+use std::fs;
+
+let contents = fs::read_to_string(file_path)
+    .expect("Should have been able to read the file");
+```
+
+It returns a `Result<String, std::io::Error>`, because the file might not exist or might not be readable. For now, `expect` is fine: it crashes with a message if reading fails. You'll handle the error properly on the next level.
+
+A file called `poem.txt` sits next to your program. Its text is in the **Expected** tab under **Output**.
+'''
+c_compare = '''
+Replaces `fopen`, a `fseek`/`ftell` to find the size, `malloc`, `fread` and `fclose`, and you can't forget to free the buffer.
+'''
+py_compare = '''
+Like `open(path).read()` inside a `with` block: one call, and the file is closed for you.
+'''
+check = "output"
+args = ["frog", "poem.txt"]
+expected_output = '''
+Searching for frog
+In file poem.txt
+With text:
+I'm nobody! Who are you?
+Are you nobody, too?
+Then there's a pair of us - don't tell!
+They'd banish us, you know.
+
+How dreary to be somebody!
+How public, like a frog
+To tell your name the livelong day
+To an admiring bog!
+'''
+starter = '''
+use std::env;
+use std::fs;
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+
+    let query = &args[1];
+    let file_path = &args[2];
+
+    println!("Searching for {query}");
+    println!("In file {file_path}");
+
+    // TODO: read the file at file_path into a String
+    let contents = String::new();
+
+    println!("With text:\n{contents}");
+}
+'''
+solution = '''
+use std::env;
+use std::fs;
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+
+    let query = &args[1];
+    let file_path = &args[2];
+
+    println!("Searching for {query}");
+    println!("In file {file_path}");
+
+    let contents = fs::read_to_string(file_path)
+        .expect("Should have been able to read the file");
+
+    println!("With text:\n{contents}");
+}
+'''
+hints = [
+    "`contents` is an empty String. It should hold the text of the file at `file_path`.",
+    "Use `fs::read_to_string(file_path)`. It returns a Result, so finish with `.expect(\"...\")`.",
+    "```rust\nlet contents = fs::read_to_string(file_path)\n    .expect(\"Should have been able to read the file\");\n```",
+]
+
+[level.files]
+"poem.txt" = '''
+I'm nobody! Who are you?
+Are you nobody, too?
+Then there's a pair of us - don't tell!
+They'd banish us, you know.
+
+How dreary to be somebody!
+How public, like a frog
+To tell your name the livelong day
+To an admiring bog!
+'''
+
+[[level]]
+id = "16.3"
 title = "Tidying the ship"
 kind = "fix"
 book = ["12.3"]
-about = "Split main into a Config and a run function, with good errors."
+xp = 55
+goal = "Make Config::build return a Result instead of panicking, and make run return a Result instead of calling expect."
+lesson = '''
+`main` is getting crowded. The usual shape for a Rust command-line program:
 
-[[planned]]
+- **`main.rs`** only collects the arguments, calls the setup, and reports errors.
+- A **`Config`** struct holds the settings, built by `Config::build`.
+- A **`run`** function does the real work.
+
+Both setup and work can fail, and neither should crash the program. They return a `Result` and let `main` decide what to do:
+
+```rust
+impl Config {
+    fn build(args: &[String]) -> Result<Config, &'static str> {
+        if args.len() < 3 {
+            return Err("not enough arguments");
+        }
+        Ok(Config { query: args[1].clone(), file_path: args[2].clone() })
+    }
+}
+
+fn run(config: Config) -> Result<(), Box<dyn Error>> {
+    let contents = fs::read_to_string(config.file_path)?;   // ? passes the error up
+    println!("With text:\n{contents}");
+    Ok(())
+}
+```
+
+`Box<dyn Error>` means "any kind of error". In `main`:
+
+```rust
+let config = Config::build(&args).unwrap_or_else(|err| {
+    println!("Problem parsing arguments: {err}");
+    process::exit(1);
+});
+
+if let Err(e) = run(config) {
+    println!("Application error: {e}");
+    process::exit(1);
+}
+```
+
+`process::exit(1)` stops the program with a failure code, without the noisy panic message.
+'''
+c_compare = '''
+Like returning an error code from `parse_args()` and `run()` instead of calling `abort()` deep inside them, except the compiler makes sure every caller deals with the error.
+'''
+py_compare = '''
+Like raising a clear exception from `parse_args` and catching it once in `main` to print a friendly message and `sys.exit(1)`.
+'''
+check = "tests"
+args = ["frog", "poem.txt"]
+starter = '''
+use std::env;
+use std::error::Error;
+use std::fs;
+use std::process;
+
+pub struct Config {
+    pub query: String,
+    pub file_path: String,
+}
+
+impl Config {
+    // Fix: return Result<Config, &'static str>, with Err("not enough arguments").
+    pub fn build(args: &[String]) -> Config {
+        if args.len() < 3 {
+            panic!("not enough arguments");
+        }
+        let query = args[1].clone();
+        let file_path = args[2].clone();
+        Config { query, file_path }
+    }
+}
+
+// Fix: return Result<(), Box<dyn Error>> and use ? instead of expect.
+pub fn run(config: Config) {
+    let contents = fs::read_to_string(config.file_path)
+        .expect("Should have been able to read the file");
+    println!("With text:\n{contents}");
+}
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+    let config = Config::build(&args);
+    println!("Searching for {}", config.query);
+    run(config);
+    process::exit(0);
+}
+'''
+solution = '''
+use std::env;
+use std::error::Error;
+use std::fs;
+use std::process;
+
+pub struct Config {
+    pub query: String,
+    pub file_path: String,
+}
+
+impl Config {
+    pub fn build(args: &[String]) -> Result<Config, &'static str> {
+        if args.len() < 3 {
+            return Err("not enough arguments");
+        }
+        let query = args[1].clone();
+        let file_path = args[2].clone();
+        Ok(Config { query, file_path })
+    }
+}
+
+pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
+    let contents = fs::read_to_string(config.file_path)?;
+    println!("With text:\n{contents}");
+    Ok(())
+}
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+    let config = Config::build(&args).unwrap_or_else(|err| {
+        println!("Problem parsing arguments: {err}");
+        process::exit(1);
+    });
+    println!("Searching for {}", config.query);
+    if let Err(e) = run(config) {
+        println!("Application error: {e}");
+        process::exit(1);
+    }
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use super::*;
+
+    fn args(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn too_few_arguments_is_an_error() {
+        assert_eq!(Config::build(&args(&["minigrep"])).err(), Some("not enough arguments"));
+        assert_eq!(Config::build(&args(&["minigrep", "frog"])).err(), Some("not enough arguments"));
+    }
+
+    #[test]
+    fn good_arguments() {
+        let config = Config::build(&args(&["minigrep", "frog", "poem.txt"]))
+            .unwrap_or_else(|e| panic!("expected Ok, got Err({e})"));
+        assert_eq!(config.query, "frog");
+        assert_eq!(config.file_path, "poem.txt");
+    }
+
+    #[test]
+    fn missing_file_is_an_error() {
+        let config = Config { query: "x".to_string(), file_path: "no-such-file.txt".to_string() };
+        assert!(run(config).is_err());
+    }
+
+    #[test]
+    fn real_file_works() {
+        let config = Config { query: "frog".to_string(), file_path: "poem.txt".to_string() };
+        assert!(run(config).is_ok());
+    }
+}
+'''
+hints = [
+    "Change the two return types first: `Result<Config, &'static str>` and `Result<(), Box<dyn Error>>`. Then the compiler will show you every line that has to follow.",
+    "In build: `return Err(\"not enough arguments\")` instead of panicking, and wrap the result in `Ok(...)`. In run: replace `.expect(...)` with `?` and end with `Ok(())`. main then needs `unwrap_or_else` and `if let Err(e) = run(config)`.",
+    "```rust\npub fn build(args: &[String]) -> Result<Config, &'static str> {\n    if args.len() < 3 {\n        return Err(\"not enough arguments\");\n    }\n    Ok(Config { query: args[1].clone(), file_path: args[2].clone() })\n}\n\npub fn run(config: Config) -> Result<(), Box<dyn Error>> {\n    let contents = fs::read_to_string(config.file_path)?;\n    println!(\"With text:\\n{contents}\");\n    Ok(())\n}\n```",
+]
+
+[level.files]
+"poem.txt" = '''
+I'm nobody! Who are you?
+Are you nobody, too?
+Then there's a pair of us - don't tell!
+They'd banish us, you know.
+
+How dreary to be somebody!
+How public, like a frog
+To tell your name the livelong day
+To an admiring bog!
+'''
+
+[[level]]
+id = "16.4"
 title = "Test first, then build"
 kind = "fill"
 book = ["12.4"]
-about = "Test-driven development of the search function."
+xp = 55
+min_tests = 2
+goal = "Write one more test for search, then write search so that all the tests pass."
+lesson = '''
+Time for the heart of minigrep: the `search` function. Let's build it **test first** (test-driven development, or TDD):
 
-[[planned]]
+1. Write a test that fails, because the feature doesn't exist yet.
+2. Write just enough code to make it pass.
+3. Tidy up, and repeat.
+
+```rust
+pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
+    let mut results = Vec::new();
+    for line in contents.lines() {
+        if line.contains(query) {
+            results.push(line);
+        }
+    }
+    results
+}
+```
+
+Notice the lifetime `'a`: the lines returned are slices **of `contents`**, so they can live as long as `contents` does. They have nothing to do with `query`.
+
+Useful String methods: `contents.lines()` gives each line, and `line.contains(query)` checks for the word.
+'''
+c_compare = '''
+The results are pointers into the original buffer, like `strstr` results, but the lifetime `'a` makes sure the buffer outlives them.
+'''
+py_compare = '''
+Like `[line for line in contents.splitlines() if query in line]`, but without copying the lines: each result points into `contents`.
+'''
+check = "tests"
+starter = '''
+pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
+    vec![]
+}
+
+fn main() {
+    let poem = "I'm nobody! Who are you?\nAre you nobody, too?";
+    println!("{:?}", search("nobody", poem));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn one_result() {
+        let query = "duct";
+        let contents = "\
+Rust:
+safe, fast, productive.
+Pick three.";
+
+        assert_eq!(vec!["safe, fast, productive."], search(query, contents));
+    }
+
+    // TODO: write one more test, for example: a query that matches no lines,
+    // or one that matches several lines.
+}
+'''
+solution = '''
+pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
+    let mut results = Vec::new();
+    for line in contents.lines() {
+        if line.contains(query) {
+            results.push(line);
+        }
+    }
+    results
+}
+
+fn main() {
+    let poem = "I'm nobody! Who are you?\nAre you nobody, too?";
+    println!("{:?}", search("nobody", poem));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn one_result() {
+        let query = "duct";
+        let contents = "\
+Rust:
+safe, fast, productive.
+Pick three.";
+
+        assert_eq!(vec!["safe, fast, productive."], search(query, contents));
+    }
+
+    #[test]
+    fn several_results() {
+        let contents = "nobody here\nsomebody there\nnobody again";
+        assert_eq!(vec!["nobody here", "nobody again"], search("nobody", contents));
+        assert!(search("crab", contents).is_empty());
+    }
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use super::*;
+
+    #[test]
+    fn searches_the_poem() {
+        let poem = "I'm nobody! Who are you?\nAre you nobody, too?\nHow public, like a frog";
+        assert_eq!(search("frog", poem), vec!["How public, like a frog"]);
+        assert_eq!(search("nobody", poem).len(), 2);
+        assert!(search("Nobody", poem).is_empty(), "search is case-sensitive");
+        assert!(search("crab", "").is_empty());
+    }
+}
+'''
+hints = [
+    "Two jobs: add a second `#[test]` function inside `mod tests`, and write the body of `search`.",
+    "In search: make an empty Vec, loop over `contents.lines()`, and push every line that `contains(query)`. Return the Vec at the end.",
+    "```rust\npub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {\n    let mut results = Vec::new();\n    for line in contents.lines() {\n        if line.contains(query) {\n            results.push(line);\n        }\n    }\n    results\n}\n```",
+]
+
+[[level]]
+id = "16.5"
 title = "Secret settings"
 kind = "fill"
 book = ["12.5"]
-about = "Case-insensitive search switched on by an environment variable."
+xp = 55
+goal = '''Add case-insensitive search, switched on when the IGNORE_CASE environment variable is set.
+The harbor runs `IGNORE_CASE=1 minigrep to poem.txt`, which should print the four lines that contain "to" or "To".'''
+lesson = '''
+Users want to search without caring about capitals, but they don't want to type an extra flag every time. A good fit for an **environment variable**: set it once in the terminal, and it applies to every run.
 
-[[planned]]
+```rust
+use std::env;
+
+let ignore_case = env::var("IGNORE_CASE").is_ok();
+```
+
+`env::var` returns `Ok(value)` if the variable is set, and `Err` if it isn't. We only care whether it exists, so `.is_ok()` is enough.
+
+For the search itself, lowercase both sides before comparing:
+
+```rust
+let query = query.to_lowercase();          // a new String
+for line in contents.lines() {
+    if line.to_lowercase().contains(&query) {
+        results.push(line);                // push the original line, not the lowercase copy
+    }
+}
+```
+
+`to_lowercase` makes a new `String`, so `query` is now a `String` and needs a `&` when passed to `contains`.
+
+Here, the harbor sets `IGNORE_CASE=1` for you.
+'''
+c_compare = '''
+`env::var` is `getenv`, but it returns a Result instead of a possibly-NULL pointer, and the text is checked to be valid UTF-8.
+'''
+py_compare = '''
+`env::var("IGNORE_CASE").is_ok()` is `"IGNORE_CASE" in os.environ`.
+'''
+check = "output"
+args = ["to", "poem.txt"]
+expected_output = '''
+Are you nobody, too?
+How dreary to be somebody!
+To tell your name the livelong day
+To an admiring bog!
+'''
+starter = '''
+use std::env;
+use std::error::Error;
+use std::fs;
+use std::process;
+
+pub struct Config {
+    pub query: String,
+    pub file_path: String,
+    pub ignore_case: bool,
+}
+
+impl Config {
+    pub fn build(args: &[String]) -> Result<Config, &'static str> {
+        if args.len() < 3 {
+            return Err("not enough arguments");
+        }
+        let query = args[1].clone();
+        let file_path = args[2].clone();
+        // TODO: true when the IGNORE_CASE environment variable is set
+        let ignore_case = false;
+        Ok(Config { query, file_path, ignore_case })
+    }
+}
+
+pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
+    let mut results = Vec::new();
+    for line in contents.lines() {
+        if line.contains(query) {
+            results.push(line);
+        }
+    }
+    results
+}
+
+pub fn search_case_insensitive<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
+    todo!()
+}
+
+pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
+    let contents = fs::read_to_string(config.file_path)?;
+    let results = if config.ignore_case {
+        search_case_insensitive(&config.query, &contents)
+    } else {
+        search(&config.query, &contents)
+    };
+    for line in results {
+        println!("{line}");
+    }
+    Ok(())
+}
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+    let config = Config::build(&args).unwrap_or_else(|err| {
+        println!("Problem parsing arguments: {err}");
+        process::exit(1);
+    });
+    if let Err(e) = run(config) {
+        println!("Application error: {e}");
+        process::exit(1);
+    }
+}
+'''
+solution = '''
+use std::env;
+use std::error::Error;
+use std::fs;
+use std::process;
+
+pub struct Config {
+    pub query: String,
+    pub file_path: String,
+    pub ignore_case: bool,
+}
+
+impl Config {
+    pub fn build(args: &[String]) -> Result<Config, &'static str> {
+        if args.len() < 3 {
+            return Err("not enough arguments");
+        }
+        let query = args[1].clone();
+        let file_path = args[2].clone();
+        let ignore_case = env::var("IGNORE_CASE").is_ok();
+        Ok(Config { query, file_path, ignore_case })
+    }
+}
+
+pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
+    let mut results = Vec::new();
+    for line in contents.lines() {
+        if line.contains(query) {
+            results.push(line);
+        }
+    }
+    results
+}
+
+pub fn search_case_insensitive<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
+    let query = query.to_lowercase();
+    let mut results = Vec::new();
+    for line in contents.lines() {
+        if line.to_lowercase().contains(&query) {
+            results.push(line);
+        }
+    }
+    results
+}
+
+pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
+    let contents = fs::read_to_string(config.file_path)?;
+    let results = if config.ignore_case {
+        search_case_insensitive(&config.query, &contents)
+    } else {
+        search(&config.query, &contents)
+    };
+    for line in results {
+        println!("{line}");
+    }
+    Ok(())
+}
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+    let config = Config::build(&args).unwrap_or_else(|err| {
+        println!("Problem parsing arguments: {err}");
+        process::exit(1);
+    });
+    if let Err(e) = run(config) {
+        println!("Application error: {e}");
+        process::exit(1);
+    }
+}
+'''
+hints = [
+    "Two TODOs: read the environment variable in `Config::build`, and write `search_case_insensitive`.",
+    "`env::var(\"IGNORE_CASE\").is_ok()` tells you if it's set. For the search, copy `search` and compare `line.to_lowercase()` with a lowercased query.",
+    "```rust\nlet ignore_case = env::var(\"IGNORE_CASE\").is_ok();\n\npub fn search_case_insensitive<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {\n    let query = query.to_lowercase();\n    let mut results = Vec::new();\n    for line in contents.lines() {\n        if line.to_lowercase().contains(&query) {\n            results.push(line);\n        }\n    }\n    results\n}\n```",
+]
+
+[level.env]
+IGNORE_CASE = "1"
+
+[level.files]
+"poem.txt" = '''
+I'm nobody! Who are you?
+Are you nobody, too?
+Then there's a pair of us - don't tell!
+They'd banish us, you know.
+
+How dreary to be somebody!
+How public, like a frog
+To tell your name the livelong day
+To an admiring bog!
+'''
+
+[[level]]
+id = "16.6"
 title = "Errors to the right place"
 kind = "fix"
 book = ["12.6"]
-about = "eprintln! sends errors to stderr, like fprintf(stderr) in C."
+xp = 45
+goal = '''The harbor runs `minigrep frog poem.txt missing.txt`. The matches belong on standard output, the complaint about the missing file on standard error:
+stdout: How public, like a frog
+stderr: Skipping missing.txt: No such file or directory (os error 2)'''
+lesson = '''
+A program has two output streams:
 
-[[planned]]
+| Stream | Macro | For |
+|---|---|---|
+| standard output | `println!` | the results |
+| standard error | `eprintln!` | error messages and warnings |
+
+Why bother? Because users **redirect** output:
+
+```text
+$ minigrep frog poem.txt > results.txt
+```
+
+Everything printed with `println!` goes into `results.txt`. If your error messages go there too, the user sees nothing in the terminal and finds garbage in their file. `eprintln!` messages still show up on the screen.
+
+This version of minigrep searches several files. One of them doesn't exist, and that complaint is printed to the wrong place.
+'''
+c_compare = '''
+`println!` is `printf` (stdout) and `eprintln!` is `fprintf(stderr, ...)`.
+'''
+py_compare = '''
+`eprintln!(...)` is `print(..., file=sys.stderr)`.
+'''
+check = "output"
+args = ["frog", "poem.txt", "missing.txt"]
+expected_output = "How public, like a frog"
+expected_stderr = "Skipping missing.txt: No such file or directory (os error 2)"
+starter = '''
+use std::env;
+use std::fs;
+
+fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
+    contents.lines().filter(|line| line.contains(query)).collect()
+}
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+    let query = &args[1];
+
+    // Search every file named after the query.
+    for file_path in &args[2..] {
+        match fs::read_to_string(file_path) {
+            Ok(contents) => {
+                for line in search(query, &contents) {
+                    println!("{line}");
+                }
+            }
+            Err(e) => println!("Skipping {file_path}: {e}"),
+        }
+    }
+}
+'''
+solution = '''
+use std::env;
+use std::fs;
+
+fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
+    contents.lines().filter(|line| line.contains(query)).collect()
+}
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+    let query = &args[1];
+
+    // Search every file named after the query.
+    for file_path in &args[2..] {
+        match fs::read_to_string(file_path) {
+            Ok(contents) => {
+                for line in search(query, &contents) {
+                    println!("{line}");
+                }
+            }
+            Err(e) => eprintln!("Skipping {file_path}: {e}"),
+        }
+    }
+}
+'''
+hints = [
+    "Everything prints fine, but one of the lines goes to the wrong stream.",
+    "The \"Skipping\" message is an error. Which macro writes to standard error?",
+    "Change `Err(e) => println!(...)` to `Err(e) => eprintln!(...)`.",
+]
+
+[level.files]
+"poem.txt" = '''
+I'm nobody! Who are you?
+Are you nobody, too?
+Then there's a pair of us - don't tell!
+They'd banish us, you know.
+
+How dreary to be somebody!
+How public, like a frog
+To tell your name the livelong day
+To an admiring bog!
+'''
+
+[[level]]
+id = "16.7"
 title = "Polish with iterators"
 kind = "fix"
 book = ["13.3"]
-about = "Swap loops and clones for iterator chains."
+xp = 55
+goal = "Make Config::build take the arguments iterator itself (no more clone), and write search as an iterator chain."
+lesson = '''
+Now that you know iterators, minigrep can lose some clutter.
 
-[[planned]]
+**1. No more `clone`.** `build` borrowed a slice of Strings, so it had to clone each one to own it. Instead, give `build` the iterator from `env::args()` and let it take the Strings out one by one:
+
+```rust
+pub fn build(mut args: impl Iterator<Item = String>) -> Result<Config, &'static str> {
+    args.next();   // skip the program name
+
+    let query = match args.next() {
+        Some(arg) => arg,
+        None => return Err("Didn't get a query string"),
+    };
+    // ... same for file_path
+}
+
+// in main:
+let config = Config::build(env::args()).unwrap_or_else(...);
+```
+
+`impl Iterator<Item = String>` means "any iterator that hands out Strings". It must be `mut`, because calling `next` changes where the iterator is.
+
+**2. Search with a chain.** The loop with a temporary Vec becomes:
+
+```rust
+contents.lines().filter(|line| line.contains(query)).collect()
+```
+'''
+c_compare = '''
+Instead of copying each `argv[i]` into a new buffer, the strings are handed over: the iterator gives up ownership as it goes.
+'''
+py_compare = '''
+Like `it = iter(sys.argv); next(it); query = next(it, None)`, but every missing value has to be handled.
+'''
+check = "tests"
+args = ["frog", "poem.txt"]
+starter = '''
+use std::env;
+
+pub struct Config {
+    pub query: String,
+    pub file_path: String,
+}
+
+impl Config {
+    // Fix: take `mut args: impl Iterator<Item = String>` and use args.next(),
+    // with Err("Didn't get a query string") and Err("Didn't get a file path").
+    pub fn build(args: &[String]) -> Result<Config, &'static str> {
+        if args.len() < 3 {
+            return Err("not enough arguments");
+        }
+        let query = args[1].clone();
+        let file_path = args[2].clone();
+        Ok(Config { query, file_path })
+    }
+}
+
+// Fix: replace the loop with one iterator chain.
+pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
+    let mut results = Vec::new();
+    for line in contents.lines() {
+        if line.contains(query) {
+            results.push(line);
+        }
+    }
+    results
+}
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+    match Config::build(&args) {
+        Ok(config) => println!("Searching for {} in {}", config.query, config.file_path),
+        Err(e) => println!("Problem parsing arguments: {e}"),
+    }
+}
+'''
+solution = '''
+use std::env;
+
+pub struct Config {
+    pub query: String,
+    pub file_path: String,
+}
+
+impl Config {
+    pub fn build(mut args: impl Iterator<Item = String>) -> Result<Config, &'static str> {
+        args.next();
+
+        let query = match args.next() {
+            Some(arg) => arg,
+            None => return Err("Didn't get a query string"),
+        };
+
+        let file_path = match args.next() {
+            Some(arg) => arg,
+            None => return Err("Didn't get a file path"),
+        };
+
+        Ok(Config { query, file_path })
+    }
+}
+
+pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
+    contents.lines().filter(|line| line.contains(query)).collect()
+}
+
+fn main() {
+    match Config::build(env::args()) {
+        Ok(config) => println!("Searching for {} in {}", config.query, config.file_path),
+        Err(e) => println!("Problem parsing arguments: {e}"),
+    }
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use super::*;
+
+    fn args(list: &[&str]) -> std::vec::IntoIter<String> {
+        list.iter().map(|s| s.to_string()).collect::<Vec<_>>().into_iter()
+    }
+
+    #[test]
+    fn builds_from_an_iterator() {
+        let config = Config::build(args(&["minigrep", "frog", "poem.txt"]))
+            .unwrap_or_else(|e| panic!("expected Ok, got Err({e})"));
+        assert_eq!(config.query, "frog");
+        assert_eq!(config.file_path, "poem.txt");
+    }
+
+    #[test]
+    fn missing_pieces() {
+        assert_eq!(Config::build(args(&["minigrep"])).err(), Some("Didn't get a query string"));
+        assert_eq!(Config::build(args(&["minigrep", "frog"])).err(), Some("Didn't get a file path"));
+    }
+
+    #[test]
+    fn search_still_works() {
+        let text = "safe, fast, productive.\nPick three.\nduct tape";
+        assert_eq!(search("duct", text), vec!["safe, fast, productive.", "duct tape"]);
+        assert!(search("crab", text).is_empty());
+    }
+}
+'''
+hints = [
+    "Change build's parameter to `mut args: impl Iterator<Item = String>`. Skip the first item with `args.next();`, then take the query and the file path with `args.next()` too.",
+    "Each `args.next()` returns an Option: `match` it, returning `Err(\"Didn't get a query string\")` (or `\"Didn't get a file path\"`) on None. In main, pass `env::args()` straight in. search becomes `contents.lines().filter(...).collect()`.",
+    "```rust\npub fn build(mut args: impl Iterator<Item = String>) -> Result<Config, &'static str> {\n    args.next();\n    let query = match args.next() {\n        Some(arg) => arg,\n        None => return Err(\"Didn't get a query string\"),\n    };\n    let file_path = match args.next() {\n        Some(arg) => arg,\n        None => return Err(\"Didn't get a file path\"),\n    };\n    Ok(Config { query, file_path })\n}\n\npub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {\n    contents.lines().filter(|line| line.contains(query)).collect()\n}\n```",
+]
+
+[[level]]
+id = "16.8"
 title = "BOSS: minigrep"
 kind = "boss"
 book = ["12.1", "12.2", "12.3", "12.4", "12.5", "12.6"]
-about = "The finished search tool."
+xp = 120
+goal = '''Build the finished minigrep. The harbor runs `IGNORE_CASE=1 minigrep TO poem.txt`, which should print:
+2: Are you nobody, too?
+6: How dreary to be somebody!
+8: To tell your name the livelong day
+9: To an admiring bog!
+4 matching lines'''
+lesson = '''
+**Boss fight!** Put the whole tool together, from an empty `main`:
+
+1. **Arguments**: the query and the file path (`env::args()`). If one is missing, print an error with `eprintln!` and stop.
+2. **Settings**: search case-insensitively when the `IGNORE_CASE` environment variable is set.
+3. **Reading**: read the file with `fs::read_to_string`. If that fails, `eprintln!` the error and stop.
+4. **Searching**: find the matching lines.
+5. **Printing**: each match with its **line number** (counting from 1, blank lines count too), as `N: line`. Then a summary line: `N matching lines`.
+
+The structure from this island is a good plan: a `Config` with `build`, a `run` function that returns `Result<(), Box<dyn Error>>`, and `search` functions written as iterator chains.
+
+Line numbers: `contents.lines().enumerate()` gives `(index, line)` pairs, with the index counting from 0.
+
+The harbor passes the arguments and sets `IGNORE_CASE` for you, and `poem.txt` is next to your program.
+'''
+c_compare = '''
+The same program in C needs `argv` checks, `fopen` and `getline`, a case-insensitive `strstr`, and a lot of care with buffers. Here every failure is a Result you must deal with.
+'''
+py_compare = '''
+About as short as the Python version, but every error path is visible in the types, and it runs as a single fast binary.
+'''
+check = "output"
+args = ["TO", "poem.txt"]
+expected_output = '''
+2: Are you nobody, too?
+6: How dreary to be somebody!
+8: To tell your name the livelong day
+9: To an admiring bog!
+4 matching lines
+'''
+starter = '''
+use std::env;
+use std::error::Error;
+use std::fs;
+use std::process;
+
+// Build minigrep here:
+//   - a Config (query, file_path, ignore_case) with a build function
+//   - search functions that return (line number, line) pairs
+//   - a run function that prints "N: line" for each match, then "N matching lines"
+//   - main: errors go to standard error
+
+fn main() {
+    todo!()
+}
+'''
+solution = '''
+use std::env;
+use std::error::Error;
+use std::fs;
+use std::process;
+
+pub struct Config {
+    pub query: String,
+    pub file_path: String,
+    pub ignore_case: bool,
+}
+
+impl Config {
+    pub fn build(mut args: impl Iterator<Item = String>) -> Result<Config, &'static str> {
+        args.next();
+        let query = args.next().ok_or("Didn't get a query string")?;
+        let file_path = args.next().ok_or("Didn't get a file path")?;
+        let ignore_case = env::var("IGNORE_CASE").is_ok();
+        Ok(Config { query, file_path, ignore_case })
+    }
+}
+
+pub fn search<'a>(query: &str, contents: &'a str, ignore_case: bool) -> Vec<(usize, &'a str)> {
+    let query = if ignore_case { query.to_lowercase() } else { query.to_string() };
+    contents
+        .lines()
+        .enumerate()
+        .filter(|(_, line)| {
+            if ignore_case {
+                line.to_lowercase().contains(&query)
+            } else {
+                line.contains(&query)
+            }
+        })
+        .map(|(i, line)| (i + 1, line))
+        .collect()
+}
+
+pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
+    let contents = fs::read_to_string(&config.file_path)?;
+    let results = search(&config.query, &contents, config.ignore_case);
+    for (number, line) in &results {
+        println!("{number}: {line}");
+    }
+    println!("{} matching lines", results.len());
+    Ok(())
+}
+
+fn main() {
+    let config = Config::build(env::args()).unwrap_or_else(|err| {
+        eprintln!("Problem parsing arguments: {err}");
+        process::exit(1);
+    });
+    if let Err(e) = run(config) {
+        eprintln!("Application error: {e}");
+        process::exit(1);
+    }
+}
+'''
+hints = [
+    "Start from the pieces you already wrote: `Config::build` reading `env::args()` and `IGNORE_CASE`, `run` reading the file, and a search function.",
+    "For line numbers, search with `contents.lines().enumerate().filter(...).map(|(i, line)| (i + 1, line)).collect()`, returning `Vec<(usize, &str)>`. In run, print each pair and then `results.len()`.",
+    "```rust\npub fn search<'a>(query: &str, contents: &'a str, ignore_case: bool) -> Vec<(usize, &'a str)> {\n    let query = if ignore_case { query.to_lowercase() } else { query.to_string() };\n    contents\n        .lines()\n        .enumerate()\n        .filter(|(_, line)| {\n            if ignore_case {\n                line.to_lowercase().contains(&query)\n            } else {\n                line.contains(&query)\n            }\n        })\n        .map(|(i, line)| (i + 1, line))\n        .collect()\n}\n```",
+]
+
+[level.env]
+IGNORE_CASE = "1"
+
+[level.files]
+"poem.txt" = '''
+I'm nobody! Who are you?
+Are you nobody, too?
+Then there's a pair of us - don't tell!
+They'd banish us, you know.
+
+How dreary to be somebody!
+How public, like a frog
+To tell your name the livelong day
+To an admiring bog!
+'''

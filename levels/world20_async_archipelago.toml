@@ -2,46 +2,2519 @@ id = 20
 name = "Async Archipelago"
 blurb = "Waiting for many things without wasting time."
 
-# Placeholder island: these levels are planned but not built yet.
+# Every level here (except the quiz) comes with `runtime.rs`, Ferris' tiny async
+# runtime: block_on, sleep, join, join_all, race, channels and streams, using only std.
 
-[[planned]]
+[[level]]
+id = "20.1"
 title = "Promises of later"
 kind = "predict"
 book = ["17.1"]
-about = "async, .await, and why futures do nothing until awaited."
+xp = 30
+goal = "Two orders are taken before anything is awaited. In what order do the lines print?"
+lesson = '''
+Some work is mostly **waiting**: for the network, a file, a timer. Instead of blocking a whole thread while it waits, **async** code can step aside and let other work run.
 
-[[planned]]
+An **`async fn`** doesn't run when you call it. It returns a **future**: a value that *will* produce a result once something drives it to the end.
+
+```rust
+async fn cook(dish: &str) -> String {
+    format!("{dish} is ready")
+}
+
+let order = cook("soup");     // nothing happens yet: `order` is a future
+let meal = order.await;       // now it runs, and `meal` is the String
+```
+
+- **`.await`** runs a future until it's done, pausing the surrounding async code whenever the future has to wait.
+- `.await` only works **inside** `async` code. Something has to drive the outermost future: an **async runtime**. `main` can't be `async` on its own.
+
+Real programs use a runtime crate like **tokio** (the book uses its own `trpl`). This island can't download crates, so Ferris wrote a tiny one: `mod runtime;` loads **`runtime.rs`**, which sits next to your code. Its `block_on(future)` runs a future to the end:
+
+```rust
+mod runtime;
+use runtime::block_on;
+
+fn main() {
+    let meal = block_on(cook("soup"));
+}
+```
+
+Futures are **lazy**: until it's awaited, a future does nothing at all.
+'''
+c_compare = '''
+No C equivalent is built in. Think of a future as a struct holding the state of a paused function, plus a `poll` function that resumes it; the compiler writes both for you.
+'''
+py_compare = '''
+Very close to Python's `async def` / `await`, and `block_on` is `asyncio.run`. Like a Python coroutine, calling an async fn does nothing until it's awaited.
+'''
+starter = '''
+mod runtime;
+
+use runtime::block_on;
+
+async fn cook(dish: &str) -> String {
+    println!("cooking {dish}");
+    format!("{dish} is ready")
+}
+
+fn main() {
+    let soup = cook("soup");
+    let pie = cook("pie");
+    println!("two orders taken");
+
+    block_on(async {
+        println!("{}", pie.await);
+        println!("{}", soup.await);
+    });
+}
+'''
+choices = [
+    "cooking soup / cooking pie / two orders taken / pie is ready / soup is ready",
+    "two orders taken / cooking soup / cooking pie / pie is ready / soup is ready",
+    "two orders taken / cooking pie / pie is ready / cooking soup / soup is ready",
+    "two orders taken / pie is ready / soup is ready",
+]
+answer = 2
+expected_output = '''
+two orders taken
+cooking pie
+pie is ready
+cooking soup
+soup is ready
+'''
+explanation = "Calling `cook` only builds a future, so nothing is printed until it's awaited. `pie` is awaited first, so its body runs (and prints) first; `soup` runs only when it is awaited after that."
+
+[level.files]
+"runtime.rs" = '''
+//! Ferris' tiny async runtime: just enough to run the levels on this island.
+//! Real programs use a crate like tokio (or the book's `trpl`), which offer the same
+//! tools: block_on, sleep, join, race, channels and streams.
+#![allow(dead_code)]
+
+use std::cell::RefCell;
+use std::collections::VecDeque;
+use std::future::{Future, poll_fn};
+use std::pin::{Pin, pin};
+use std::rc::Rc;
+use std::sync::Arc;
+use std::task::{Context, Poll, Wake, Waker};
+use std::thread::{self, Thread};
+use std::time::{Duration, Instant};
+
+struct ThreadWaker(Thread);
+
+impl Wake for ThreadWaker {
+    fn wake(self: Arc<Self>) {
+        self.0.unpark();
+    }
+}
+
+/// Run a future on this thread until it finishes, and return its output.
+pub fn block_on<F: Future>(future: F) -> F::Output {
+    let mut future = pin!(future);
+    let waker = Waker::from(Arc::new(ThreadWaker(thread::current())));
+    let mut cx = Context::from_waker(&waker);
+    loop {
+        if let Poll::Ready(output) = future.as_mut().poll(&mut cx) {
+            return output;
+        }
+        thread::park_timeout(Duration::from_millis(5));
+    }
+}
+
+/// A future that finishes after `duration`.
+pub fn sleep(duration: Duration) -> Sleep {
+    Sleep { deadline: Instant::now() + duration, timer_started: false }
+}
+
+pub struct Sleep {
+    deadline: Instant,
+    timer_started: bool,
+}
+
+impl Future for Sleep {
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+        let now = Instant::now();
+        if now >= self.deadline {
+            return Poll::Ready(());
+        }
+        if !self.timer_started {
+            self.timer_started = true;
+            let waker = cx.waker().clone();
+            let wait = self.deadline - now;
+            thread::spawn(move || {
+                thread::sleep(wait);
+                waker.wake();
+            });
+        }
+        Poll::Pending
+    }
+}
+
+/// Let other futures run before continuing.
+pub async fn yield_now() {
+    let mut yielded = false;
+    poll_fn(|cx| {
+        if yielded {
+            Poll::Ready(())
+        } else {
+            yielded = true;
+            cx.waker().wake_by_ref();
+            Poll::Pending
+        }
+    })
+    .await
+}
+
+/// Run two futures at the same time and wait for both.
+pub async fn join<A: Future, B: Future>(a: A, b: B) -> (A::Output, B::Output) {
+    let mut a = pin!(a);
+    let mut b = pin!(b);
+    let mut out_a = None;
+    let mut out_b = None;
+    poll_fn(|cx| {
+        if out_a.is_none() {
+            if let Poll::Ready(v) = a.as_mut().poll(cx) {
+                out_a = Some(v);
+            }
+        }
+        if out_b.is_none() {
+            if let Poll::Ready(v) = b.as_mut().poll(cx) {
+                out_b = Some(v);
+            }
+        }
+        if out_a.is_some() && out_b.is_some() {
+            Poll::Ready((out_a.take().unwrap(), out_b.take().unwrap()))
+        } else {
+            Poll::Pending
+        }
+    })
+    .await
+}
+
+/// Run any number of futures at the same time; their outputs, in the same order.
+pub async fn join_all<F: Future>(futures: impl IntoIterator<Item = F>) -> Vec<F::Output> {
+    let mut futures: Vec<Pin<Box<F>>> = futures.into_iter().map(Box::pin).collect();
+    let mut outputs: Vec<Option<F::Output>> = futures.iter().map(|_| None).collect();
+    poll_fn(|cx| {
+        let mut all_done = true;
+        for (future, output) in futures.iter_mut().zip(outputs.iter_mut()) {
+            if output.is_none() {
+                match future.as_mut().poll(cx) {
+                    Poll::Ready(v) => *output = Some(v),
+                    Poll::Pending => all_done = false,
+                }
+            }
+        }
+        if all_done {
+            Poll::Ready(outputs.iter_mut().map(|o| o.take().unwrap()).collect())
+        } else {
+            Poll::Pending
+        }
+    })
+    .await
+}
+
+/// Which of two raced futures finished first.
+#[derive(Debug, PartialEq)]
+pub enum Either<A, B> {
+    Left(A),
+    Right(B),
+}
+
+/// Run two futures at the same time; the first one to finish wins and the other is dropped.
+pub async fn race<A: Future, B: Future>(a: A, b: B) -> Either<A::Output, B::Output> {
+    let mut a = pin!(a);
+    let mut b = pin!(b);
+    poll_fn(|cx| {
+        if let Poll::Ready(v) = a.as_mut().poll(cx) {
+            return Poll::Ready(Either::Left(v));
+        }
+        if let Poll::Ready(v) = b.as_mut().poll(cx) {
+            return Poll::Ready(Either::Right(v));
+        }
+        Poll::Pending
+    })
+    .await
+}
+
+// ---- channels ----
+
+struct Shared<T> {
+    queue: VecDeque<T>,
+    senders: usize,
+    waker: Option<Waker>,
+}
+
+/// The sending half of an async channel. Clone it for more senders.
+pub struct Sender<T>(Rc<RefCell<Shared<T>>>);
+
+/// The receiving half of an async channel. It is also a Stream.
+pub struct Receiver<T>(Rc<RefCell<Shared<T>>>);
+
+/// An async channel: `tx.send(value)`, and `rx.recv().await` on the other side.
+/// `recv` returns None once every sender has been dropped and the channel is empty.
+pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
+    let shared = Rc::new(RefCell::new(Shared { queue: VecDeque::new(), senders: 1, waker: None }));
+    (Sender(Rc::clone(&shared)), Receiver(shared))
+}
+
+impl<T> Sender<T> {
+    pub fn send(&self, value: T) -> Result<(), T> {
+        let mut shared = self.0.borrow_mut();
+        shared.queue.push_back(value);
+        if let Some(waker) = shared.waker.take() {
+            waker.wake();
+        }
+        Ok(())
+    }
+}
+
+impl<T> Clone for Sender<T> {
+    fn clone(&self) -> Self {
+        self.0.borrow_mut().senders += 1;
+        Sender(Rc::clone(&self.0))
+    }
+}
+
+impl<T> Drop for Sender<T> {
+    fn drop(&mut self) {
+        let mut shared = self.0.borrow_mut();
+        shared.senders -= 1;
+        if shared.senders == 0 {
+            if let Some(waker) = shared.waker.take() {
+                waker.wake();
+            }
+        }
+    }
+}
+
+impl<T> Receiver<T> {
+    pub async fn recv(&mut self) -> Option<T> {
+        poll_fn(|cx| self.poll_recv(cx)).await
+    }
+
+    fn poll_recv(&mut self, cx: &mut Context<'_>) -> Poll<Option<T>> {
+        let mut shared = self.0.borrow_mut();
+        if let Some(value) = shared.queue.pop_front() {
+            Poll::Ready(Some(value))
+        } else if shared.senders == 0 {
+            Poll::Ready(None)
+        } else {
+            shared.waker = Some(cx.waker().clone());
+            Poll::Pending
+        }
+    }
+}
+
+// ---- streams ----
+
+/// An async iterator: values that arrive one after another.
+pub trait Stream {
+    type Item;
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>>;
+}
+
+/// Handy methods for every Stream.
+pub trait StreamExt: Stream {
+    /// The next value, or None when the stream is finished.
+    fn next(&mut self) -> impl Future<Output = Option<Self::Item>>
+    where
+        Self: Unpin,
+    {
+        poll_fn(move |cx| Pin::new(&mut *self).poll_next(cx))
+    }
+}
+
+impl<S: Stream + ?Sized> StreamExt for S {}
+
+impl<T> Stream for Receiver<T> {
+    type Item = T;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<T>> {
+        self.poll_recv(cx)
+    }
+}
+
+/// A stream that hands out the items of an iterator.
+pub struct Iter<I>(I);
+
+pub fn stream_from_iter<I: IntoIterator>(items: I) -> Iter<I::IntoIter> {
+    Iter(items.into_iter())
+}
+
+impl<I: Iterator + Unpin> Stream for Iter<I> {
+    type Item = I::Item;
+
+    fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<I::Item>> {
+        Poll::Ready(self.0.next())
+    }
+}
+'''
+
+[[level]]
+id = "20.2"
 title = "Juggling tasks"
 kind = "fill"
 book = ["17.2"]
-about = "Run async work side by side."
+xp = 55
+goal = "Cook the pasta and the soup at the same time with join, and write an async block that doubles a number later."
+lesson = '''
+Awaiting one future after another runs them **one after another**:
 
-[[planned]]
+```rust
+cook("pasta").await;    // all of the pasta...
+cook("soup").await;     // ...then all of the soup
+```
+
+To run them **at the same time**, hand both futures to **`join`**. It drives both, and whenever one is waiting (say, for a timer), it works on the other. It finishes when both are done, and gives back both results:
+
+```rust
+use runtime::join;
+
+let (pasta, soup) = join(cook("pasta"), cook("soup")).await;
+```
+
+This is **concurrency on a single thread**: no new threads, just smart switching at every `.await`.
+
+**Async blocks** make a future out of a few lines of code, right where you need it:
+
+```rust
+let later = async move {
+    sleep(Duration::from_millis(10)).await;
+    x * 2
+};
+```
+
+Like closures, they borrow what they use, unless you write `async move` to take ownership.
+
+`runtime::sleep(duration)` is the async version of `thread::sleep`: it pauses only this future, not the whole thread.
+'''
+c_compare = '''
+Like an event loop with `select`/`poll` that switches between tasks whenever one would block, except you write plain straight-line code and the compiler builds the state machine.
+'''
+py_compare = '''
+`join(a, b).await` is `await asyncio.gather(a, b)`, and an async block is like an inline coroutine.
+'''
+check = "tests"
+starter = '''
+mod runtime;
+
+use runtime::{block_on, join, sleep};
+use std::cell::RefCell;
+use std::future::Future;
+use std::time::Duration;
+
+/// Writes "<dish> 1", "<dish> 2", ... into the log, pausing `pause_ms` before each step.
+async fn cook(dish: &str, steps: u32, pause_ms: u64, log: &RefCell<Vec<String>>) {
+    for step in 1..=steps {
+        sleep(Duration::from_millis(pause_ms)).await;
+        log.borrow_mut().push(format!("{dish} {step}"));
+    }
+}
+
+/// Cook pasta (3 steps, 30 ms each) and soup (2 steps, 75 ms each) AT THE SAME TIME.
+async fn dinner(log: &RefCell<Vec<String>>) {
+    cook("pasta", 3, 30, log).await;
+    cook("soup", 2, 75, log).await;
+}
+
+/// TODO: return an async block that sleeps 10 ms and then gives x * 2.
+fn double_later(x: u32) -> impl Future<Output = u32> {
+    std::future::ready(0)
+}
+
+fn main() {
+    let log = RefCell::new(Vec::new());
+    block_on(dinner(&log));
+    println!("{:?}", log.borrow());
+    println!("{}", block_on(double_later(21)));
+}
+'''
+solution = '''
+mod runtime;
+
+use runtime::{block_on, join, sleep};
+use std::cell::RefCell;
+use std::future::Future;
+use std::time::Duration;
+
+/// Writes "<dish> 1", "<dish> 2", ... into the log, pausing `pause_ms` before each step.
+async fn cook(dish: &str, steps: u32, pause_ms: u64, log: &RefCell<Vec<String>>) {
+    for step in 1..=steps {
+        sleep(Duration::from_millis(pause_ms)).await;
+        log.borrow_mut().push(format!("{dish} {step}"));
+    }
+}
+
+/// Cook pasta (3 steps, 30 ms each) and soup (2 steps, 75 ms each) AT THE SAME TIME.
+async fn dinner(log: &RefCell<Vec<String>>) {
+    join(cook("pasta", 3, 30, log), cook("soup", 2, 75, log)).await;
+}
+
+fn double_later(x: u32) -> impl Future<Output = u32> {
+    async move {
+        sleep(Duration::from_millis(10)).await;
+        x * 2
+    }
+}
+
+fn main() {
+    let log = RefCell::new(Vec::new());
+    block_on(dinner(&log));
+    println!("{:?}", log.borrow());
+    println!("{}", block_on(double_later(21)));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use super::*;
+    use std::time::Instant;
+
+    #[test]
+    fn both_dishes_at_once() {
+        let log = RefCell::new(Vec::new());
+        let start = Instant::now();
+        block_on(dinner(&log));
+        let took = start.elapsed();
+        assert_eq!(*log.borrow(), ["pasta 1", "pasta 2", "soup 1", "pasta 3", "soup 2"]);
+        assert!(took < Duration::from_millis(220), "took {took:?}: one after the other takes 240 ms");
+    }
+
+    #[test]
+    fn doubling_later() {
+        let start = Instant::now();
+        assert_eq!(block_on(double_later(21)), 42);
+        assert_eq!(block_on(double_later(0)), 0);
+        assert!(start.elapsed() >= Duration::from_millis(20), "each one should sleep 10 ms first");
+    }
+}
+'''
+hints = [
+    "In dinner, don't await the two cooks one after the other. Build both futures and give them to `join(...)`, then await that. For double_later, return `async move { ... }`.",
+    "`join(cook(\"pasta\", 3, 30, log), cook(\"soup\", 2, 75, log)).await;`. The async block: sleep with `sleep(Duration::from_millis(10)).await;`, then end with `x * 2`.",
+    "```rust\nasync fn dinner(log: &RefCell<Vec<String>>) {\n    join(cook(\"pasta\", 3, 30, log), cook(\"soup\", 2, 75, log)).await;\n}\n\nfn double_later(x: u32) -> impl Future<Output = u32> {\n    async move {\n        sleep(Duration::from_millis(10)).await;\n        x * 2\n    }\n}\n```",
+]
+
+[level.files]
+"runtime.rs" = '''
+//! Ferris' tiny async runtime: just enough to run the levels on this island.
+//! Real programs use a crate like tokio (or the book's `trpl`), which offer the same
+//! tools: block_on, sleep, join, race, channels and streams.
+#![allow(dead_code)]
+
+use std::cell::RefCell;
+use std::collections::VecDeque;
+use std::future::{Future, poll_fn};
+use std::pin::{Pin, pin};
+use std::rc::Rc;
+use std::sync::Arc;
+use std::task::{Context, Poll, Wake, Waker};
+use std::thread::{self, Thread};
+use std::time::{Duration, Instant};
+
+struct ThreadWaker(Thread);
+
+impl Wake for ThreadWaker {
+    fn wake(self: Arc<Self>) {
+        self.0.unpark();
+    }
+}
+
+/// Run a future on this thread until it finishes, and return its output.
+pub fn block_on<F: Future>(future: F) -> F::Output {
+    let mut future = pin!(future);
+    let waker = Waker::from(Arc::new(ThreadWaker(thread::current())));
+    let mut cx = Context::from_waker(&waker);
+    loop {
+        if let Poll::Ready(output) = future.as_mut().poll(&mut cx) {
+            return output;
+        }
+        thread::park_timeout(Duration::from_millis(5));
+    }
+}
+
+/// A future that finishes after `duration`.
+pub fn sleep(duration: Duration) -> Sleep {
+    Sleep { deadline: Instant::now() + duration, timer_started: false }
+}
+
+pub struct Sleep {
+    deadline: Instant,
+    timer_started: bool,
+}
+
+impl Future for Sleep {
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+        let now = Instant::now();
+        if now >= self.deadline {
+            return Poll::Ready(());
+        }
+        if !self.timer_started {
+            self.timer_started = true;
+            let waker = cx.waker().clone();
+            let wait = self.deadline - now;
+            thread::spawn(move || {
+                thread::sleep(wait);
+                waker.wake();
+            });
+        }
+        Poll::Pending
+    }
+}
+
+/// Let other futures run before continuing.
+pub async fn yield_now() {
+    let mut yielded = false;
+    poll_fn(|cx| {
+        if yielded {
+            Poll::Ready(())
+        } else {
+            yielded = true;
+            cx.waker().wake_by_ref();
+            Poll::Pending
+        }
+    })
+    .await
+}
+
+/// Run two futures at the same time and wait for both.
+pub async fn join<A: Future, B: Future>(a: A, b: B) -> (A::Output, B::Output) {
+    let mut a = pin!(a);
+    let mut b = pin!(b);
+    let mut out_a = None;
+    let mut out_b = None;
+    poll_fn(|cx| {
+        if out_a.is_none() {
+            if let Poll::Ready(v) = a.as_mut().poll(cx) {
+                out_a = Some(v);
+            }
+        }
+        if out_b.is_none() {
+            if let Poll::Ready(v) = b.as_mut().poll(cx) {
+                out_b = Some(v);
+            }
+        }
+        if out_a.is_some() && out_b.is_some() {
+            Poll::Ready((out_a.take().unwrap(), out_b.take().unwrap()))
+        } else {
+            Poll::Pending
+        }
+    })
+    .await
+}
+
+/// Run any number of futures at the same time; their outputs, in the same order.
+pub async fn join_all<F: Future>(futures: impl IntoIterator<Item = F>) -> Vec<F::Output> {
+    let mut futures: Vec<Pin<Box<F>>> = futures.into_iter().map(Box::pin).collect();
+    let mut outputs: Vec<Option<F::Output>> = futures.iter().map(|_| None).collect();
+    poll_fn(|cx| {
+        let mut all_done = true;
+        for (future, output) in futures.iter_mut().zip(outputs.iter_mut()) {
+            if output.is_none() {
+                match future.as_mut().poll(cx) {
+                    Poll::Ready(v) => *output = Some(v),
+                    Poll::Pending => all_done = false,
+                }
+            }
+        }
+        if all_done {
+            Poll::Ready(outputs.iter_mut().map(|o| o.take().unwrap()).collect())
+        } else {
+            Poll::Pending
+        }
+    })
+    .await
+}
+
+/// Which of two raced futures finished first.
+#[derive(Debug, PartialEq)]
+pub enum Either<A, B> {
+    Left(A),
+    Right(B),
+}
+
+/// Run two futures at the same time; the first one to finish wins and the other is dropped.
+pub async fn race<A: Future, B: Future>(a: A, b: B) -> Either<A::Output, B::Output> {
+    let mut a = pin!(a);
+    let mut b = pin!(b);
+    poll_fn(|cx| {
+        if let Poll::Ready(v) = a.as_mut().poll(cx) {
+            return Poll::Ready(Either::Left(v));
+        }
+        if let Poll::Ready(v) = b.as_mut().poll(cx) {
+            return Poll::Ready(Either::Right(v));
+        }
+        Poll::Pending
+    })
+    .await
+}
+
+// ---- channels ----
+
+struct Shared<T> {
+    queue: VecDeque<T>,
+    senders: usize,
+    waker: Option<Waker>,
+}
+
+/// The sending half of an async channel. Clone it for more senders.
+pub struct Sender<T>(Rc<RefCell<Shared<T>>>);
+
+/// The receiving half of an async channel. It is also a Stream.
+pub struct Receiver<T>(Rc<RefCell<Shared<T>>>);
+
+/// An async channel: `tx.send(value)`, and `rx.recv().await` on the other side.
+/// `recv` returns None once every sender has been dropped and the channel is empty.
+pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
+    let shared = Rc::new(RefCell::new(Shared { queue: VecDeque::new(), senders: 1, waker: None }));
+    (Sender(Rc::clone(&shared)), Receiver(shared))
+}
+
+impl<T> Sender<T> {
+    pub fn send(&self, value: T) -> Result<(), T> {
+        let mut shared = self.0.borrow_mut();
+        shared.queue.push_back(value);
+        if let Some(waker) = shared.waker.take() {
+            waker.wake();
+        }
+        Ok(())
+    }
+}
+
+impl<T> Clone for Sender<T> {
+    fn clone(&self) -> Self {
+        self.0.borrow_mut().senders += 1;
+        Sender(Rc::clone(&self.0))
+    }
+}
+
+impl<T> Drop for Sender<T> {
+    fn drop(&mut self) {
+        let mut shared = self.0.borrow_mut();
+        shared.senders -= 1;
+        if shared.senders == 0 {
+            if let Some(waker) = shared.waker.take() {
+                waker.wake();
+            }
+        }
+    }
+}
+
+impl<T> Receiver<T> {
+    pub async fn recv(&mut self) -> Option<T> {
+        poll_fn(|cx| self.poll_recv(cx)).await
+    }
+
+    fn poll_recv(&mut self, cx: &mut Context<'_>) -> Poll<Option<T>> {
+        let mut shared = self.0.borrow_mut();
+        if let Some(value) = shared.queue.pop_front() {
+            Poll::Ready(Some(value))
+        } else if shared.senders == 0 {
+            Poll::Ready(None)
+        } else {
+            shared.waker = Some(cx.waker().clone());
+            Poll::Pending
+        }
+    }
+}
+
+// ---- streams ----
+
+/// An async iterator: values that arrive one after another.
+pub trait Stream {
+    type Item;
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>>;
+}
+
+/// Handy methods for every Stream.
+pub trait StreamExt: Stream {
+    /// The next value, or None when the stream is finished.
+    fn next(&mut self) -> impl Future<Output = Option<Self::Item>>
+    where
+        Self: Unpin,
+    {
+        poll_fn(move |cx| Pin::new(&mut *self).poll_next(cx))
+    }
+}
+
+impl<S: Stream + ?Sized> StreamExt for S {}
+
+impl<T> Stream for Receiver<T> {
+    type Item = T;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<T>> {
+        self.poll_recv(cx)
+    }
+}
+
+/// A stream that hands out the items of an iterator.
+pub struct Iter<I>(I);
+
+pub fn stream_from_iter<I: IntoIterator>(items: I) -> Iter<I::IntoIter> {
+    Iter(items.into_iter())
+}
+
+impl<I: Iterator + Unpin> Stream for Iter<I> {
+    type Item = I::Item;
+
+    fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<I::Item>> {
+        Poll::Ready(self.0.next())
+    }
+}
+'''
+
+[[level]]
+id = "20.3"
 title = "Many futures at once"
 kind = "fill"
 book = ["17.3"]
-about = "Join them, race them, and add timeouts."
+xp = 60
+goal = "Fetch a whole list of pages at once with join_all, race two fetches, and build your own timeout out of race and sleep."
+lesson = '''
+`join` handles two futures. For a whole list of them, use **`join_all`**: it runs every future at the same time and returns their outputs **in the original order**:
 
-[[planned]]
+```rust
+use runtime::join_all;
+
+let futures = names.iter().map(|name| fetch(name));   // a future per name
+let pages: Vec<String> = join_all(futures).await;
+```
+
+Sometimes you only need the **first** one to finish. **`race`** runs two futures and returns as soon as one is done; the loser is dropped (cancelled). Since the two might have different output types, the winner comes wrapped in an `Either`:
+
+```rust
+use runtime::{race, Either};
+
+match race(fetch("a"), fetch("b")).await {
+    Either::Left(page) => println!("a won: {page}"),
+    Either::Right(page) => println!("b won: {page}"),
+}
+```
+
+These small pieces combine into new tools. A **timeout** is just a race between the work and a timer:
+
+```text
+race(the_work, sleep(max))
+  work finished first  -> Ok(its output)
+  timer finished first -> Err(max)
+```
+
+Writing `timeout` yourself is exactly what the book does in "Building Our Own Async Abstractions".
+'''
+c_compare = '''
+`join_all` is like waiting on many file descriptors at once with `poll`, and `race` is like taking whichever `select` result is ready first.
+'''
+py_compare = '''
+`join_all` is `asyncio.gather(*futures)`, `race` is like `asyncio.wait(..., return_when=FIRST_COMPLETED)`, and your timeout is `asyncio.wait_for`.
+'''
+check = "tests"
+starter = '''
+mod runtime;
+
+use runtime::{block_on, join_all, race, sleep, Either};
+use std::future::Future;
+use std::time::Duration;
+
+/// Pretend to download a page: waits `ms` milliseconds, then returns the name in capitals.
+async fn fetch(name: &str, ms: u64) -> String {
+    sleep(Duration::from_millis(ms)).await;
+    name.to_uppercase()
+}
+
+/// Fetch every (name, ms) page at the same time. Results in the same order as `pages`.
+async fn fetch_all(pages: &[(&str, u64)]) -> Vec<String> {
+    todo!()
+}
+
+/// Race two fetches; return the text of whichever finishes first.
+async fn fastest(a: (&str, u64), b: (&str, u64)) -> String {
+    todo!()
+}
+
+/// Ok(output) if `future` finishes within `max`, otherwise Err(max).
+async fn timeout<F: Future>(future: F, max: Duration) -> Result<F::Output, Duration> {
+    todo!()
+}
+
+fn main() {
+    let pages = block_on(fetch_all(&[("crab", 30), ("rust", 10)]));
+    println!("{pages:?}");
+}
+'''
+solution = '''
+mod runtime;
+
+use runtime::{block_on, join_all, race, sleep, Either};
+use std::future::Future;
+use std::time::Duration;
+
+/// Pretend to download a page: waits `ms` milliseconds, then returns the name in capitals.
+async fn fetch(name: &str, ms: u64) -> String {
+    sleep(Duration::from_millis(ms)).await;
+    name.to_uppercase()
+}
+
+/// Fetch every (name, ms) page at the same time. Results in the same order as `pages`.
+async fn fetch_all(pages: &[(&str, u64)]) -> Vec<String> {
+    join_all(pages.iter().map(|(name, ms)| fetch(name, *ms))).await
+}
+
+/// Race two fetches; return the text of whichever finishes first.
+async fn fastest(a: (&str, u64), b: (&str, u64)) -> String {
+    match race(fetch(a.0, a.1), fetch(b.0, b.1)).await {
+        Either::Left(page) | Either::Right(page) => page,
+    }
+}
+
+/// Ok(output) if `future` finishes within `max`, otherwise Err(max).
+async fn timeout<F: Future>(future: F, max: Duration) -> Result<F::Output, Duration> {
+    match race(future, sleep(max)).await {
+        Either::Left(output) => Ok(output),
+        Either::Right(()) => Err(max),
+    }
+}
+
+fn main() {
+    let pages = block_on(fetch_all(&[("crab", 30), ("rust", 10)]));
+    println!("{pages:?}");
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use super::*;
+    use std::time::Instant;
+
+    #[test]
+    fn all_at_once() {
+        let start = Instant::now();
+        let pages = block_on(fetch_all(&[("a", 100), ("bb", 80), ("c", 60)]));
+        let took = start.elapsed();
+        assert_eq!(pages, vec!["A", "BB", "C"]);
+        assert!(took < Duration::from_millis(200), "took {took:?}: one by one takes 240 ms");
+        assert!(block_on(fetch_all(&[])).is_empty());
+    }
+
+    #[test]
+    fn the_hare_wins() {
+        assert_eq!(block_on(fastest(("tortoise", 120), ("hare", 20))), "HARE");
+        assert_eq!(block_on(fastest(("hare", 20), ("tortoise", 120))), "HARE");
+    }
+
+    #[test]
+    fn timeouts() {
+        let start = Instant::now();
+        assert_eq!(block_on(timeout(fetch("slow", 300), Duration::from_millis(50))), Err(Duration::from_millis(50)));
+        assert!(start.elapsed() < Duration::from_millis(200), "it should give up after 50 ms");
+        assert_eq!(block_on(timeout(fetch("quick", 10), Duration::from_millis(100))), Ok("QUICK".to_string()));
+    }
+}
+'''
+hints = [
+    "fetch_all: make one future per page with `.iter().map(...)` and give them all to `join_all(...).await`. fastest and timeout both `match` on `race(...).await`.",
+    "In fetch_all the closure gets `&(&str, u64)`, so write `|(name, ms)| fetch(name, *ms)`. In fastest, both arms return the page: `Either::Left(page) | Either::Right(page) => page`. timeout races the future against `sleep(max)`.",
+    "```rust\nasync fn fetch_all(pages: &[(&str, u64)]) -> Vec<String> {\n    join_all(pages.iter().map(|(name, ms)| fetch(name, *ms))).await\n}\n\nasync fn timeout<F: Future>(future: F, max: Duration) -> Result<F::Output, Duration> {\n    match race(future, sleep(max)).await {\n        Either::Left(output) => Ok(output),\n        Either::Right(()) => Err(max),\n    }\n}\n```",
+]
+
+[level.files]
+"runtime.rs" = '''
+//! Ferris' tiny async runtime: just enough to run the levels on this island.
+//! Real programs use a crate like tokio (or the book's `trpl`), which offer the same
+//! tools: block_on, sleep, join, race, channels and streams.
+#![allow(dead_code)]
+
+use std::cell::RefCell;
+use std::collections::VecDeque;
+use std::future::{Future, poll_fn};
+use std::pin::{Pin, pin};
+use std::rc::Rc;
+use std::sync::Arc;
+use std::task::{Context, Poll, Wake, Waker};
+use std::thread::{self, Thread};
+use std::time::{Duration, Instant};
+
+struct ThreadWaker(Thread);
+
+impl Wake for ThreadWaker {
+    fn wake(self: Arc<Self>) {
+        self.0.unpark();
+    }
+}
+
+/// Run a future on this thread until it finishes, and return its output.
+pub fn block_on<F: Future>(future: F) -> F::Output {
+    let mut future = pin!(future);
+    let waker = Waker::from(Arc::new(ThreadWaker(thread::current())));
+    let mut cx = Context::from_waker(&waker);
+    loop {
+        if let Poll::Ready(output) = future.as_mut().poll(&mut cx) {
+            return output;
+        }
+        thread::park_timeout(Duration::from_millis(5));
+    }
+}
+
+/// A future that finishes after `duration`.
+pub fn sleep(duration: Duration) -> Sleep {
+    Sleep { deadline: Instant::now() + duration, timer_started: false }
+}
+
+pub struct Sleep {
+    deadline: Instant,
+    timer_started: bool,
+}
+
+impl Future for Sleep {
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+        let now = Instant::now();
+        if now >= self.deadline {
+            return Poll::Ready(());
+        }
+        if !self.timer_started {
+            self.timer_started = true;
+            let waker = cx.waker().clone();
+            let wait = self.deadline - now;
+            thread::spawn(move || {
+                thread::sleep(wait);
+                waker.wake();
+            });
+        }
+        Poll::Pending
+    }
+}
+
+/// Let other futures run before continuing.
+pub async fn yield_now() {
+    let mut yielded = false;
+    poll_fn(|cx| {
+        if yielded {
+            Poll::Ready(())
+        } else {
+            yielded = true;
+            cx.waker().wake_by_ref();
+            Poll::Pending
+        }
+    })
+    .await
+}
+
+/// Run two futures at the same time and wait for both.
+pub async fn join<A: Future, B: Future>(a: A, b: B) -> (A::Output, B::Output) {
+    let mut a = pin!(a);
+    let mut b = pin!(b);
+    let mut out_a = None;
+    let mut out_b = None;
+    poll_fn(|cx| {
+        if out_a.is_none() {
+            if let Poll::Ready(v) = a.as_mut().poll(cx) {
+                out_a = Some(v);
+            }
+        }
+        if out_b.is_none() {
+            if let Poll::Ready(v) = b.as_mut().poll(cx) {
+                out_b = Some(v);
+            }
+        }
+        if out_a.is_some() && out_b.is_some() {
+            Poll::Ready((out_a.take().unwrap(), out_b.take().unwrap()))
+        } else {
+            Poll::Pending
+        }
+    })
+    .await
+}
+
+/// Run any number of futures at the same time; their outputs, in the same order.
+pub async fn join_all<F: Future>(futures: impl IntoIterator<Item = F>) -> Vec<F::Output> {
+    let mut futures: Vec<Pin<Box<F>>> = futures.into_iter().map(Box::pin).collect();
+    let mut outputs: Vec<Option<F::Output>> = futures.iter().map(|_| None).collect();
+    poll_fn(|cx| {
+        let mut all_done = true;
+        for (future, output) in futures.iter_mut().zip(outputs.iter_mut()) {
+            if output.is_none() {
+                match future.as_mut().poll(cx) {
+                    Poll::Ready(v) => *output = Some(v),
+                    Poll::Pending => all_done = false,
+                }
+            }
+        }
+        if all_done {
+            Poll::Ready(outputs.iter_mut().map(|o| o.take().unwrap()).collect())
+        } else {
+            Poll::Pending
+        }
+    })
+    .await
+}
+
+/// Which of two raced futures finished first.
+#[derive(Debug, PartialEq)]
+pub enum Either<A, B> {
+    Left(A),
+    Right(B),
+}
+
+/// Run two futures at the same time; the first one to finish wins and the other is dropped.
+pub async fn race<A: Future, B: Future>(a: A, b: B) -> Either<A::Output, B::Output> {
+    let mut a = pin!(a);
+    let mut b = pin!(b);
+    poll_fn(|cx| {
+        if let Poll::Ready(v) = a.as_mut().poll(cx) {
+            return Poll::Ready(Either::Left(v));
+        }
+        if let Poll::Ready(v) = b.as_mut().poll(cx) {
+            return Poll::Ready(Either::Right(v));
+        }
+        Poll::Pending
+    })
+    .await
+}
+
+// ---- channels ----
+
+struct Shared<T> {
+    queue: VecDeque<T>,
+    senders: usize,
+    waker: Option<Waker>,
+}
+
+/// The sending half of an async channel. Clone it for more senders.
+pub struct Sender<T>(Rc<RefCell<Shared<T>>>);
+
+/// The receiving half of an async channel. It is also a Stream.
+pub struct Receiver<T>(Rc<RefCell<Shared<T>>>);
+
+/// An async channel: `tx.send(value)`, and `rx.recv().await` on the other side.
+/// `recv` returns None once every sender has been dropped and the channel is empty.
+pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
+    let shared = Rc::new(RefCell::new(Shared { queue: VecDeque::new(), senders: 1, waker: None }));
+    (Sender(Rc::clone(&shared)), Receiver(shared))
+}
+
+impl<T> Sender<T> {
+    pub fn send(&self, value: T) -> Result<(), T> {
+        let mut shared = self.0.borrow_mut();
+        shared.queue.push_back(value);
+        if let Some(waker) = shared.waker.take() {
+            waker.wake();
+        }
+        Ok(())
+    }
+}
+
+impl<T> Clone for Sender<T> {
+    fn clone(&self) -> Self {
+        self.0.borrow_mut().senders += 1;
+        Sender(Rc::clone(&self.0))
+    }
+}
+
+impl<T> Drop for Sender<T> {
+    fn drop(&mut self) {
+        let mut shared = self.0.borrow_mut();
+        shared.senders -= 1;
+        if shared.senders == 0 {
+            if let Some(waker) = shared.waker.take() {
+                waker.wake();
+            }
+        }
+    }
+}
+
+impl<T> Receiver<T> {
+    pub async fn recv(&mut self) -> Option<T> {
+        poll_fn(|cx| self.poll_recv(cx)).await
+    }
+
+    fn poll_recv(&mut self, cx: &mut Context<'_>) -> Poll<Option<T>> {
+        let mut shared = self.0.borrow_mut();
+        if let Some(value) = shared.queue.pop_front() {
+            Poll::Ready(Some(value))
+        } else if shared.senders == 0 {
+            Poll::Ready(None)
+        } else {
+            shared.waker = Some(cx.waker().clone());
+            Poll::Pending
+        }
+    }
+}
+
+// ---- streams ----
+
+/// An async iterator: values that arrive one after another.
+pub trait Stream {
+    type Item;
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>>;
+}
+
+/// Handy methods for every Stream.
+pub trait StreamExt: Stream {
+    /// The next value, or None when the stream is finished.
+    fn next(&mut self) -> impl Future<Output = Option<Self::Item>>
+    where
+        Self: Unpin,
+    {
+        poll_fn(move |cx| Pin::new(&mut *self).poll_next(cx))
+    }
+}
+
+impl<S: Stream + ?Sized> StreamExt for S {}
+
+impl<T> Stream for Receiver<T> {
+    type Item = T;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<T>> {
+        self.poll_recv(cx)
+    }
+}
+
+/// A stream that hands out the items of an iterator.
+pub struct Iter<I>(I);
+
+pub fn stream_from_iter<I: IntoIterator>(items: I) -> Iter<I::IntoIter> {
+    Iter(items.into_iter())
+}
+
+impl<I: Iterator + Unpin> Stream for Iter<I> {
+    type Item = I::Item;
+
+    fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<I::Item>> {
+        Poll::Ready(self.0.next())
+    }
+}
+'''
+
+[[level]]
+id = "20.4"
 title = "A river of values"
 kind = "fill"
 book = ["17.4"]
-about = "Streams: values that arrive one after another."
+xp = 60
+goal = "Read values from a stream as they arrive, and connect a producer and a consumer with an async channel."
+lesson = '''
+A future gives you **one** value later. A **stream** gives you **many** values, one after another, over time: messages from a chat, lines from a network connection, clicks.
 
-[[planned]]
+A stream is the async version of an iterator. Instead of a `for` loop, you `await` each item:
+
+```rust
+use runtime::{stream_from_iter, StreamExt};
+
+let mut stream = stream_from_iter(vec![1, 2, 3]);
+while let Some(value) = stream.next().await {
+    println!("got {value}");
+}
+```
+
+`next()` comes from the **`StreamExt`** trait, so it must be imported. It returns `None` when the stream ends.
+
+An async **channel** connects two pieces of async code. Its receiver is a stream:
+
+```rust
+use runtime::channel;
+
+let (tx, mut rx) = channel();
+
+let producer = async move {           // move: the producer owns tx...
+    tx.send("hello").unwrap();
+    sleep(Duration::from_millis(10)).await;
+};                                    // ...so tx is dropped when it's done
+
+let consumer = async {
+    while let Some(msg) = rx.next().await {   // None once every sender is gone
+        println!("{msg}");
+    }
+};
+
+join(producer, consumer).await;
+```
+
+⚠ Forget the `move`, and `tx` lives on in the outer function. The channel never closes, and the consumer waits forever.
+'''
+c_compare = '''
+Like reading from a pipe in an event loop: each read waits for the next chunk, and end-of-file (all writers closed) ends the loop.
+'''
+py_compare = '''
+Like `async for value in stream:` with an async generator, and the channel is `asyncio.Queue`, except it closes by itself when the senders are gone.
+'''
+check = "tests"
+starter = '''
+mod runtime;
+
+use runtime::{block_on, channel, join, sleep, stream_from_iter, StreamExt};
+use std::time::Duration;
+
+/// Go through the numbers as a stream (`stream_from_iter`), with
+/// `while let Some(n) = stream.next().await`. Keep the even ones, doubled.
+async fn evens_doubled(numbers: Vec<i32>) -> Vec<i32> {
+    todo!()
+}
+
+/// A producer sends "tick 1", "tick 2", ... "tick n" through a channel, sleeping
+/// `gap` after each one. A consumer collects every message until the channel closes.
+/// Run both at the same time with join, and return what the consumer collected.
+async fn ticks(n: u32, gap: Duration) -> Vec<String> {
+    todo!()
+}
+
+fn main() {
+    println!("{:?}", block_on(evens_doubled(vec![1, 2, 3, 4])));
+}
+'''
+solution = '''
+mod runtime;
+
+use runtime::{block_on, channel, join, sleep, stream_from_iter, StreamExt};
+use std::time::Duration;
+
+/// Go through the numbers as a stream (`stream_from_iter`), with
+/// `while let Some(n) = stream.next().await`. Keep the even ones, doubled.
+async fn evens_doubled(numbers: Vec<i32>) -> Vec<i32> {
+    let mut stream = stream_from_iter(numbers);
+    let mut result = Vec::new();
+    while let Some(n) = stream.next().await {
+        if n % 2 == 0 {
+            result.push(n * 2);
+        }
+    }
+    result
+}
+
+/// A producer sends "tick 1", "tick 2", ... "tick n" through a channel, sleeping
+/// `gap` after each one. A consumer collects every message until the channel closes.
+/// Run both at the same time with join, and return what the consumer collected.
+async fn ticks(n: u32, gap: Duration) -> Vec<String> {
+    let (tx, mut rx) = channel();
+
+    let producer = async move {
+        for i in 1..=n {
+            tx.send(format!("tick {i}")).unwrap();
+            sleep(gap).await;
+        }
+    };
+
+    let consumer = async {
+        let mut got = Vec::new();
+        while let Some(msg) = rx.next().await {
+            got.push(msg);
+        }
+        got
+    };
+
+    let ((), got) = join(producer, consumer).await;
+    got
+}
+
+fn main() {
+    println!("{:?}", block_on(evens_doubled(vec![1, 2, 3, 4])));
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use super::*;
+    use std::time::Instant;
+
+    #[test]
+    fn evens() {
+        assert_eq!(block_on(evens_doubled(vec![1, 2, 3, 4, 5, 6])), vec![4, 8, 12]);
+        assert!(block_on(evens_doubled(vec![1, 3])).is_empty());
+    }
+
+    #[test]
+    fn ticking() {
+        let start = Instant::now();
+        let got = block_on(ticks(3, Duration::from_millis(20)));
+        assert_eq!(got, vec!["tick 1", "tick 2", "tick 3"]);
+        assert!(start.elapsed() >= Duration::from_millis(60), "sleep between the ticks");
+        assert!(block_on(ticks(0, Duration::from_millis(5))).is_empty());
+    }
+}
+'''
+hints = [
+    "evens_doubled: `let mut stream = stream_from_iter(numbers);` then a `while let Some(n) = stream.next().await` loop that pushes `n * 2` for even numbers.",
+    "ticks: `let (tx, mut rx) = channel();`. The producer is an `async move { ... }` block with a for loop that sends and sleeps. The consumer is an `async { ... }` block that collects with `while let Some(msg) = rx.next().await`. Then `join(producer, consumer).await` and return the consumer's part.",
+    "```rust\nlet (tx, mut rx) = channel();\nlet producer = async move {\n    for i in 1..=n {\n        tx.send(format!(\"tick {i}\")).unwrap();\n        sleep(gap).await;\n    }\n};\nlet consumer = async {\n    let mut got = Vec::new();\n    while let Some(msg) = rx.next().await {\n        got.push(msg);\n    }\n    got\n};\nlet ((), got) = join(producer, consumer).await;\ngot\n```",
+]
+
+[level.files]
+"runtime.rs" = '''
+//! Ferris' tiny async runtime: just enough to run the levels on this island.
+//! Real programs use a crate like tokio (or the book's `trpl`), which offer the same
+//! tools: block_on, sleep, join, race, channels and streams.
+#![allow(dead_code)]
+
+use std::cell::RefCell;
+use std::collections::VecDeque;
+use std::future::{Future, poll_fn};
+use std::pin::{Pin, pin};
+use std::rc::Rc;
+use std::sync::Arc;
+use std::task::{Context, Poll, Wake, Waker};
+use std::thread::{self, Thread};
+use std::time::{Duration, Instant};
+
+struct ThreadWaker(Thread);
+
+impl Wake for ThreadWaker {
+    fn wake(self: Arc<Self>) {
+        self.0.unpark();
+    }
+}
+
+/// Run a future on this thread until it finishes, and return its output.
+pub fn block_on<F: Future>(future: F) -> F::Output {
+    let mut future = pin!(future);
+    let waker = Waker::from(Arc::new(ThreadWaker(thread::current())));
+    let mut cx = Context::from_waker(&waker);
+    loop {
+        if let Poll::Ready(output) = future.as_mut().poll(&mut cx) {
+            return output;
+        }
+        thread::park_timeout(Duration::from_millis(5));
+    }
+}
+
+/// A future that finishes after `duration`.
+pub fn sleep(duration: Duration) -> Sleep {
+    Sleep { deadline: Instant::now() + duration, timer_started: false }
+}
+
+pub struct Sleep {
+    deadline: Instant,
+    timer_started: bool,
+}
+
+impl Future for Sleep {
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+        let now = Instant::now();
+        if now >= self.deadline {
+            return Poll::Ready(());
+        }
+        if !self.timer_started {
+            self.timer_started = true;
+            let waker = cx.waker().clone();
+            let wait = self.deadline - now;
+            thread::spawn(move || {
+                thread::sleep(wait);
+                waker.wake();
+            });
+        }
+        Poll::Pending
+    }
+}
+
+/// Let other futures run before continuing.
+pub async fn yield_now() {
+    let mut yielded = false;
+    poll_fn(|cx| {
+        if yielded {
+            Poll::Ready(())
+        } else {
+            yielded = true;
+            cx.waker().wake_by_ref();
+            Poll::Pending
+        }
+    })
+    .await
+}
+
+/// Run two futures at the same time and wait for both.
+pub async fn join<A: Future, B: Future>(a: A, b: B) -> (A::Output, B::Output) {
+    let mut a = pin!(a);
+    let mut b = pin!(b);
+    let mut out_a = None;
+    let mut out_b = None;
+    poll_fn(|cx| {
+        if out_a.is_none() {
+            if let Poll::Ready(v) = a.as_mut().poll(cx) {
+                out_a = Some(v);
+            }
+        }
+        if out_b.is_none() {
+            if let Poll::Ready(v) = b.as_mut().poll(cx) {
+                out_b = Some(v);
+            }
+        }
+        if out_a.is_some() && out_b.is_some() {
+            Poll::Ready((out_a.take().unwrap(), out_b.take().unwrap()))
+        } else {
+            Poll::Pending
+        }
+    })
+    .await
+}
+
+/// Run any number of futures at the same time; their outputs, in the same order.
+pub async fn join_all<F: Future>(futures: impl IntoIterator<Item = F>) -> Vec<F::Output> {
+    let mut futures: Vec<Pin<Box<F>>> = futures.into_iter().map(Box::pin).collect();
+    let mut outputs: Vec<Option<F::Output>> = futures.iter().map(|_| None).collect();
+    poll_fn(|cx| {
+        let mut all_done = true;
+        for (future, output) in futures.iter_mut().zip(outputs.iter_mut()) {
+            if output.is_none() {
+                match future.as_mut().poll(cx) {
+                    Poll::Ready(v) => *output = Some(v),
+                    Poll::Pending => all_done = false,
+                }
+            }
+        }
+        if all_done {
+            Poll::Ready(outputs.iter_mut().map(|o| o.take().unwrap()).collect())
+        } else {
+            Poll::Pending
+        }
+    })
+    .await
+}
+
+/// Which of two raced futures finished first.
+#[derive(Debug, PartialEq)]
+pub enum Either<A, B> {
+    Left(A),
+    Right(B),
+}
+
+/// Run two futures at the same time; the first one to finish wins and the other is dropped.
+pub async fn race<A: Future, B: Future>(a: A, b: B) -> Either<A::Output, B::Output> {
+    let mut a = pin!(a);
+    let mut b = pin!(b);
+    poll_fn(|cx| {
+        if let Poll::Ready(v) = a.as_mut().poll(cx) {
+            return Poll::Ready(Either::Left(v));
+        }
+        if let Poll::Ready(v) = b.as_mut().poll(cx) {
+            return Poll::Ready(Either::Right(v));
+        }
+        Poll::Pending
+    })
+    .await
+}
+
+// ---- channels ----
+
+struct Shared<T> {
+    queue: VecDeque<T>,
+    senders: usize,
+    waker: Option<Waker>,
+}
+
+/// The sending half of an async channel. Clone it for more senders.
+pub struct Sender<T>(Rc<RefCell<Shared<T>>>);
+
+/// The receiving half of an async channel. It is also a Stream.
+pub struct Receiver<T>(Rc<RefCell<Shared<T>>>);
+
+/// An async channel: `tx.send(value)`, and `rx.recv().await` on the other side.
+/// `recv` returns None once every sender has been dropped and the channel is empty.
+pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
+    let shared = Rc::new(RefCell::new(Shared { queue: VecDeque::new(), senders: 1, waker: None }));
+    (Sender(Rc::clone(&shared)), Receiver(shared))
+}
+
+impl<T> Sender<T> {
+    pub fn send(&self, value: T) -> Result<(), T> {
+        let mut shared = self.0.borrow_mut();
+        shared.queue.push_back(value);
+        if let Some(waker) = shared.waker.take() {
+            waker.wake();
+        }
+        Ok(())
+    }
+}
+
+impl<T> Clone for Sender<T> {
+    fn clone(&self) -> Self {
+        self.0.borrow_mut().senders += 1;
+        Sender(Rc::clone(&self.0))
+    }
+}
+
+impl<T> Drop for Sender<T> {
+    fn drop(&mut self) {
+        let mut shared = self.0.borrow_mut();
+        shared.senders -= 1;
+        if shared.senders == 0 {
+            if let Some(waker) = shared.waker.take() {
+                waker.wake();
+            }
+        }
+    }
+}
+
+impl<T> Receiver<T> {
+    pub async fn recv(&mut self) -> Option<T> {
+        poll_fn(|cx| self.poll_recv(cx)).await
+    }
+
+    fn poll_recv(&mut self, cx: &mut Context<'_>) -> Poll<Option<T>> {
+        let mut shared = self.0.borrow_mut();
+        if let Some(value) = shared.queue.pop_front() {
+            Poll::Ready(Some(value))
+        } else if shared.senders == 0 {
+            Poll::Ready(None)
+        } else {
+            shared.waker = Some(cx.waker().clone());
+            Poll::Pending
+        }
+    }
+}
+
+// ---- streams ----
+
+/// An async iterator: values that arrive one after another.
+pub trait Stream {
+    type Item;
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>>;
+}
+
+/// Handy methods for every Stream.
+pub trait StreamExt: Stream {
+    /// The next value, or None when the stream is finished.
+    fn next(&mut self) -> impl Future<Output = Option<Self::Item>>
+    where
+        Self: Unpin,
+    {
+        poll_fn(move |cx| Pin::new(&mut *self).poll_next(cx))
+    }
+}
+
+impl<S: Stream + ?Sized> StreamExt for S {}
+
+impl<T> Stream for Receiver<T> {
+    type Item = T;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<T>> {
+        self.poll_recv(cx)
+    }
+}
+
+/// A stream that hands out the items of an iterator.
+pub struct Iter<I>(I);
+
+pub fn stream_from_iter<I: IntoIterator>(items: I) -> Iter<I::IntoIter> {
+    Iter(items.into_iter())
+}
+
+impl<I: Iterator + Unpin> Stream for Iter<I> {
+    type Item = I::Item;
+
+    fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<I::Item>> {
+        Poll::Ready(self.0.next())
+    }
+}
+'''
+
+[[level]]
+id = "20.5"
 title = "Under the hood"
 kind = "predict"
 book = ["17.5"]
-about = "Future, Pin and Stream: the traits that make async work."
+xp = 30
+goal = "A hand-written future says Pending twice before it's ready. What does this print?"
+lesson = '''
+What *is* a future? Anything that implements the **`Future`** trait:
 
-[[planned]]
+```rust
+pub trait Future {
+    type Output;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output>;
+}
+
+pub enum Poll<T> {
+    Ready(T),
+    Pending,
+}
+```
+
+The runtime calls **`poll`** to make progress:
+
+- **`Poll::Ready(value)`**: done, here's the result.
+- **`Poll::Pending`**: not yet. Before returning `Pending`, the future arranges for **`cx.waker()`** to be called when it's worth polling again (when data arrives, a timer fires...). The runtime then polls it again.
+
+`.await` is just this loop, written for you. An `async fn` compiles into a state machine that implements `Future`, with one state for each `.await`.
+
+**`Pin`**: that state machine may contain references to its own fields. Moving it in memory would break them. `Pin<&mut Self>` promises the future won't be moved again once polling has started. Most types don't care (they're `Unpin`); that's why `runtime.rs` uses `pin!` before polling.
+
+**Streams** are the same idea with `poll_next`, returning `Poll<Option<Item>>`. Ferris' `runtime.rs` is about 250 lines built from exactly these pieces: `block_on` polls in a loop and sleeps until a waker fires, and `sleep` starts a timer that calls the waker.
+'''
+c_compare = '''
+A future is a state machine struct plus a "step" function, the kind of thing you'd hand-write in C for a non-blocking network server. The waker is the callback that says "step me again".
+'''
+py_compare = '''
+Python coroutines are driven by `send()`, and `await` yields back to the event loop. Rust's `poll` + `Waker` is the same idea, but the runtime only polls again after a wake-up.
+'''
+starter = '''
+mod runtime;
+
+use runtime::block_on;
+use std::future::Future;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+
+struct Knock {
+    left: u32,
+}
+
+impl Future for Knock {
+    type Output = &'static str;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        println!("poll: {} knocks left", self.left);
+        if self.left == 0 {
+            Poll::Ready("the door opens")
+        } else {
+            self.left -= 1;
+            cx.waker().wake_by_ref(); // "poll me again soon"
+            Poll::Pending
+        }
+    }
+}
+
+fn main() {
+    let knock = Knock { left: 2 };
+    println!("built");
+    let result = block_on(async {
+        println!("awaiting");
+        knock.await
+    });
+    println!("{result}");
+}
+'''
+choices = [
+    "built / awaiting / poll: 2 knocks left / the door opens",
+    "built / awaiting / poll: 2 knocks left / poll: 1 knocks left / poll: 0 knocks left / the door opens",
+    "poll: 2 knocks left / built / awaiting / poll: 1 knocks left / poll: 0 knocks left / the door opens",
+    "built / awaiting / poll: 2 knocks left, and then it waits forever",
+]
+answer = 1
+expected_output = '''
+built
+awaiting
+poll: 2 knocks left
+poll: 1 knocks left
+poll: 0 knocks left
+the door opens
+'''
+explanation = "Making `Knock` runs no code; it's only polled once awaited. Each `Pending` comes with a wake-up (`wake_by_ref`), so the runtime polls again: three polls in total, and the third returns `Ready`. Without the wake-up, the runtime could wait forever."
+
+[level.files]
+"runtime.rs" = '''
+//! Ferris' tiny async runtime: just enough to run the levels on this island.
+//! Real programs use a crate like tokio (or the book's `trpl`), which offer the same
+//! tools: block_on, sleep, join, race, channels and streams.
+#![allow(dead_code)]
+
+use std::cell::RefCell;
+use std::collections::VecDeque;
+use std::future::{Future, poll_fn};
+use std::pin::{Pin, pin};
+use std::rc::Rc;
+use std::sync::Arc;
+use std::task::{Context, Poll, Wake, Waker};
+use std::thread::{self, Thread};
+use std::time::{Duration, Instant};
+
+struct ThreadWaker(Thread);
+
+impl Wake for ThreadWaker {
+    fn wake(self: Arc<Self>) {
+        self.0.unpark();
+    }
+}
+
+/// Run a future on this thread until it finishes, and return its output.
+pub fn block_on<F: Future>(future: F) -> F::Output {
+    let mut future = pin!(future);
+    let waker = Waker::from(Arc::new(ThreadWaker(thread::current())));
+    let mut cx = Context::from_waker(&waker);
+    loop {
+        if let Poll::Ready(output) = future.as_mut().poll(&mut cx) {
+            return output;
+        }
+        thread::park_timeout(Duration::from_millis(5));
+    }
+}
+
+/// A future that finishes after `duration`.
+pub fn sleep(duration: Duration) -> Sleep {
+    Sleep { deadline: Instant::now() + duration, timer_started: false }
+}
+
+pub struct Sleep {
+    deadline: Instant,
+    timer_started: bool,
+}
+
+impl Future for Sleep {
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+        let now = Instant::now();
+        if now >= self.deadline {
+            return Poll::Ready(());
+        }
+        if !self.timer_started {
+            self.timer_started = true;
+            let waker = cx.waker().clone();
+            let wait = self.deadline - now;
+            thread::spawn(move || {
+                thread::sleep(wait);
+                waker.wake();
+            });
+        }
+        Poll::Pending
+    }
+}
+
+/// Let other futures run before continuing.
+pub async fn yield_now() {
+    let mut yielded = false;
+    poll_fn(|cx| {
+        if yielded {
+            Poll::Ready(())
+        } else {
+            yielded = true;
+            cx.waker().wake_by_ref();
+            Poll::Pending
+        }
+    })
+    .await
+}
+
+/// Run two futures at the same time and wait for both.
+pub async fn join<A: Future, B: Future>(a: A, b: B) -> (A::Output, B::Output) {
+    let mut a = pin!(a);
+    let mut b = pin!(b);
+    let mut out_a = None;
+    let mut out_b = None;
+    poll_fn(|cx| {
+        if out_a.is_none() {
+            if let Poll::Ready(v) = a.as_mut().poll(cx) {
+                out_a = Some(v);
+            }
+        }
+        if out_b.is_none() {
+            if let Poll::Ready(v) = b.as_mut().poll(cx) {
+                out_b = Some(v);
+            }
+        }
+        if out_a.is_some() && out_b.is_some() {
+            Poll::Ready((out_a.take().unwrap(), out_b.take().unwrap()))
+        } else {
+            Poll::Pending
+        }
+    })
+    .await
+}
+
+/// Run any number of futures at the same time; their outputs, in the same order.
+pub async fn join_all<F: Future>(futures: impl IntoIterator<Item = F>) -> Vec<F::Output> {
+    let mut futures: Vec<Pin<Box<F>>> = futures.into_iter().map(Box::pin).collect();
+    let mut outputs: Vec<Option<F::Output>> = futures.iter().map(|_| None).collect();
+    poll_fn(|cx| {
+        let mut all_done = true;
+        for (future, output) in futures.iter_mut().zip(outputs.iter_mut()) {
+            if output.is_none() {
+                match future.as_mut().poll(cx) {
+                    Poll::Ready(v) => *output = Some(v),
+                    Poll::Pending => all_done = false,
+                }
+            }
+        }
+        if all_done {
+            Poll::Ready(outputs.iter_mut().map(|o| o.take().unwrap()).collect())
+        } else {
+            Poll::Pending
+        }
+    })
+    .await
+}
+
+/// Which of two raced futures finished first.
+#[derive(Debug, PartialEq)]
+pub enum Either<A, B> {
+    Left(A),
+    Right(B),
+}
+
+/// Run two futures at the same time; the first one to finish wins and the other is dropped.
+pub async fn race<A: Future, B: Future>(a: A, b: B) -> Either<A::Output, B::Output> {
+    let mut a = pin!(a);
+    let mut b = pin!(b);
+    poll_fn(|cx| {
+        if let Poll::Ready(v) = a.as_mut().poll(cx) {
+            return Poll::Ready(Either::Left(v));
+        }
+        if let Poll::Ready(v) = b.as_mut().poll(cx) {
+            return Poll::Ready(Either::Right(v));
+        }
+        Poll::Pending
+    })
+    .await
+}
+
+// ---- channels ----
+
+struct Shared<T> {
+    queue: VecDeque<T>,
+    senders: usize,
+    waker: Option<Waker>,
+}
+
+/// The sending half of an async channel. Clone it for more senders.
+pub struct Sender<T>(Rc<RefCell<Shared<T>>>);
+
+/// The receiving half of an async channel. It is also a Stream.
+pub struct Receiver<T>(Rc<RefCell<Shared<T>>>);
+
+/// An async channel: `tx.send(value)`, and `rx.recv().await` on the other side.
+/// `recv` returns None once every sender has been dropped and the channel is empty.
+pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
+    let shared = Rc::new(RefCell::new(Shared { queue: VecDeque::new(), senders: 1, waker: None }));
+    (Sender(Rc::clone(&shared)), Receiver(shared))
+}
+
+impl<T> Sender<T> {
+    pub fn send(&self, value: T) -> Result<(), T> {
+        let mut shared = self.0.borrow_mut();
+        shared.queue.push_back(value);
+        if let Some(waker) = shared.waker.take() {
+            waker.wake();
+        }
+        Ok(())
+    }
+}
+
+impl<T> Clone for Sender<T> {
+    fn clone(&self) -> Self {
+        self.0.borrow_mut().senders += 1;
+        Sender(Rc::clone(&self.0))
+    }
+}
+
+impl<T> Drop for Sender<T> {
+    fn drop(&mut self) {
+        let mut shared = self.0.borrow_mut();
+        shared.senders -= 1;
+        if shared.senders == 0 {
+            if let Some(waker) = shared.waker.take() {
+                waker.wake();
+            }
+        }
+    }
+}
+
+impl<T> Receiver<T> {
+    pub async fn recv(&mut self) -> Option<T> {
+        poll_fn(|cx| self.poll_recv(cx)).await
+    }
+
+    fn poll_recv(&mut self, cx: &mut Context<'_>) -> Poll<Option<T>> {
+        let mut shared = self.0.borrow_mut();
+        if let Some(value) = shared.queue.pop_front() {
+            Poll::Ready(Some(value))
+        } else if shared.senders == 0 {
+            Poll::Ready(None)
+        } else {
+            shared.waker = Some(cx.waker().clone());
+            Poll::Pending
+        }
+    }
+}
+
+// ---- streams ----
+
+/// An async iterator: values that arrive one after another.
+pub trait Stream {
+    type Item;
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>>;
+}
+
+/// Handy methods for every Stream.
+pub trait StreamExt: Stream {
+    /// The next value, or None when the stream is finished.
+    fn next(&mut self) -> impl Future<Output = Option<Self::Item>>
+    where
+        Self: Unpin,
+    {
+        poll_fn(move |cx| Pin::new(&mut *self).poll_next(cx))
+    }
+}
+
+impl<S: Stream + ?Sized> StreamExt for S {}
+
+impl<T> Stream for Receiver<T> {
+    type Item = T;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<T>> {
+        self.poll_recv(cx)
+    }
+}
+
+/// A stream that hands out the items of an iterator.
+pub struct Iter<I>(I);
+
+pub fn stream_from_iter<I: IntoIterator>(items: I) -> Iter<I::IntoIter> {
+    Iter(items.into_iter())
+}
+
+impl<I: Iterator + Unpin> Stream for Iter<I> {
+    type Item = I::Item;
+
+    fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<I::Item>> {
+        Poll::Ready(self.0.next())
+    }
+}
+'''
+
+[[level]]
+id = "20.6"
 title = "Threads or async?"
-kind = "predict"
+kind = "quiz"
 book = ["17.6"]
-about = "Picking the right tool."
+xp = 25
+goal = "One job resizes 1,000 photos. Another keeps 10,000 mostly idle chat connections open. Which tool fits which job?"
+lesson = '''
+Threads and async both do "many things at once", but they shine at different work.
 
-[[planned]]
+**Threads** are run by the operating system. Each one has its own stack (often megabytes) and can run on its own CPU core. They're great for **CPU-heavy** work that keeps a core busy: number crunching, image processing, compression.
+
+**Async tasks** are run by your runtime, switched at every `.await`. A task is small (often just a few hundred bytes), so you can have hundreds of thousands. They're great for **I/O-heavy** work that mostly **waits**: network servers, many connections, timers.
+
+| Work | Mostly... | Fits |
+|---|---|---|
+| Resizing photos | computing | threads (one per core) |
+| A chat server | waiting for messages | async tasks (one per connection) |
+
+They also combine well: real runtimes like tokio run async tasks **on a pool of threads**, and can hand blocking or CPU-heavy work to a separate thread (`spawn_blocking`). A thread can send results to async code through a channel, and the other way around.
+
+One warning: a long computation inside an async task never reaches an `.await`, so it **blocks** every other task on that thread until it's done.
+'''
+c_compare = '''
+Threads are pthreads. Async is the `epoll`-based event loop that servers like nginx use, but you write straight-line code instead of callbacks.
+'''
+py_compare = '''
+Like choosing between `multiprocessing` for CPU work and `asyncio` for I/O, except Rust threads run in parallel (no GIL), so threads work for CPU work too.
+'''
+choices = [
+    "Async for both: async is always faster than threads",
+    "Threads for the photos (CPU-heavy), async for the connections (mostly waiting)",
+    "Async for the photos, threads for the connections",
+    "Threads for both: async only works for web servers",
+]
+answer = 1
+explanation = "Resizing keeps the CPU busy, so a few threads (one per core) do it in parallel. Idle connections mostly wait, so cheap async tasks fit: 10,000 threads would waste a lot of memory. Many programs combine both."
+
+[[level]]
+id = "20.7"
 title = "BOSS: The async fetcher"
 kind = "boss"
 book = ["17.2", "17.3", "17.4"]
-about = "Fetch many things at once and give up on slow ones."
+xp = 130
+goal = '''Fetch many pages at once, give up on slow ones, and report progress through a channel
+in the order the downloads finish.'''
+lesson = '''
+**Boss fight!** The archipelago's message service must fetch pages from many islands. Some islands are slow, and some don't exist.
+
+`download(url)` is written for you. Write:
+
+1. **`download_with_limit(url, limit)`**: download, but give up after `limit` with `Err("timed out: <url>")`. (Use `race` with `sleep`, like your `timeout`.)
+2. **`fetch_all(urls, limit)`**: download **every** URL at the same time, each with the limit. Results in the same order as `urls`.
+3. **`fetch_with_progress(urls, limit)`**: like `fetch_all`, but each download also sends its URL through a **channel** the moment it finishes (successfully or not). A listener running **alongside** collects the URLs. Return both: the results (in `urls` order) and the URLs in the order they finished.
+4. **`report(results)`**: a summary like `"3 ok, 2 failed"`.
+
+For step 3, each download needs its own sender: clone `tx` inside the `map`. And make sure the original `tx` is dropped when the downloads are done (an `async move` block that owns it), or the listener never stops.
+'''
+c_compare = '''
+A non-blocking downloader in C means an event loop, a state machine per connection and manual timers. Here each download is straight-line code, and `join_all` plus `race` do the juggling.
+'''
+py_compare = '''
+Like `asyncio.gather(*(asyncio.wait_for(download(u), limit) for u in urls))`, plus an `asyncio.Queue` for the progress messages.
+'''
+check = "tests"
+starter = '''
+mod runtime;
+
+use runtime::{block_on, channel, join, join_all, race, sleep, Either, StreamExt};
+use std::time::Duration;
+
+/// How long each island takes to answer, in milliseconds (None: no such island).
+fn latency(url: &str) -> Option<u64> {
+    match url {
+        "crab.rs" => Some(40),
+        "rust-lang.org" => Some(70),
+        "ferris.dev" => Some(100),
+        "slow.io" => Some(1000),
+        _ => None,
+    }
+}
+
+/// Download one page (already written for you).
+async fn download(url: &str) -> Result<String, String> {
+    match latency(url) {
+        Some(ms) => {
+            sleep(Duration::from_millis(ms)).await;
+            Ok(format!("<page {url}>"))
+        }
+        None => {
+            sleep(Duration::from_millis(10)).await;
+            Err(format!("not found: {url}"))
+        }
+    }
+}
+
+/// Download, giving up after `limit` with Err("timed out: <url>").
+async fn download_with_limit(url: &str, limit: Duration) -> Result<String, String> {
+    todo!()
+}
+
+/// Download every url at the same time, each with the limit. Same order as `urls`.
+async fn fetch_all(urls: &[&str], limit: Duration) -> Vec<Result<String, String>> {
+    todo!()
+}
+
+/// Like fetch_all, but each download sends its url through a channel as soon as it
+/// finishes. Returns (results in `urls` order, urls in the order they finished).
+async fn fetch_with_progress(
+    urls: &[&str],
+    limit: Duration,
+) -> (Vec<Result<String, String>>, Vec<String>) {
+    todo!()
+}
+
+/// "<ok> ok, <failed> failed"
+fn report(results: &[Result<String, String>]) -> String {
+    todo!()
+}
+
+fn main() {
+    let results = block_on(fetch_all(&["crab.rs", "slow.io"], Duration::from_millis(200)));
+    println!("{results:?}");
+}
+'''
+solution = '''
+mod runtime;
+
+use runtime::{block_on, channel, join, join_all, race, sleep, Either, StreamExt};
+use std::time::Duration;
+
+/// How long each island takes to answer, in milliseconds (None: no such island).
+fn latency(url: &str) -> Option<u64> {
+    match url {
+        "crab.rs" => Some(40),
+        "rust-lang.org" => Some(70),
+        "ferris.dev" => Some(100),
+        "slow.io" => Some(1000),
+        _ => None,
+    }
+}
+
+/// Download one page (already written for you).
+async fn download(url: &str) -> Result<String, String> {
+    match latency(url) {
+        Some(ms) => {
+            sleep(Duration::from_millis(ms)).await;
+            Ok(format!("<page {url}>"))
+        }
+        None => {
+            sleep(Duration::from_millis(10)).await;
+            Err(format!("not found: {url}"))
+        }
+    }
+}
+
+/// Download, giving up after `limit` with Err("timed out: <url>").
+async fn download_with_limit(url: &str, limit: Duration) -> Result<String, String> {
+    match race(download(url), sleep(limit)).await {
+        Either::Left(result) => result,
+        Either::Right(()) => Err(format!("timed out: {url}")),
+    }
+}
+
+/// Download every url at the same time, each with the limit. Same order as `urls`.
+async fn fetch_all(urls: &[&str], limit: Duration) -> Vec<Result<String, String>> {
+    join_all(urls.iter().map(|url| download_with_limit(url, limit))).await
+}
+
+/// Like fetch_all, but each download sends its url through a channel as soon as it
+/// finishes. Returns (results in `urls` order, urls in the order they finished).
+async fn fetch_with_progress(
+    urls: &[&str],
+    limit: Duration,
+) -> (Vec<Result<String, String>>, Vec<String>) {
+    let (tx, mut rx) = channel();
+
+    let downloads = async move {
+        let downloads = urls.iter().map(|url| {
+            let tx = tx.clone();
+            async move {
+                let result = download_with_limit(url, limit).await;
+                tx.send(url.to_string()).unwrap();
+                result
+            }
+        });
+        join_all(downloads).await
+    };
+
+    let listener = async {
+        let mut finished = Vec::new();
+        while let Some(url) = rx.next().await {
+            finished.push(url);
+        }
+        finished
+    };
+
+    join(downloads, listener).await
+}
+
+/// "<ok> ok, <failed> failed"
+fn report(results: &[Result<String, String>]) -> String {
+    let ok = results.iter().filter(|r| r.is_ok()).count();
+    format!("{ok} ok, {} failed", results.len() - ok)
+}
+
+fn main() {
+    let results = block_on(fetch_all(&["crab.rs", "slow.io"], Duration::from_millis(200)));
+    println!("{results:?}");
+}
+'''
+tests = '''
+#[cfg(test)]
+mod ferris_tests {
+    use super::*;
+    use std::time::Instant;
+
+    fn ms(n: u64) -> Duration {
+        Duration::from_millis(n)
+    }
+
+    #[test]
+    fn one_with_a_limit() {
+        assert_eq!(block_on(download_with_limit("crab.rs", ms(200))), Ok("<page crab.rs>".to_string()));
+        assert_eq!(block_on(download_with_limit("nope.net", ms(200))), Err("not found: nope.net".to_string()));
+        let start = Instant::now();
+        assert_eq!(block_on(download_with_limit("slow.io", ms(50))), Err("timed out: slow.io".to_string()));
+        assert!(start.elapsed() < ms(300), "it should give up after the limit");
+    }
+
+    #[test]
+    fn all_at_once() {
+        let start = Instant::now();
+        let results = block_on(fetch_all(&["crab.rs", "slow.io", "nope.net", "ferris.dev"], ms(200)));
+        let took = start.elapsed();
+        assert_eq!(
+            results,
+            vec![
+                Ok("<page crab.rs>".to_string()),
+                Err("timed out: slow.io".to_string()),
+                Err("not found: nope.net".to_string()),
+                Ok("<page ferris.dev>".to_string()),
+            ]
+        );
+        assert!(took < ms(300), "took {took:?}: one by one takes 350 ms; at once, about 200 ms");
+    }
+
+    #[test]
+    fn progress_in_finishing_order() {
+        let urls = ["ferris.dev", "slow.io", "crab.rs", "nope.net", "rust-lang.org"];
+        let (results, finished) = block_on(fetch_with_progress(&urls, ms(200)));
+        assert_eq!(results.len(), 5);
+        assert_eq!(results[2], Ok("<page crab.rs>".to_string()));
+        assert_eq!(results[1], Err("timed out: slow.io".to_string()));
+        assert_eq!(finished, vec!["nope.net", "crab.rs", "rust-lang.org", "ferris.dev", "slow.io"]);
+    }
+
+    #[test]
+    fn reporting() {
+        let results = vec![Ok("a".to_string()), Err("b".to_string()), Ok("c".to_string())];
+        assert_eq!(report(&results), "2 ok, 1 failed");
+        assert_eq!(report(&[]), "0 ok, 0 failed");
+    }
+}
+'''
+hints = [
+    "download_with_limit is your `timeout` from 20.3: `race(download(url), sleep(limit))`. fetch_all is `join_all` over `urls.iter().map(...)`.",
+    "fetch_with_progress: make a channel. Build an `async move` block that owns `tx`; inside it, map each url to an `async move` block that awaits the download, sends the url through its own `tx.clone()`, and returns the result; `join_all` them. A second async block collects from `rx.next().await`. `join` the two.",
+    "```rust\nlet (tx, mut rx) = channel();\nlet downloads = async move {\n    let downloads = urls.iter().map(|url| {\n        let tx = tx.clone();\n        async move {\n            let result = download_with_limit(url, limit).await;\n            tx.send(url.to_string()).unwrap();\n            result\n        }\n    });\n    join_all(downloads).await\n};\nlet listener = async {\n    let mut finished = Vec::new();\n    while let Some(url) = rx.next().await {\n        finished.push(url);\n    }\n    finished\n};\njoin(downloads, listener).await\n```",
+]
+
+[level.files]
+"runtime.rs" = '''
+//! Ferris' tiny async runtime: just enough to run the levels on this island.
+//! Real programs use a crate like tokio (or the book's `trpl`), which offer the same
+//! tools: block_on, sleep, join, race, channels and streams.
+#![allow(dead_code)]
+
+use std::cell::RefCell;
+use std::collections::VecDeque;
+use std::future::{Future, poll_fn};
+use std::pin::{Pin, pin};
+use std::rc::Rc;
+use std::sync::Arc;
+use std::task::{Context, Poll, Wake, Waker};
+use std::thread::{self, Thread};
+use std::time::{Duration, Instant};
+
+struct ThreadWaker(Thread);
+
+impl Wake for ThreadWaker {
+    fn wake(self: Arc<Self>) {
+        self.0.unpark();
+    }
+}
+
+/// Run a future on this thread until it finishes, and return its output.
+pub fn block_on<F: Future>(future: F) -> F::Output {
+    let mut future = pin!(future);
+    let waker = Waker::from(Arc::new(ThreadWaker(thread::current())));
+    let mut cx = Context::from_waker(&waker);
+    loop {
+        if let Poll::Ready(output) = future.as_mut().poll(&mut cx) {
+            return output;
+        }
+        thread::park_timeout(Duration::from_millis(5));
+    }
+}
+
+/// A future that finishes after `duration`.
+pub fn sleep(duration: Duration) -> Sleep {
+    Sleep { deadline: Instant::now() + duration, timer_started: false }
+}
+
+pub struct Sleep {
+    deadline: Instant,
+    timer_started: bool,
+}
+
+impl Future for Sleep {
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+        let now = Instant::now();
+        if now >= self.deadline {
+            return Poll::Ready(());
+        }
+        if !self.timer_started {
+            self.timer_started = true;
+            let waker = cx.waker().clone();
+            let wait = self.deadline - now;
+            thread::spawn(move || {
+                thread::sleep(wait);
+                waker.wake();
+            });
+        }
+        Poll::Pending
+    }
+}
+
+/// Let other futures run before continuing.
+pub async fn yield_now() {
+    let mut yielded = false;
+    poll_fn(|cx| {
+        if yielded {
+            Poll::Ready(())
+        } else {
+            yielded = true;
+            cx.waker().wake_by_ref();
+            Poll::Pending
+        }
+    })
+    .await
+}
+
+/// Run two futures at the same time and wait for both.
+pub async fn join<A: Future, B: Future>(a: A, b: B) -> (A::Output, B::Output) {
+    let mut a = pin!(a);
+    let mut b = pin!(b);
+    let mut out_a = None;
+    let mut out_b = None;
+    poll_fn(|cx| {
+        if out_a.is_none() {
+            if let Poll::Ready(v) = a.as_mut().poll(cx) {
+                out_a = Some(v);
+            }
+        }
+        if out_b.is_none() {
+            if let Poll::Ready(v) = b.as_mut().poll(cx) {
+                out_b = Some(v);
+            }
+        }
+        if out_a.is_some() && out_b.is_some() {
+            Poll::Ready((out_a.take().unwrap(), out_b.take().unwrap()))
+        } else {
+            Poll::Pending
+        }
+    })
+    .await
+}
+
+/// Run any number of futures at the same time; their outputs, in the same order.
+pub async fn join_all<F: Future>(futures: impl IntoIterator<Item = F>) -> Vec<F::Output> {
+    let mut futures: Vec<Pin<Box<F>>> = futures.into_iter().map(Box::pin).collect();
+    let mut outputs: Vec<Option<F::Output>> = futures.iter().map(|_| None).collect();
+    poll_fn(|cx| {
+        let mut all_done = true;
+        for (future, output) in futures.iter_mut().zip(outputs.iter_mut()) {
+            if output.is_none() {
+                match future.as_mut().poll(cx) {
+                    Poll::Ready(v) => *output = Some(v),
+                    Poll::Pending => all_done = false,
+                }
+            }
+        }
+        if all_done {
+            Poll::Ready(outputs.iter_mut().map(|o| o.take().unwrap()).collect())
+        } else {
+            Poll::Pending
+        }
+    })
+    .await
+}
+
+/// Which of two raced futures finished first.
+#[derive(Debug, PartialEq)]
+pub enum Either<A, B> {
+    Left(A),
+    Right(B),
+}
+
+/// Run two futures at the same time; the first one to finish wins and the other is dropped.
+pub async fn race<A: Future, B: Future>(a: A, b: B) -> Either<A::Output, B::Output> {
+    let mut a = pin!(a);
+    let mut b = pin!(b);
+    poll_fn(|cx| {
+        if let Poll::Ready(v) = a.as_mut().poll(cx) {
+            return Poll::Ready(Either::Left(v));
+        }
+        if let Poll::Ready(v) = b.as_mut().poll(cx) {
+            return Poll::Ready(Either::Right(v));
+        }
+        Poll::Pending
+    })
+    .await
+}
+
+// ---- channels ----
+
+struct Shared<T> {
+    queue: VecDeque<T>,
+    senders: usize,
+    waker: Option<Waker>,
+}
+
+/// The sending half of an async channel. Clone it for more senders.
+pub struct Sender<T>(Rc<RefCell<Shared<T>>>);
+
+/// The receiving half of an async channel. It is also a Stream.
+pub struct Receiver<T>(Rc<RefCell<Shared<T>>>);
+
+/// An async channel: `tx.send(value)`, and `rx.recv().await` on the other side.
+/// `recv` returns None once every sender has been dropped and the channel is empty.
+pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
+    let shared = Rc::new(RefCell::new(Shared { queue: VecDeque::new(), senders: 1, waker: None }));
+    (Sender(Rc::clone(&shared)), Receiver(shared))
+}
+
+impl<T> Sender<T> {
+    pub fn send(&self, value: T) -> Result<(), T> {
+        let mut shared = self.0.borrow_mut();
+        shared.queue.push_back(value);
+        if let Some(waker) = shared.waker.take() {
+            waker.wake();
+        }
+        Ok(())
+    }
+}
+
+impl<T> Clone for Sender<T> {
+    fn clone(&self) -> Self {
+        self.0.borrow_mut().senders += 1;
+        Sender(Rc::clone(&self.0))
+    }
+}
+
+impl<T> Drop for Sender<T> {
+    fn drop(&mut self) {
+        let mut shared = self.0.borrow_mut();
+        shared.senders -= 1;
+        if shared.senders == 0 {
+            if let Some(waker) = shared.waker.take() {
+                waker.wake();
+            }
+        }
+    }
+}
+
+impl<T> Receiver<T> {
+    pub async fn recv(&mut self) -> Option<T> {
+        poll_fn(|cx| self.poll_recv(cx)).await
+    }
+
+    fn poll_recv(&mut self, cx: &mut Context<'_>) -> Poll<Option<T>> {
+        let mut shared = self.0.borrow_mut();
+        if let Some(value) = shared.queue.pop_front() {
+            Poll::Ready(Some(value))
+        } else if shared.senders == 0 {
+            Poll::Ready(None)
+        } else {
+            shared.waker = Some(cx.waker().clone());
+            Poll::Pending
+        }
+    }
+}
+
+// ---- streams ----
+
+/// An async iterator: values that arrive one after another.
+pub trait Stream {
+    type Item;
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>>;
+}
+
+/// Handy methods for every Stream.
+pub trait StreamExt: Stream {
+    /// The next value, or None when the stream is finished.
+    fn next(&mut self) -> impl Future<Output = Option<Self::Item>>
+    where
+        Self: Unpin,
+    {
+        poll_fn(move |cx| Pin::new(&mut *self).poll_next(cx))
+    }
+}
+
+impl<S: Stream + ?Sized> StreamExt for S {}
+
+impl<T> Stream for Receiver<T> {
+    type Item = T;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<T>> {
+        self.poll_recv(cx)
+    }
+}
+
+/// A stream that hands out the items of an iterator.
+pub struct Iter<I>(I);
+
+pub fn stream_from_iter<I: IntoIterator>(items: I) -> Iter<I::IntoIter> {
+    Iter(items.into_iter())
+}
+
+impl<I: Iterator + Unpin> Stream for Iter<I> {
+    type Item = I::Item;
+
+    fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<I::Item>> {
+        Poll::Ready(self.0.next())
+    }
+}
+'''
