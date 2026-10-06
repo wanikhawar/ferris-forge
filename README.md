@@ -147,3 +147,7 @@ The game runs on your own computer and only listens on 127.0.0.1. It runs the co
 
 - Only the game's own page can use its API (see the key above); other websites and other local programs can't.
 - Each program runs with limits on memory, file size and CPU time, and is stopped after 5 seconds. On Linux it runs in its own process namespace, so nothing it starts outlives the run.
+
+## License
+
+[MIT](LICENSE)

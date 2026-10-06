@@ -2,6 +2,12 @@
 name = "ferris_forge"
 version = "0.1.0"
 edition = "2024"
+description = "A cozy pixel-art game that teaches Rust, with Ferris the crab as a Claude-powered teacher"
+license = "MIT"
+repository = "https://github.com/wanikhawar/ferris-forge"
+readme = "README.md"
+keywords = ["rust-learning", "game", "education", "tutorial", "ferris"]
+categories = ["games", "development-tools"]
 
 [dependencies]
 axum = { version = "0.8", features = ["ws"] }
