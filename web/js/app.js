@@ -3,6 +3,8 @@ import { api } from "./api.js";
 import { Editor, errorLinesFrom, escapeHtml } from "./editor.js";
 import { renderMarkdown } from "./md.js";
 import { Ferris, grassTileURL } from "./sprites.js";
+import { TitleScene } from "./title.js";
+import { LogoSign } from "./logo.js";
 import { WorldMap } from "./map.js";
 import { sound } from "./sound.js";
 import { applyIcons, pixelIcon, pixelGlyph } from "./icons.js";
@@ -62,6 +64,8 @@ function saveHistory() {
   try { localStorage.setItem("ff-history", JSON.stringify(S.history)); } catch { /* storage unavailable */ }
 }
 
+/** A short message. `text` is HTML: escape anything that comes from outside the game
+ *  (error messages, Neovim) with escapeHtml. */
 function toast(icon, text) {
   const t = el("div", "toast frame-wood", `<span class="t-icon">${icon}</span><span>${text}</span>`);
   $("#toast-root").appendChild(t);
@@ -75,6 +79,12 @@ function floatXP(amount, anchor) {
   f.style.top = `${r.top - 10}px`;
   document.body.appendChild(f);
   setTimeout(() => f.remove(), 1700);
+}
+
+/** The fanfare after a world's last level. After the very last island there is no new one to find. */
+function worldClearedBanner(lv, nextId) {
+  sound.fanfare();
+  banner(`${lv.world.name} cleared!`, nextId ? "A new island appears on the map…" : "You've cleared every island. You're a true Rustacean! 🦀");
 }
 
 function banner(title, sub) {
@@ -287,10 +297,18 @@ function updateModelChip() {
   chip.title = `Ferris' brain: ${s.teacher === "offline" ? "offline (built-in hints)" : `${modelLabel(s.model)} · effort ${s.effort}`}\nClick to switch models.`;
 }
 
+/** The code font setting. Changing it moves the text, so the Vim cursor is redrawn too. */
+function applyCodeFont() {
+  const pixel = S.game.settings.code_font === "pixel";
+  if (document.body.classList.contains("code-pixel") === pixel) return;
+  document.body.classList.toggle("code-pixel", pixel);
+  requestAnimationFrame(() => editor?.relayout());
+}
+
 async function refreshState() {
   S.game = await api.state();
   sound.setEnabled(S.game.settings.sound);
-  document.body.classList.toggle("code-pixel", S.game.settings.code_font === "pixel");
+  applyCodeFont();
   document.body.classList.toggle("readable", !!S.game.settings.readable_text);
   updateHUD();
   applyVimSetting();
@@ -306,7 +324,7 @@ function applyVimSetting() {
   btn.title = s.vim ? "Vim mode is ON (your Neovim). Click to turn it off." : "Vim mode is OFF. Click to edit with your own Neovim.";
   const want = s.vim && S.level && !answers(S.level.kind);
   if (want) editor.enableVim(s.nvim_config);
-  else editor.disableVim();
+  else editor.turnOffVim();
 }
 
 // ---------------------------------------------------------------- screens
@@ -624,9 +642,15 @@ function consoleTabHTML(tab) {
   const lv = S.level;
   const pre = t => `<pre class="console-text">${t}</pre>`;
   if (tab === "expected") {
-    // Levels with keyboard input: show what the game types for you, then the expected output.
-    const typed = lv.stdin ? `<div class="console-label">The game types this for you:</div>${pre(escapeHtml(lv.stdin.trimEnd()))}<div class="console-label">Expected output:</div>` : "";
-    return typed + pre(escapeHtml(lv.expected_output?.trim() || ""));
+    // What the game gives the program (input, arguments, settings, files), then the expected output.
+    let given = "";
+    if (lv.args?.length) given += `<div class="console-label">Command-line arguments:</div>${pre(escapeHtml(lv.args.join(" ")))}`;
+    const env = Object.entries(lv.env || {});
+    if (env.length) given += `<div class="console-label">Environment variables:</div>${pre(escapeHtml(env.map(([k, v]) => `${k}=${v}`).join("\n")))}`;
+    if (lv.files?.length) given += `<div class="console-label">Files next to your program:</div>${pre(escapeHtml(lv.files.join("\n")))}`;
+    if (lv.stdin) given += `<div class="console-label">The game types this for you:</div>${pre(escapeHtml(lv.stdin.trimEnd()))}`;
+    if (given) given += `<div class="console-label">Expected output:</div>`;
+    return given + pre(escapeHtml(lv.expected_output?.trim() || ""));
   }
   if (tab === "tests") return renderMarkdown("These are the tests Ferris runs on your code:\n```rust\n" + (lv.tests || "").trim() + "\n```");
   if (!r) return `<p class="console-empty">Nothing here yet. Run your code first.</p>`;
@@ -639,7 +663,7 @@ function consoleTabHTML(tab) {
   return pre(escapeHtml((r.stdout || "") + (r.stderr ? `\n${r.stderr}` : "")) || "(the program printed nothing)");
 }
 
-/** The console as a popup, opened from the hotbar (Compiler / Output / Expected or Tests). */
+/** The console as a popup, opened from the hotbar (Compiler, or Output with its Expected / Tests tab). */
 function openConsole(tab = "compiler") {
   const lv = S.level;
   if (!lv) return;
@@ -724,6 +748,9 @@ async function runCode() {
   sound.compile();
   ferris.setMood("thinking");
   try {
+    // Vim mode: compile what Neovim has, including keys it's still working on.
+    await editor.sync();
+    if (S.level !== lv) return;
     const res = await api.run(lv.id, editor.value);
     S.game.player = res.player;
     updateHUD();
@@ -738,7 +765,7 @@ async function runCode() {
     if (res.result.passed) await onPass(res, lv);
     else onFail(res.result);
   } catch (e) {
-    toast("⚠", e.message);
+    toast("⚠", escapeHtml(e.message));
     ferris.setMood("idle");
   } finally {
     S.running = false;
@@ -778,7 +805,7 @@ async function onPass(res, lv) {
     toast("⭐", `Level cleared! +${res.xp_gained} XP`);
   }
   if (res.world_cleared) {
-    setTimeout(() => { sound.fanfare(); banner(`${lv.world.name} cleared!`, "A new island appears on the map…"); }, 700);
+    setTimeout(() => worldClearedBanner(lv, res.next_id), 700);
   }
   lv.next_id = res.next_id;
   buildHotbar();
@@ -858,7 +885,7 @@ async function answerQuiz(i, btn) {
       $("#lv-xp").className = "badge xp done";
       $("#lv-xp").innerHTML = `${sym("✔")}Cleared`;
     }
-    if (res.world_cleared) setTimeout(() => { sound.fanfare(); banner(`${lv.world.name} cleared!`, "A new island appears on the map…"); }, 700);
+    if (res.world_cleared) setTimeout(() => worldClearedBanner(lv, res.next_id), 700);
     lv.next_id = res.next_id;
     buildHotbar();
     const actions = lv.kind === "quiz" ? [] : [{ label: `${sym("▶")}Run it to see`, fn: runPredict }];
@@ -983,8 +1010,10 @@ function cancelDraft() {
 }
 
 /** Save a pending edit right away (e.g. before switching levels). Resolves once every
- *  queued save has finished. */
-function flushDraft() {
+ *  queued save has finished. In Vim mode, first waits for Neovim to apply every key sent
+ *  so far, so the last few keystrokes are part of the draft. */
+async function flushDraft() {
+  await editor?.sync();
   clearTimeout(draftTimer);
   const d = draftPending;
   draftPending = null;
@@ -997,16 +1026,23 @@ function flushDraft() {
 const SLOTS = [
   { id: "run", key: "1", icon: "run", label: "Run", primary: true, fn: () => runCode() },
   { id: "compiler", key: "2", icon: "compiler", label: "Compiler", console: "compiler", fn: () => openConsole("compiler") },
-  { id: "output", key: "3", icon: "output", label: "Output", console: "output", fn: () => openConsole("output") },
-  { id: "extra", key: "4", icon: "expected", label: "Expected", fn: () => openConsole(S.level.check === "tests" ? "tests" : "expected") },
-  { id: "hint", key: "5", icon: "hint", label: "Hint", fn: () => askFerris("hint") },
-  { id: "explain", key: "6", icon: "explain", label: "Explain", fn: () => askFerris("explain") },
-  { id: "review", key: "7", icon: "review", label: "Review", fn: () => askFerris("review") },
-  { id: "reset", key: "8", icon: "reset", label: "Reset", fn: () => resetCode() },
-  { id: "skip", key: "9", icon: "skip", label: "Skip", fn: () => skipLevel() },
-  { id: "map", key: "0", icon: "map", label: "Map", fn: () => showMap() },
+  // Output (or test results) together with what's expected (or the tests themselves), as
+  // tabs in one console. Before the first run there's no output yet, so it opens on what's expected.
+  { id: "output", key: "3", icon: "output", label: "Output", console: "output", fn: () => openConsole(S.lastRun ? "output" : expectedTab()) },
+  { id: "hint", key: "4", icon: "hint", label: "Hint", fn: () => askFerris("hint") },
+  { id: "explain", key: "5", icon: "explain", label: "Explain", fn: () => askFerris("explain") },
+  { id: "review", key: "6", icon: "review", label: "Review", fn: () => askFerris("review") },
+  { id: "reset", key: "7", icon: "reset", label: "Reset", fn: () => resetCode() },
+  { id: "skip", key: "8", icon: "skip", label: "Skip", fn: () => skipLevel() },
+  { id: "map", key: "9", icon: "map", label: "Map", fn: () => showMap() },
   { id: "next", key: "N", icon: "next", label: "Next", fn: () => goNext() },
 ];
+
+/** The console tab with what the level expects: Ferris' tests, or the expected output. */
+function expectedTab() {
+  const want = S.level.check === "tests" ? "tests" : "expected";
+  return consoleTabs().some(([key]) => key === want) ? want : "output";
+}
 
 function buildHotbar() {
   const lv = S.level;
@@ -1021,7 +1057,6 @@ function buildHotbar() {
     if (s.id === "hint") label = `Hint ${lv.hint_tier}/3`;
     if (s.id === "run" && answers(lv.kind)) label = "Run it";
     if (s.id === "output" && lv.check === "tests" && !answers(lv.kind)) label = "Results";
-    if (s.id === "extra" && lv.check === "tests") label = "Tests";
     b.innerHTML = `<span class="slot-key">${s.key}</span><span class="slot-icon">${pixelIcon(s.icon, 2)}</span><span class="slot-label">${label}</span>`;
     b.title = slotTitle(s.id);
     b.disabled = !slotEnabled(s.id);
@@ -1036,8 +1071,7 @@ function slotTitle(id) {
   const lv = S.level;
   switch (id) {
     case "compiler": return "Compiler messages: errors and warnings (2)";
-    case "output": return lv.check === "tests" && !answers(lv.kind) ? "Test results (3)" : "What your program printed, next to what's expected (3)";
-    case "extra": return lv.check === "tests" ? "The tests Ferris runs on your code (4)" : "The output the goal expects (4)";
+    case "output": return lv.check === "tests" && !answers(lv.kind) ? "Test results, and the tests Ferris runs on your code (3)" : "What your program printed, and what's expected (3)";
     case "run": return answers(lv.kind) ? "Compile and run the code (after you've answered)" : "Compile and check your code (Ctrl+Enter)";
     case "hint": return lv.hint_tier >= 3 ? "You've seen all 3 hints. Ask again for more help." : `Get hint ${lv.hint_tier + 1} of 3 (${HINT_COST[lv.hint_tier + 1]} on this level${lv.done ? ", but you've already cleared it" : ""})`;
     case "explain": return "Ask Ferris to explain the last error";
@@ -1057,7 +1091,6 @@ function slotEnabled(id) {
   switch (id) {
     case "run": return lv.kind !== "quiz" && (!predict || S.quizSolved);
     case "compiler": case "output": return lv.kind !== "quiz" && (!predict || S.quizSolved);
-    case "extra": return !predict && (lv.check === "tests" || !!lv.expected_output);
     case "explain": return !predict && !!S.lastRun && !S.lastRun.passed;
     case "review": return !predict && lv.done && !lv.skipped;
     case "reset": return !predict || lv.done || lv.hint_tier > 0;
@@ -1219,6 +1252,7 @@ async function askFerris(mode, { message = "", choice = null, label = "" } = {})
   };
 
   try {
+    await editor.sync();
     await api.ferris(
       { id: lv.id, mode, code: editor.value, output: runOutputText(), message, history, choice },
       ev => {
@@ -1367,13 +1401,13 @@ function saveSettings(patch, note) {
     try {
       S.game.settings = await api.saveSettings(next);
       sound.setEnabled(S.game.settings.sound);
-      document.body.classList.toggle("code-pixel", S.game.settings.code_font === "pixel");
+      applyCodeFont();
       document.body.classList.toggle("readable", !!S.game.settings.readable_text);
       updateHUD();
       applyVimSetting();
       if (note && S.screen === "level") addMessage("system", note, { save: false });
     } catch (e) {
-      toast("⚠", e.message);
+      toast("⚠", escapeHtml(e.message));
     }
   });
   return settingsChain;
@@ -1506,6 +1540,7 @@ function openWorkshop() {
     sum.className = "console-summary";
     sum.textContent = "⚙ Compiling…";
     sound.compile();
+    await ed.sync();
     const r = await api.play(ed.value);
     sum.className = `console-summary ${r.passed ? "pass" : r.compiled ? "warn" : "fail"}`;
     sum.textContent = r.summary;
@@ -1516,7 +1551,7 @@ function openWorkshop() {
   const ed = new Editor(host, {
     onRun: run,
     onChange: v => { try { localStorage.setItem("ff-workshop", v); } catch { /* ignore */ } },
-    onVimError: m => toast("⌨️", m.message || "Neovim problem"),
+    onVimError: m => toast("⌨️", escapeHtml(m.message || "Neovim problem")),
   });
   ed.value = starter;
   if (S.game?.settings.vim) ed.enableVim(S.game.settings.nvim_config);
@@ -1526,85 +1561,85 @@ function openWorkshop() {
 
 // ---------------------------------------------------------------- title screen
 
-// ---- Title screen: an animated beach scene with music notes rising from dancing Ferris ----
-const NOTE = ["..#..", "..##.", "..#.#", "..#..", "###..", "###.."];
-const title = { notes: [], lastNote: 0, last: 0 };
-
-function pixelBlob(ctx, cx, cy, r) {
-  for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++) if (x * x + y * y <= r * r) ctx.fillRect(Math.floor(cx + x), Math.floor(cy + y), 1, 1);
-}
-
-function drawTitle(t) {
-  const c = $("#title-bg");
-  const w = Math.ceil(innerWidth / 4), h = Math.ceil(innerHeight / 4);
-  if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
-  const ctx = c.getContext("2d");
-  const sec = t / 1000;
-  const bands = ["#6fc3f0", "#7fcbf2", "#8fd3f5", "#a2dcf7", "#b6e5f9"];
-  const skyH = Math.floor(h * 0.62);
-  bands.forEach((col, i) => { ctx.fillStyle = col; ctx.fillRect(0, Math.floor((skyH / bands.length) * i), w, Math.ceil(skyH / bands.length) + 1); });
-  // A sun that slowly pulses
-  ctx.fillStyle = "#fff4c2";
-  pixelBlob(ctx, w - 40, 22, 6 + (Math.floor(sec * 2) % 2));
-  // Clouds drifting across the sky
-  ctx.fillStyle = "#ffffff";
-  [[30, 26, 2], [110, 16, 3], [200, 34, 1.5], [w - 110, 44, 2.5]].forEach(([x0, cy, speed]) => {
-    const cx = ((x0 + sec * speed) % (w + 40)) - 20;
-    for (const [ox, r] of [[0, 5], [7, 7], [15, 5]]) pixelBlob(ctx, cx + ox, cy, r);
-    ctx.fillRect(Math.floor(cx), cy, 16, 5);
-  });
-  // Hills
-  const hill = (base, amp, freq, col, ph) => {
-    ctx.fillStyle = col;
-    for (let x = 0; x < w; x++) {
-      const y = Math.floor(base + Math.sin(x * freq + ph) * amp + Math.sin(x * freq * 2.3 + ph) * amp * 0.4);
-      ctx.fillRect(x, y, 1, h - y);
-    }
-  };
-  hill(skyH - 18, 8, 0.03, "#7fb86a", 1);
-  hill(skyH - 6, 6, 0.045, "#5aa63a", 3);
-  // Sea with sparkling waves, sand with foam that comes and goes
-  ctx.fillStyle = "#3f8fd2";
-  ctx.fillRect(0, skyH + 10, w, h);
-  ctx.fillStyle = "#f1d48a";
-  ctx.fillRect(0, skyH + 2, w, 9);
-  ctx.fillStyle = "#d4ad5e";
-  ctx.fillRect(0, skyH + 9, w, 2);
-  ctx.fillStyle = "#ffffff";
-  for (let x = 0; x < w; x += 6) if ((Math.floor(x / 6) + Math.floor(sec * 3)) % 3 === 0) ctx.fillRect(x, skyH + 10, 3, 1);
-  for (let i = 0; i < 60; i++) {
-    const x = ((i * 37) + Math.floor(sec * (2 + (i % 3)))) % w;
-    ctx.fillStyle = (i + Math.floor(sec * 2)) % 5 === 0 ? "#ffffff" : "#7cc4ee";
-    ctx.fillRect(x, skyH + 14 + ((i * 13) % (h - skyH - 16)), 3, 1);
-  }
-  // Music notes rising from Ferris
-  const f = $("#title-ferris").getBoundingClientRect();
-  if (t - title.lastNote > 550 && f.width) {
-    title.lastNote = t;
-    const side = title.notes.length % 2 ? 1 : -1;
-    title.notes.push({
-      x: (f.left + f.width / 2) / 4 + side * (6 + Math.random() * 10),
-      y: (f.top + f.height * 0.25) / 4,
-      born: t,
-      drift: side * (0.4 + Math.random() * 0.6),
-      color: ["#ffd54a", "#ff9fd0", "#ffffff", "#a6ec7c"][title.notes.length % 4],
-    });
-  }
-  title.notes = title.notes.filter(n => t - n.born < 2600);
-  for (const n of title.notes) {
-    const age = (t - n.born) / 1000;
-    const x = Math.round(n.x + n.drift * age * 8 + Math.sin(age * 5) * 2);
-    const y = Math.round(n.y - age * 14);
-    ctx.fillStyle = age > 2 ? "rgba(255,255,255,.5)" : n.color;
-    NOTE.forEach((row, j) => [...row].forEach((ch, i) => { if (ch === "#") ctx.fillRect(x + i, y + j, 1, 1); }));
-  }
-}
+// ---- Title screen: the animated beach (drawn by title.js) ----
+let titleScene = null;
+let logoSign = null;
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+let titleLast = 0;
 
 function titleLoop(t) {
   requestAnimationFrame(titleLoop);
-  if (S.screen !== "title" || t - title.last < 90) return;
-  title.last = t;
-  drawTitle(t);
+  // About 15 frames a second suits pixel art; once a second if motion should be reduced.
+  const every = reducedMotion.matches ? 1000 : 66;
+  if (S.screen !== "title" || !titleScene || t - titleLast < every) return;
+  titleLast = t;
+  titleScene.draw(t);
+  logoSign?.draw(t);
+}
+
+/** Start: Ferris and his friends wave and scuttle off, then the game begins. */
+let leavingTitle = false;
+function leaveTitle() {
+  if (leavingTitle) return;
+  if (!titleScene || reducedMotion.matches) return startGame();
+  leavingTitle = true;
+  titleScene.setLook(null);
+  titleScene.exit();
+  titleFerris.look = null;
+  titleFerris.setDance(false);
+  titleFerris.setMood("excited");
+  $("#title-ferris").classList.add("leaving");
+  setTimeout(async () => {
+    try {
+      await startGame();
+    } finally {
+      // Still on the title (e.g. the name box was closed): everyone comes back.
+      setTimeout(() => {
+        leavingTitle = false;
+        if (S.screen === "title") resetTitle();
+      }, 400);
+    }
+  }, 850);
+}
+
+function resetTitle() {
+  $("#title-ferris").classList.remove("leaving");
+  titleScene?.reset();
+  titleFerris.setMood("happy");
+  titleFerris.setDance(!reducedMotion.matches);
+}
+
+/** The beach scene, its sign, and the little interactions on the title screen. */
+function setupTitle() {
+  titleScene = new TitleScene({
+    canvas: $("#title-bg"),
+    ferrisCanvas: $("#title-ferris"),
+    ferris: titleFerris,
+    props: $("#title-props"),
+    reduced: reducedMotion.matches,
+  });
+  titleScene.setSign("rustc ✓");
+  const start = $("#btn-start");
+  // Hovering Start: everyone stops to look at the button.
+  start.addEventListener("mouseenter", () => {
+    if (leavingTitle) return;
+    titleFerris.look = { dx: 0, dy: 1 };
+    titleScene.setLook({ dx: 0, dy: 1 });
+  });
+  start.addEventListener("mouseleave", () => {
+    titleFerris.look = null;
+    titleScene.setLook(null);
+  });
+  // Clicking the beach makes a splash of sparkles.
+  $("#title-screen").addEventListener("pointerdown", e => {
+    if (e.target.closest("button, .modal")) return;
+    titleScene.splash(e.clientX, e.clientY);
+  });
+  reducedMotion.addEventListener?.("change", () => {
+    titleScene.reduced = reducedMotion.matches;
+    if (logoSign) logoSign.reduced = reducedMotion.matches;
+    if (!leavingTitle) titleFerris.setDance(!reducedMotion.matches);
+  });
 }
 
 async function startGame() {
@@ -1659,7 +1694,7 @@ addEventListener("error", e => {
 
 async function boot() {
   // The title buttons first, so nothing below can leave them dead.
-  $("#btn-start").onclick = startGame;
+  $("#btn-start").onclick = leaveTitle;
   $("#btn-title-settings").onclick = openSettings;
   applyIcons();
   for (const g of document.querySelectorAll("[data-glyph]")) g.innerHTML = pixelGlyph(g.dataset.glyph) || g.dataset.glyph;
@@ -1667,14 +1702,15 @@ async function boot() {
   ferris = new Ferris($("#ferris-canvas"), { scale: 6 });
   titleFerris = new Ferris($("#title-ferris"), { scale: 6, pad: 6 });
   titleFerris.setMood("happy");
-  titleFerris.setDance?.(true);
-  // Bounce the logo's letters in a wave
-  const logo = $(".logo-main");
-  logo.innerHTML = [...logo.textContent].map((ch, i) => ch === " " ? " " : `<span style="animation-delay:${i * 0.09}s">${escapeHtml(ch)}</span>`).join("");
+  titleFerris.setDance(!reducedMotion.matches);
+  setupTitle();
+  // The rusty sign. It lands about halfway through its drop animation.
+  logoSign = new LogoSign({ canvas: $("#logo-canvas"), sub: $("#logo-sub"), reduced: reducedMotion.matches });
+  setTimeout(() => logoSign.land(), 620);
   worldMap = new WorldMap($("#map-canvas"), $("#map-overlay"), { onSelect: openWorldBoard });
   editor = new Editor($("#editor"), {
     onRun: runCode,
-    onVimError: m => toast("⌨️", m.message || "Neovim problem"),
+    onVimError: m => toast("⌨️", escapeHtml(m.message || "Neovim problem")),
     onChange: code => {
       const id = S.level?.id;
       if (id && !answers(S.level.kind)) scheduleDraft(id, code);
@@ -1692,7 +1728,7 @@ async function boot() {
     const g = $("#lv-goal");
     if (g.classList.contains("long")) g.classList.toggle("open");
   };
-  $("#btn-start").onclick = startGame;
+  $("#btn-start").onclick = leaveTitle;
   $("#btn-title-settings").onclick = openSettings;
   $("#btn-settings").onclick = openSettings;
   $("#btn-codex").onclick = openCodex;
@@ -1789,8 +1825,9 @@ async function boot() {
 
   try {
     [S.models] = await Promise.all([api.models(), refreshState()]);
+    if (S.game.rustc) titleScene?.setSign(`rustc ${S.game.rustc} ✓`);
   } catch (e) {
-    toast("⚠", `Can't reach the game server: ${e.message}`);
+    toast("⚠", `Can't reach the game server: ${escapeHtml(e.message)}`);
   }
   updateModelChip();
 }

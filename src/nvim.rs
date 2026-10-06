@@ -4,13 +4,13 @@
 
 use axum::extract::State;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::response::Response;
+use axum::response::{IntoResponse, Response};
 use rmpv::Value;
 use serde_json::{Value as Json, json};
 use std::collections::HashMap;
 use std::io::{BufReader, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::oneshot;
@@ -43,11 +43,15 @@ function ferris.focus()
     pcall(vim.api.nvim_set_current_buf, ferris.buf)
   end
 end
-function ferris.state()
+function ferris.state(peek)
   ferris.focus()
   local mode = vim.api.nvim_get_mode().mode
-  local err = vim.v.errmsg
-  vim.v.errmsg = ''
+  -- A background look (peek) leaves the error message for the next real reply.
+  local err = vim.NIL
+  if not peek then
+    err = vim.v.errmsg
+    vim.v.errmsg = ''
+  end
   local visual = vim.NIL
   if mode:match('^[vV\22]') then
     local p = vim.fn.getpos('v')
@@ -182,7 +186,8 @@ impl Nvim {
     }
 
     /// Current buffer, cursor and mode. While Neovim waits for more keys only the mode is known.
-    async fn state(&self) -> Result<Json, String> {
+    /// `peek` is a background look: it doesn't use up the error message.
+    async fn state(&self, peek: bool) -> Result<Json, String> {
         for _ in 0..3 {
             let mode = self.call("nvim_get_mode", vec![]).await?;
             let m = map_get(&mode, "mode")
@@ -199,13 +204,47 @@ impl Nvim {
             if blocking {
                 return Ok(json!({ "type": "mode", "mode": m }));
             }
-            let st = self.lua("return ferris.state()", vec![]).await?;
+            let st = self
+                .lua("return ferris.state(...)", vec![peek.into()])
+                .await?;
             let mut out = to_json(&st);
             out["type"] = json!("state");
             return Ok(out);
         }
         Ok(json!({ "type": "mode", "mode": "r" }))
     }
+}
+
+impl Nvim {
+    /// If Neovim is holding keys for a possible mapping (`j` of a `jk` mapping), resolve
+    /// them now, exactly as if 'timeoutlen' had run out, so the buffer is complete.
+    /// `<Ignore>` does that: it can't continue any mapping, and is otherwise ignored.
+    /// Built-in prefixes (`g`, `d`, `"`...) and the command line never time out, and
+    /// `<Ignore>` leaves them alone too.
+    async fn settle(&self) -> Result<(), String> {
+        let mode = self.call("nvim_get_mode", vec![]).await?;
+        let m = map_get(&mode, "mode").and_then(Value::as_str).unwrap_or("");
+        let blocking = map_get(&mode, "blocking")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        if blocking && !m.starts_with('c') {
+            self.call("nvim_input", vec!["<Ignore>".into()]).await?;
+        }
+        Ok(())
+    }
+}
+
+/// What a state looks like for "did anything change?": everything but the error message.
+fn state_key(st: &Json) -> String {
+    json!([
+        st["type"],
+        st["mode"],
+        st["lines"],
+        st["cursor"],
+        st["visual"],
+        st["cmdline"]
+    ])
+    .to_string()
 }
 
 fn map_get<'a>(v: &'a Value, key: &str) -> Option<&'a Value> {
@@ -255,14 +294,73 @@ fn to_json(v: &Value) -> Json {
     }
 }
 
+/// How many Neovims may run at once (the level editor and the Workshop need two).
+const MAX_SESSIONS: usize = 6;
+static SESSIONS: AtomicUsize = AtomicUsize::new(0);
+/// The biggest message the editor may send: plenty for any code, far below the 64 MB default.
+const MAX_MESSAGE: usize = 1 << 20;
+
 pub async fn vim_ws(ws: WebSocketUpgrade, State(s): State<Arc<AppState>>) -> Response {
-    ws.on_upgrade(move |socket| session(socket, s))
+    if SESSIONS.load(Ordering::SeqCst) >= MAX_SESSIONS {
+        return (
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            "Too many Neovims are running. Close a tab with the game and try again.",
+        )
+            .into_response();
+    }
+    ws.max_message_size(MAX_MESSAGE)
+        .max_frame_size(MAX_MESSAGE)
+        .on_upgrade(move |socket| async move {
+            SESSIONS.fetch_add(1, Ordering::SeqCst);
+            session(socket, s).await;
+            SESSIONS.fetch_sub(1, Ordering::SeqCst);
+        })
 }
+
+/// How long the editor must be quiet before we look for changes Neovim made by itself.
+const IDLE_POLL: Duration = Duration::from_millis(250);
 
 /// One browser editor ↔ one Neovim. Neovim is stopped when the editor disconnects.
 async fn session(mut socket: WebSocket, state: Arc<AppState>) {
     let mut nvim: Option<Nvim> = None;
-    while let Some(Ok(msg)) = socket.recv().await {
+    // The last request handled, and the last state the browser was sent.
+    let mut last_seq = Json::Null;
+    let mut last_sent = String::new();
+    loop {
+        let next = if nvim.is_some() {
+            tokio::time::timeout(IDLE_POLL, socket.recv()).await
+        } else {
+            Ok(socket.recv().await)
+        };
+        let msg = match next {
+            Ok(Some(Ok(msg))) => msg,
+            Ok(_) => break,
+            Err(_) => {
+                // Quiet for a moment. Neovim can still change things on its own: a mapping
+                // that timed out (`j` of `jk`), a plugin, a timer. Tell the browser.
+                let Some(n) = &nvim else { continue };
+                let Ok(mut st) = n.state(true).await else {
+                    continue;
+                };
+                let key = state_key(&st);
+                if key == last_sent {
+                    continue;
+                }
+                last_sent = key;
+                // Tagged with the last request, so the browser can tell it apart from
+                // replies to requests it sent later (e.g. after loading another level).
+                st["seq"] = last_seq.clone();
+                st["push"] = json!(true);
+                if socket
+                    .send(Message::Text(st.to_string().into()))
+                    .await
+                    .is_err()
+                {
+                    break;
+                }
+                continue;
+            }
+        };
         let Message::Text(text) = msg else { continue };
         let Ok(req) = serde_json::from_str::<Json>(&text) else {
             continue;
@@ -272,6 +370,10 @@ async fn session(mut socket: WebSocket, state: Arc<AppState>) {
             Ok(r) => r,
             Err(e) => json!({ "type": "error", "message": e }),
         };
+        last_seq = seq.clone();
+        if reply["type"] == "state" || reply["type"] == "mode" {
+            last_sent = state_key(&reply);
+        }
         reply["seq"] = seq;
         if socket
             .send(Message::Text(reply.to_string().into()))
@@ -316,7 +418,7 @@ async fn handle(nvim: &mut Option<Nvim>, req: &Json, state: &AppState) -> Result
         n.lua("ferris.setup()", vec![]).await?;
         n.set_text(text, row, col).await?;
         let version = n.lua("local v = vim.version(); return string.format('%d.%d.%d', v.major, v.minor, v.patch)", vec![]).await.ok().and_then(|v| v.as_str().map(String::from));
-        let mut st = n.state().await?;
+        let mut st = n.state(false).await?;
         st["version"] = json!(version);
         st["config"] = json!(use_config);
         *nvim = Some(n);
@@ -344,10 +446,13 @@ async fn handle(nvim: &mut Option<Nvim>, req: &Json, state: &AppState) -> Result
             .call("nvim_paste", vec![text.into(), true.into(), (-1).into()])
             .await
             .map(|_| ()),
+        // Just report the state; with "settle", first let a pending mapping time out.
+        Some("state") if req["settle"] == true => n.settle().await,
+        Some("state") => Ok(()),
         _ => Err("unknown request".into()),
     };
     let outcome = match result {
-        Ok(()) => n.state().await,
+        Ok(()) => n.state(false).await,
         Err(e) => Err(e),
     };
     match outcome {

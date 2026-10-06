@@ -1,9 +1,22 @@
 // Talking to the Rust backend.
 
+/** The game's key. The server only answers requests that carry it. It arrives once in the
+ *  link the game opens (…/#key=…), is remembered in this browser, and is then removed from
+ *  the address bar so it doesn't end up in screenshots or shared links. */
+export const gameKey = (() => {
+  const m = location.hash.match(/(?:^#|&)key=([0-9a-f]{64})/);
+  if (m) {
+    try { localStorage.setItem("ff-key", m[1]); } catch { /* storage unavailable */ }
+    history.replaceState(null, "", location.pathname + location.search);
+    return m[1];
+  }
+  try { return localStorage.getItem("ff-key") || ""; } catch { return ""; }
+})();
+
 async function request(method, url, body) {
   const res = await fetch(url, {
     method,
-    headers: body ? { "content-type": "application/json" } : {},
+    headers: body ? { "content-type": "application/json", "x-ferris-key": gameKey } : { "x-ferris-key": gameKey },
     body: body ? JSON.stringify(body) : undefined,
   });
   if (res.status === 204) return null;
@@ -44,7 +57,7 @@ export const api = {
     const signal = stopSignal ? AbortSignal.any([stopSignal, timeout]) : timeout;
     const res = await fetch("/api/ferris", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "x-ferris-key": gameKey },
       body: JSON.stringify(payload),
       signal,
     });

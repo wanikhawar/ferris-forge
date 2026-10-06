@@ -55,6 +55,18 @@ export function highlightRust(code) {
   return out;
 }
 
+const graphemes = typeof Intl !== "undefined" && Intl.Segmenter ? new Intl.Segmenter(undefined, { granularity: "grapheme" }) : null;
+
+/** The index just after the character that starts at `idx`, with its accents
+ *  (combining marks) and both halves of a surrogate pair. */
+function charEnd(text, idx) {
+  if (idx >= text.length) return text.length;
+  if (graphemes) {
+    for (const { segment } of graphemes.segment(text.slice(idx, idx + 64))) return idx + segment.length;
+  }
+  return idx + (text.codePointAt(idx) > 0xffff ? 2 : 1);
+}
+
 export class Editor {
   constructor(host, { onChange = () => {}, onRun = () => {}, onVimError = () => {} } = {}) {
     this.onChange = onChange;
@@ -90,15 +102,40 @@ export class Editor {
     this.errorLines = new Set();
 
     this.ta.addEventListener("input", () => { this.render(); this.onChange(this.value); this.keepCaretVisible(); });
-    this.ta.addEventListener("keydown", e => this.onKey(e));
+    // Each key press or mouse press is a new gesture. One gesture pastes at most once:
+    // some browsers fire two paste events for a single Ctrl+Shift+V on a read-only textarea.
+    this.gesture = 0;
+    this.pastedGesture = -1;
+    this.ta.addEventListener("keydown", e => { this.gesture++; this.onKey(e); });
+    this.ta.addEventListener("mousedown", () => this.gesture++);
+    this.ta.addEventListener("contextmenu", () => this.gesture++);
     this.ta.addEventListener("click", () => this.keepCaretVisible());
     this.ta.addEventListener("mouseup", () => this.vimClick());
     this.ta.addEventListener("paste", e => {
       if (!this.vim) return;
       e.preventDefault();
+      if (this.pastedGesture === this.gesture) return;
+      this.pastedGesture = this.gesture;
       this.vim.paste(e.clipboardData.getData("text"));
     });
+    // A web font that finishes loading moves the text; move the Vim cursor with it.
+    document.fonts?.addEventListener?.("loadingdone", () => this.relayout());
     this.render();
+  }
+
+  /** Redraw after the code font or the layout changed. */
+  relayout() {
+    if (this.vim) this.drawVimCursor();
+  }
+
+  /** Wait until Neovim has handled every key sent so far (and any mapping that is waiting
+   *  for its timeout), so `value` is complete. Use before saving, running or switching. */
+  async sync() {
+    const bridge = this.vim;
+    if (!bridge || this.vimDead) return;
+    // Only a safety net: the server always answers (or the connection closes) well before this.
+    const timeout = new Promise(resolve => setTimeout(resolve, 10000));
+    await Promise.race([bridge.request({ type: "state", settle: true }), timeout]);
   }
 
   get value() { return this.ta.value; }
@@ -120,11 +157,36 @@ export class Editor {
   get vimActive() { return !!this.vim; }
 
   enableVim(useConfig = true) {
+    // The latest request wins: an older turnOffVim() or config switch that is still
+    // waiting for its sync sees this and gives up.
+    this.vimWanted = { on: true, config: useConfig };
     if (this.vim && this.vimConfig === useConfig) return;
+    if (this.vim && !this.vimDead) {
+      // Switching between your config and a clean Neovim: let the old one hand over every
+      // key it's still holding (like the `j` of `jk`) before it's replaced.
+      this.replaceVim(this.vimWanted);
+      return;
+    }
+    this.startVim(useConfig);
+  }
+
+  async replaceVim(wanted) {
+    const old = this.vim;
+    await this.sync();
+    if (this.vimWanted !== wanted || this.vim !== old) return;
+    this.startVim(wanted.config);
+  }
+
+  startVim(useConfig) {
     this.disableVim();
     this.vimConfig = useConfig;
     this.vimDead = false;
-    this.vim = new VimBridge({ onState: st => this.applyVim(st), onError: m => this.vimError(m) });
+    // Callbacks from an older bridge (before a restart) must not touch the editor.
+    const bridge = new VimBridge({
+      onState: st => { if (this.vim === bridge) this.applyVim(st); },
+      onError: m => { if (this.vim === bridge) this.vimError(m); },
+    });
+    this.vim = bridge;
     this.ta.readOnly = true;
     this.root.classList.add("vim-on");
     const { row, col } = this.cursorRowCol();
@@ -142,7 +204,17 @@ export class Editor {
     this.vlayer.innerHTML = "";
   }
 
-  destroy() { this.disableVim(); }
+  /** Turn Vim mode off without losing keys Neovim is still holding (like the `j` of `jk`):
+   *  their text reaches the editor first. */
+  async turnOffVim() {
+    const bridge = this.vim;
+    const wanted = this.vimWanted = { on: false };
+    if (!bridge) return;
+    await this.sync();
+    if (this.vim === bridge && this.vimWanted === wanted) this.disableVim();
+  }
+
+  destroy() { return this.turnOffVim(); }
 
   cursorRowCol() {
     const pos = this.ta.selectionStart || 0;
@@ -200,15 +272,21 @@ export class Editor {
         const end = offsets[b.row] + lines[b.row].length;
         this.ta.setSelectionRange(start, end);
       } else {
-        this.ta.setSelectionRange(a.idx, Math.min(text.length, b.idx + 1));
+        this.ta.setSelectionRange(a.idx, Math.min(text.length, charEnd(text, b.idx)));
       }
     } else {
       if (st.visual && mode === "\x16") this.vimVisual = at(st.visual[0], st.visual[1]);
       this.ta.setSelectionRange(cur.idx, cur.idx);
     }
-    const msg = st.cmdline ?? (st.err || "");
+    const wasCmdline = this.shownCmdline;
+    this.shownCmdline = st.cmdline != null;
+    let msg;
+    if (st.cmdline != null) msg = st.cmdline;
+    else if (st.push) msg = wasCmdline ? "" : this.statusMsg.textContent;
+    else msg = st.err || "";
+    const isErr = st.cmdline == null && (st.push ? !wasCmdline && this.statusMsg.classList.contains("err") : !!st.err);
     this.setStatus(modeName(mode), msg, this.vimInfo || "");
-    this.statusMsg.classList.toggle("err", !st.cmdline && !!st.err);
+    this.statusMsg.classList.toggle("err", isErr);
     this.drawVimCursor();
     this.keepCaretVisible(cur);
   }
@@ -248,6 +326,8 @@ export class Editor {
       this.setStatus("QUIT", m.message, "");
       return;
     }
+    // The connection (and with it this Neovim) is gone: the next key starts a new one.
+    if (m.type === "disconnected" || /isn't running/.test(m.message || "")) this.vimDead = true;
     this.setStatus("ERROR", m.message || "Neovim error", "");
     this.statusMsg.classList.add("err");
     if (m.type !== "error") this.onVimError(m);
@@ -271,11 +351,9 @@ export class Editor {
     e.preventDefault();
     e.stopPropagation();
     if (this.vimDead) {
-      // Neovim was quit with :q; start a fresh one with the current text.
-      const cfg = this.vimConfig;
-      this.disableVim();
-      this.enableVim(cfg);
-      return;
+      // Neovim was quit with :q (or the connection was lost): start a fresh one with the
+      // current text, then send it this key, so the key isn't lost.
+      this.startVim(this.vimConfig);
     }
     this.vim.keys(k);
   }
@@ -361,22 +439,24 @@ export class Editor {
   }
 
   keepCaretVisible(at = null) {
-    let line, col;
-    if (at) ({ row: line, col } = at);
+    let line, idx;
+    if (at) ({ row: line, idx } = at);
     else {
-      const pos = this.ta.selectionEnd;
-      const before = this.ta.value.slice(0, pos);
-      line = before.split("\n").length - 1;
-      col = pos - before.lastIndexOf("\n") - 1;
+      idx = this.ta.selectionEnd;
+      line = this.ta.value.slice(0, idx).split("\n").length - 1;
     }
     const lh = this.lineHeight();
     const y = 10 + line * lh;
-    const x = this.gutter.offsetWidth + 12 + col * this.charWidth();
+    // Measure the drawn character: tabs and wide characters (CJK, emoji) aren't one column.
+    const box = this.charBox(idx);
+    const codeLeft = this.pre.parentElement.getBoundingClientRect().left - this.scroller.getBoundingClientRect().left + this.scroller.scrollLeft;
+    const x = codeLeft + box.left;
+    const right = x + box.width;
     const s = this.scroller;
     if (y < s.scrollTop) s.scrollTop = y - 4;
     else if (y + lh > s.scrollTop + s.clientHeight) s.scrollTop = y + lh - s.clientHeight + 8;
-    if (x < s.scrollLeft + this.gutter.offsetWidth + 10) s.scrollLeft = Math.max(0, x - this.gutter.offsetWidth - 40);
-    else if (x > s.scrollLeft + s.clientWidth - 20) s.scrollLeft = x - s.clientWidth + 60;
+    if (x < s.scrollLeft + codeLeft + 10) s.scrollLeft = Math.max(0, x - codeLeft - 40);
+    else if (right > s.scrollLeft + s.clientWidth - 20) s.scrollLeft = right - s.clientWidth + 60;
   }
 
   /** Insert text at the cursor, keeping the browser's undo history. */

@@ -31,6 +31,8 @@ pub struct AppState {
     pub save_error: Mutex<Option<String>>,
     /// A one-time message from startup, e.g. that a damaged save was backed up.
     pub notice: Mutex<Option<String>>,
+    /// The compiler's version ("1.99.0"), shown on the sign on the title screen.
+    pub rustc: Option<String>,
 }
 
 type Shared = Arc<AppState>;
@@ -140,6 +142,22 @@ impl AppState {
 
 pub struct ApiError(StatusCode, String);
 
+/// The longest code the game accepts to save or run (far more than any level needs).
+const MAX_CODE_BYTES: usize = 200_000;
+
+fn check_code_size(code: &str) -> Result<(), ApiError> {
+    if code.len() > MAX_CODE_BYTES {
+        return Err(ApiError(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            format!(
+                "That's more than {} KB of code. Please keep it shorter.",
+                MAX_CODE_BYTES / 1000
+            ),
+        ));
+    }
+    Ok(())
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         (self.0, Json(json!({ "error": self.1 }))).into_response()
@@ -218,6 +236,7 @@ async fn get_state(State(s): State<Shared>) -> Json<Value> {
         .collect();
     Json(json!({
         "player": s.player(&p),
+        "rustc": s.rustc,
         "settings": p.settings,
         "usage": *s.usage.lock().unwrap(),
         "worlds": worlds,
@@ -268,7 +287,7 @@ async fn get_level(
     Ok(Json(json!({
         "id": level.id, "num": format!("{}.{}", world.id, li + 1),
         "title": level.title, "kind": level.kind, "goal": level.goal,
-        "stdin": level.stdin, "args": level.args, "files": level.files.keys().collect::<Vec<_>>(),
+        "stdin": level.stdin, "args": level.args, "env": level.env, "files": level.files.keys().collect::<Vec<_>>(),
         "lesson": level.lesson, "c_compare": level.c_compare, "py_compare": level.py_compare,
         "starter": level.starter,
         "code": p.drafts.get(&id).cloned().unwrap_or_else(|| level.starter.clone()),
@@ -308,6 +327,7 @@ async fn run_level(
     State(s): State<Shared>,
     Json(req): Json<CodeReq>,
 ) -> Result<Json<Value>, ApiError> {
+    check_code_size(&req.code)?;
     let (world, li, level) = s.playable(&req.id)?;
     if matches!(level.kind, Kind::Predict | Kind::Quiz) {
         return Err(ApiError(
@@ -369,14 +389,17 @@ struct PlayReq {
     id: Option<String>,
 }
 
-async fn play(State(s): State<Shared>, Json(req): Json<PlayReq>) -> Json<Value> {
+async fn play(State(s): State<Shared>, Json(req): Json<PlayReq>) -> Result<Json<Value>, ApiError> {
+    check_code_size(&req.code)?;
     let setup = req
         .id
         .as_deref()
         .and_then(|id| s.level(id).ok())
         .map(|(_, _, l)| runner::Setup::from_level(l))
         .unwrap_or_default();
-    Json(json!(runner::play(&req.code, &setup, &s.work_dir()).await))
+    Ok(Json(json!(
+        runner::play(&req.code, &setup, &s.work_dir()).await
+    )))
 }
 
 #[derive(Deserialize)]
@@ -457,6 +480,9 @@ async fn save_draft(
     State(s): State<Shared>,
     Json(req): Json<CodeReq>,
 ) -> Result<StatusCode, ApiError> {
+    // Only real levels get drafts, so the save file can't grow without bound.
+    s.level(&req.id)?;
+    check_code_size(&req.code)?;
     let mut p = s.progress.lock().unwrap();
     p.drafts.insert(req.id, req.code);
     s.save(&p);
@@ -522,10 +548,30 @@ async fn set_settings(
 /// in that family. The fallback name is only shown until Claude Code has told us which
 /// model the alias really is (after a reply, a test, or "Check for new versions").
 const MODEL_CARDS: &[(&str, &str, &str, &str)] = &[
-    ("fable", "Claude Fable", "Wizard", "The most capable model. Deepest explanations, slowest replies, uses the most of your plan's limits."),
-    ("opus", "Claude Opus", "Sage", "Excellent teacher. Thoughtful and clear — the recommended default."),
-    ("sonnet", "Claude Sonnet", "Ranger", "Fast and smart. A great everyday choice that's lighter on your limits."),
-    ("haiku", "Claude Haiku", "Sprite", "The quickest replies and the lightest on your limits. Best for quick hints."),
+    (
+        "fable",
+        "Claude Fable",
+        "Wizard",
+        "The most capable model. Deepest explanations, slowest replies, uses the most of your plan's limits.",
+    ),
+    (
+        "opus",
+        "Claude Opus",
+        "Sage",
+        "Excellent teacher. Thoughtful and clear — the recommended default.",
+    ),
+    (
+        "sonnet",
+        "Claude Sonnet",
+        "Ranger",
+        "Fast and smart. A great everyday choice that's lighter on your limits.",
+    ),
+    (
+        "haiku",
+        "Claude Haiku",
+        "Sprite",
+        "The quickest replies and the lightest on your limits. Best for quick hints.",
+    ),
 ];
 
 /// "claude-opus-5-5" -> "Claude Opus 5.5", "claude-haiku-4-5-20251001" -> "Claude Haiku 4.5".
@@ -544,7 +590,11 @@ fn model_name(id: &str) -> String {
         }
     }
     let name = words.join(" ");
-    if version.is_empty() { name } else { format!("{name} {}", version.join(".")) }
+    if version.is_empty() {
+        name
+    } else {
+        format!("{name} {}", version.join("."))
+    }
 }
 
 impl AppState {
@@ -643,6 +693,7 @@ struct FerrisReq {
 
 /// Streams Ferris' reply as newline-delimited JSON events.
 async fn ferris(State(s): State<Shared>, Json(req): Json<FerrisReq>) -> Result<Response, ApiError> {
+    check_code_size(&req.code)?;
     let (world, _, level) = s.playable(&req.id)?;
     let (world, level) = (world.clone(), level.clone());
 

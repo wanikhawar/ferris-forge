@@ -126,30 +126,66 @@ canvas.sprite, canvas.pixel-bg, #map-canvas { image-rendering: pixelated; }
   position: relative; height: 100%;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
 }
-.logo-sign {
-  text-align: center; padding: 18px 48px 14px;
-  background: linear-gradient(var(--wood-light), var(--wood));
-  border: 6px solid var(--wood-dark);
-  box-shadow: inset 0 4px 0 var(--wood-hi), inset 0 -6px 0 var(--wood-dark), 0 8px 0 rgba(0,0,0,.25);
-  clip-path: var(--px-corners);
+.logo-sub {
+  position: absolute; left: 0; right: 0; text-align: center; pointer-events: none;
+  font-family: var(--font-talk); letter-spacing: 1px; color: #f6e6c4; opacity: .92;
+  text-shadow: 1px 1px 0 rgba(74, 36, 16, .7);
 }
-.logo-main {
-  font-size: clamp(42px, 7vw, 84px); font-weight: 700; line-height: 1;
-  color: var(--gold);
-  text-shadow: 4px 4px 0 var(--bad-dark), -2px -2px 0 var(--wood-dark), 2px -2px 0 var(--wood-dark), -2px 2px 0 var(--wood-dark), 6px 6px 0 var(--wood-dark);
-  letter-spacing: 2px;
-}
-.logo-sub { font-family: var(--font-talk); font-size: 26px; color: var(--parch-light); text-shadow: 2px 2px 0 var(--wood-dark); margin-top: 6px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+#logo-canvas { display: block; filter: drop-shadow(0 6px 0 rgba(0, 0, 0, .22)); }
 #title-ferris { width: 312px; height: 228px; margin: -20px 0 -12px; }
 .title-gear { position: absolute; top: 16px; right: 16px; z-index: 2; width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; padding: 0; }
 .title-gear:hover .px-icon { animation: spin 1.2s steps(8) infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.logo-main span { display: inline-block; animation: letter-bob 1.6s steps(2) infinite; }
-@keyframes letter-bob { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-6px); } }
 #btn-start { animation: start-glow 1.4s steps(2) infinite; }
 @keyframes start-glow { 50% { transform: translateY(-2px); filter: brightness(1.1); } }
 .title-buttons { display: flex; gap: 18px; align-items: center; }
-.title-foot { font-family: var(--font-talk); font-size: 22px; color: #fff; text-shadow: 2px 2px 0 rgba(0,0,0,.5); }
+.title-foot { font-family: var(--font-talk); font-size: 22px; color: #fff; text-shadow: 2px 2px 0 rgba(0,0,0,.5); padding: 2px 14px; background: rgba(74, 44, 24, .45); clip-path: var(--px-corners); }
+
+/* The sign hangs on two ropes from the top of the screen, drops in with a bounce, then
+   sways gently from side to side (in whole pixels, so it stays crisp). */
+.logo-hang { position: relative; animation: logo-drop 1.2s cubic-bezier(.3, 1.4, .5, 1) both, logo-sway 5s steps(10) 1.2s infinite; }
+.logo-hang::before, .logo-hang::after {
+  content: ""; position: absolute; bottom: calc(100% - var(--rope-end, 20px)); height: 100vh; width: 6px;
+  background: repeating-linear-gradient(160deg, #d9b26a 0 5px, #9a6a32 5px 9px);
+  box-shadow: 2px 0 0 rgba(0,0,0,.2);
+}
+.logo-hang::before { left: 16%; }
+.logo-hang::after { right: 16%; }
+@keyframes logo-drop { from { transform: translateY(-110vh); } to { transform: translateY(0); } }
+@keyframes logo-sway { 0%, 100% { transform: translateX(-4px); } 50% { transform: translateX(4px); } }
+
+/* HTML pieces placed on the beach by title.js: the sign and the bottle notes. */
+#title-props { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.beach-sign { position: absolute; transform: translate(-50%, -100%); display: flex; flex-direction: column; align-items: center; }
+.beach-sign-board {
+  font-family: var(--font-code); font-size: 18px; font-weight: 700; color: var(--parch-light); white-space: nowrap;
+  padding: 6px 12px; background: linear-gradient(var(--wood-light), var(--wood));
+  border: 4px solid var(--wood-dark); clip-path: var(--px-corners);
+  text-shadow: 2px 2px 0 var(--wood-dark); transform: rotate(-3deg);
+}
+.beach-sign-post { width: 10px; height: 34px; margin-top: -4px; background: linear-gradient(90deg, var(--wood), var(--wood-dark)); }
+.bottle-note {
+  position: absolute; transform: translate(-50%, -100%) scale(.6); opacity: 0; transition: opacity .25s, transform .25s steps(3);
+  font-family: var(--font-code); font-size: 16px; color: #4a2c18; white-space: nowrap;
+  padding: 4px 10px; background: #fff3d0; border: 3px solid #c9a15a; box-shadow: 3px 3px 0 rgba(0,0,0,.2);
+}
+.bottle-note.show { opacity: 1; transform: translate(-50%, -100%) scale(1); }
+
+/* Start: Ferris waves (hops), then scuttles off to the right. */
+#title-ferris.leaving { animation: ferris-leave .85s steps(12) forwards; }
+@keyframes ferris-leave {
+  0% { transform: translate(0, 0); }
+  12% { transform: translate(0, -14px); }
+  24% { transform: translate(0, 0); }
+  36% { transform: translate(0, -14px); }
+  45% { transform: translate(0, 0); }
+  100% { transform: translate(70vw, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .logo-hang, #btn-start { animation: none; }
+}
 
 /* ---------- HUD ---------- */
 #hud {

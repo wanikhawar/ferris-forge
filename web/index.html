@@ -14,11 +14,13 @@
   <!-- Title screen -->
   <section id="title-screen" class="screen active">
     <canvas id="title-bg" class="pixel-bg"></canvas>
+    <div id="title-props" aria-hidden="true"></div>
     <button class="icon-btn title-gear" id="btn-title-settings" title="Settings" aria-label="Settings" data-icon="gear"></button>
     <div class="title-content">
-      <div class="logo-sign">
-        <div class="logo-main">Ferris' Forge</div>
-        <div class="logo-sub">learn Rust, one crab-step at a time</div>
+      <div class="logo-hang">
+        <h1 class="sr-only">Ferris' Forge: learn Rust, one crab-step at a time</h1>
+        <canvas id="logo-canvas" class="pixel-bg" aria-hidden="true"></canvas>
+        <div class="logo-sub" id="logo-sub" aria-hidden="true">learn Rust, one crab-step at a time</div>
       </div>
       <canvas id="title-ferris" class="sprite"></canvas>
       <div class="title-buttons">

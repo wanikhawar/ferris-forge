@@ -142,30 +142,55 @@ async fn compile(dir: &Path, source: &str, as_tests: bool) -> std::io::Result<Co
         .arg(&binary)
         .arg("main.rs")
         .current_dir(dir)
-        .stdout(Stdio::piped())
+        .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
     if as_tests {
         // `main` is never called in test mode, so don't nag about it.
         cmd.arg("--test").arg("-A").arg("dead_code");
     }
-    let child = cmd.spawn()?;
-    match tokio::time::timeout(COMPILE_TIMEOUT, child.wait_with_output()).await {
-        Ok(out) => {
-            let out = out?;
-            let messages = String::from_utf8_lossy(&out.stderr).into_owned();
-            Ok(Compiled {
-                ok: out.status.success(),
-                messages: truncate(messages),
-                binary,
-            })
-        }
-        Err(_) => Ok(Compiled {
+    let mut child = cmd.spawn()?;
+    // Read the compiler's messages with the same cap as program output, so a flood of
+    // errors can't fill memory. (rustc prints nothing useful on stdout.)
+    let over = Arc::new(Notify::new());
+    let messages = tokio::spawn(read_capped(
+        child.stderr.take().expect("piped"),
+        over.clone(),
+    ));
+    let finished = tokio::select! {
+        status = child.wait() => Some(status?),
+        _ = over.notified() => None,
+        _ = tokio::time::sleep(COMPILE_TIMEOUT) => None,
+    };
+    if finished.is_none() {
+        let _ = child.kill().await;
+    }
+    let (bytes, cut) = tokio::time::timeout(Duration::from_secs(1), messages)
+        .await
+        .ok()
+        .and_then(Result::ok)
+        .unwrap_or_default();
+    let mut text = String::from_utf8_lossy(&bytes).into_owned();
+    if cut {
+        text.push_str("\n… (compiler messages cut off)");
+    }
+    Ok(match finished {
+        Some(status) => Compiled {
+            ok: status.success(),
+            messages: truncate(text),
+            binary,
+        },
+        None if cut => Compiled {
+            ok: false,
+            messages: text,
+            binary,
+        },
+        None => Compiled {
             ok: false,
             messages: "The compiler took too long.".into(),
             binary,
-        }),
-    }
+        },
+    })
 }
 
 struct Ran {
@@ -201,8 +226,14 @@ async fn run_binary(
     args: &[&str],
     setup: &Setup,
 ) -> std::io::Result<Ran> {
-    let mut child = Command::new(binary)
-        .args(args)
+    let mut cmd = if contained().await {
+        let mut c = Command::new("unshare");
+        c.args(UNSHARE).arg(binary);
+        c
+    } else {
+        Command::new(binary)
+    };
+    cmd.args(args)
         .envs(setup.env.iter().map(|(k, v)| (k.as_str(), v.as_str())))
         .current_dir(dir)
         .stdin(Stdio::piped())
@@ -210,8 +241,15 @@ async fn run_binary(
         .stderr(Stdio::piped())
         .kill_on_drop(true)
         // Its own process group, so anything it starts can be stopped along with it.
-        .process_group(0)
-        .spawn()?;
+        .process_group(0);
+    // SAFETY: only calls setrlimit, which is async-signal-safe, between fork and exec.
+    unsafe {
+        cmd.pre_exec(|| {
+            set_limits();
+            Ok(())
+        });
+    }
+    let mut child = cmd.spawn()?;
     let pgid = child.id();
     // Type the level's input, then "press Ctrl+D" (close stdin).
     if let Some(mut stdin) = child.stdin.take() {
@@ -277,6 +315,57 @@ async fn run_binary(
         stdout,
         stderr,
     })
+}
+
+/// Runs the program as process 1 of its own PID namespace (inside a user namespace, so no
+/// root is needed). When that process ends or is killed, the kernel kills everything else
+/// in the namespace too: even children that left the process group with `setsid` can't
+/// outlive the run. The program still runs as you, with your files and network.
+const UNSHARE: &[&str] = &[
+    "--user",
+    "--map-current-user",
+    "--pid",
+    "--fork",
+    "--kill-child",
+    "--",
+];
+
+/// Whether this computer allows that (some systems switch off unprivileged namespaces).
+/// Without it, runs fall back to killing the process group.
+async fn contained() -> bool {
+    static AVAILABLE: tokio::sync::OnceCell<bool> = tokio::sync::OnceCell::const_new();
+    *AVAILABLE
+        .get_or_init(|| async {
+            let probe = Command::new("unshare")
+                .args(UNSHARE)
+                .arg("true")
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .kill_on_drop(true)
+                .status();
+            matches!(
+                tokio::time::timeout(Duration::from_secs(5), probe).await,
+                Ok(Ok(status)) if status.success()
+            )
+        })
+        .await
+}
+
+/// Limits for a running program, so a runaway one can't take the whole computer down
+/// before the timeout stops it: memory, size of any file it writes, and CPU time.
+fn set_limits() {
+    let limit = |resource, value: libc::rlim_t| {
+        let l = libc::rlimit {
+            rlim_cur: value,
+            rlim_max: value,
+        };
+        // SAFETY: setrlimit only reads the struct we pass.
+        unsafe { libc::setrlimit(resource, &l) };
+    };
+    limit(libc::RLIMIT_AS, 2 << 30);
+    limit(libc::RLIMIT_FSIZE, 64 << 20);
+    limit(libc::RLIMIT_CPU, 20);
 }
 
 /// Kill a whole process group (the program plus anything it spawned).
@@ -532,6 +621,31 @@ mod tests {
             "took {:?}",
             start.elapsed()
         );
+    }
+
+    #[tokio::test]
+    async fn detached_children_are_stopped_with_the_run() {
+        if !contained().await {
+            eprintln!("unprivileged namespaces are off here; skipping");
+            return;
+        }
+        let dir = work_dir("setsid");
+        let marker = dir.join("escaped.txt");
+        let _ = std::fs::remove_file(&marker);
+        let code = format!(
+            r#"fn main() {{
+                std::process::Command::new("setsid")
+                    .args(["sh", "-c", "sleep 1; touch {}"])
+                    .spawn()
+                    .unwrap();
+                println!("parent done");
+            }}"#,
+            marker.display()
+        );
+        let r = play(&code, &Setup::default(), &dir).await;
+        assert_eq!(r.stdout.trim(), "parent done", "{r:?}");
+        tokio::time::sleep(Duration::from_millis(1500)).await;
+        assert!(!marker.exists(), "a setsid child outlived the run");
     }
 
     #[tokio::test]

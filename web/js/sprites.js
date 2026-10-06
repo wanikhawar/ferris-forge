@@ -56,7 +56,7 @@ function outline(g, color = "O") {
  * Build Ferris for a mood and animation frame.
  * moods: idle, happy, talking, thinking, worried, excited, sleepy
  */
-export function ferrisGrid({ mood = "idle", frame = 0, blink = false, mouthOpen = false } = {}) {
+export function ferrisGrid({ mood = "idle", frame = 0, blink = false, mouthOpen = false, look = null } = {}) {
   let g = grid(FW, FH);
   const cx = 20, cy = 18;
   const excited = mood === "excited";
@@ -117,6 +117,8 @@ export function ferrisGrid({ mood = "idle", frame = 0, blink = false, mouthOpen 
     if (mood === "thinking") { dx = -1; dy = -1; }
     if (mood === "worried") { dy = 1; }
     if (mood === "talking" || mood === "happy") { dy = 0; dx = frame % 8 < 4 ? 0 : 1; }
+    // Looking at something: { dx, dy } from -1 to 1.
+    if (look) { dx = look.dx; dy = look.dy; }
     for (const ex of eyes) {
       for (const [px, py] of [[0, 0], [1, 0], [0, 1], [1, 1]]) set(g, ex + dx + px, 6 + dy + py, "K");
     }
@@ -155,6 +157,46 @@ export function ferrisGrid({ mood = "idle", frame = 0, blink = false, mouthOpen 
   return g;
 }
 
+/** Ferris' colors with a different shell: for his crab friends on the title screen. */
+export function crabPalette(body, highlight, shadow, outlineColor = PALETTE.O) {
+  return { ...PALETTE, R: body, H: highlight, D: shadow, O: outlineColor };
+}
+
+/** Frames in one round of the dance (at 8 frames a second). */
+export const DANCE_FRAMES = 64;
+
+/**
+ * One beat of the dance: sideways offset, hop height, mood and facing.
+ * Shuffle, claws-up hops, a spin, shuffle back, a little song, and a big jump.
+ */
+export function danceStep(frame) {
+  const f = ((frame % DANCE_FRAMES) + DANCE_FRAMES) % DANCE_FRAMES;
+  if (f < 16) {
+    // Shuffle side to side, claws pumping.
+    const dx = [0, 2, 4, 2, 0, -2, -4, -2][f % 8];
+    return { dx, hop: f % 2 ? -1 : 0, mood: "excited", flip: false };
+  }
+  if (f < 24) {
+    // Claws up, hopping in place.
+    return { dx: 0, hop: [0, -3, -5, -3][f % 4], mood: "excited", flip: false };
+  }
+  if (f < 32) {
+    // A spin: turning round twice, with a little lift.
+    return { dx: 0, hop: f % 4 === 1 || f % 4 === 2 ? -2 : 0, mood: "happy", flip: Math.floor(f / 2) % 2 === 1 };
+  }
+  if (f < 48) {
+    // Shuffle the other way, facing the other side.
+    const dx = [0, -2, -4, -2, 0, 2, 4, 2][f % 8];
+    return { dx, hop: f % 2 ? -1 : 0, mood: "excited", flip: true };
+  }
+  if (f < 56) {
+    // Wiggle and sing.
+    return { dx: f % 2 ? 1 : -1, hop: 0, mood: "talking", flip: f % 4 < 2 };
+  }
+  // One big jump to finish.
+  return { dx: 0, hop: [0, -3, -6, -8, -8, -6, -3, 0][f - 56], mood: "excited", flip: false };
+}
+
 export function drawGrid(ctx, g, ox, oy, scale, palette = PALETTE) {
   for (let y = 0; y < g.length; y++) for (let x = 0; x < g[0].length; x++) {
     const c = g[y][x];
@@ -173,6 +215,8 @@ export class Ferris {
     this.shadow = shadow;
     this.pad = pad;
     this.dancing = false;
+    // Where Ferris is looking ({ dx, dy }), or null to look around as usual.
+    this.look = null;
     canvas.width = (FW + pad * 2) * scale;
     canvas.height = (FH + 2 + pad) * scale;
     this.ctx = canvas.getContext("2d");
@@ -210,32 +254,16 @@ export class Ferris {
     this.draw(t < this.blinkUntil);
   }
 
-  /** One step of the dance: sideways offset, hop height, mood and facing, by beat. */
+  /** One step of the dance (see danceStep). */
   danceStep() {
-    const f = this.frame % 48;
-    if (f < 16) {
-      // Shuffle side to side, claws pumping.
-      const dx = [0, 2, 4, 2, 0, -2, -4, -2][f % 8];
-      return { dx, hop: f % 2 ? -1 : 0, mood: "excited", flip: false };
-    }
-    if (f < 24) {
-      // Big hops in place, looking happy.
-      return { dx: 0, hop: [0, -3, -5, -3][f % 4], mood: f % 4 === 2 ? "excited" : "happy", flip: false };
-    }
-    if (f < 40) {
-      // Turn around and shuffle the other way.
-      const dx = [0, -2, -4, -2, 0, 2, 4, 2][f % 8];
-      return { dx, hop: f % 2 ? -1 : 0, mood: "excited", flip: true };
-    }
-    // Wiggle and sing.
-    return { dx: f % 2 ? 1 : -1, hop: 0, mood: "talking", flip: f % 4 < 2 };
+    return danceStep(this.frame);
   }
 
   draw(blink = false) {
     const { ctx, scale, pad } = this;
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     let dx = 0, bob, mood = this.mood, flip = false;
-    if (this.dancing) {
+    if (this.dancing && !this.look) {
       const step = this.danceStep();
       ({ dx, mood, flip } = step);
       bob = step.hop;
@@ -250,7 +278,8 @@ export class Ferris {
       for (let x = 8 + air; x < 32 - air; x++) ctx.fillRect((x + pad + dx) * scale, (29 + pad) * scale, scale, scale);
       for (let x = 11 + air; x < 29 - air; x++) ctx.fillRect((x + pad + dx) * scale, (30 + pad) * scale, scale, scale);
     }
-    const g = ferrisGrid({ mood, frame: this.frame, blink, mouthOpen: this.frame % 2 === 0 });
+    if (this.look) mood = "happy";
+    const g = ferrisGrid({ mood, frame: this.frame, blink, mouthOpen: this.frame % 2 === 0, look: this.look });
     if (flip) {
       ctx.save();
       ctx.translate(this.canvas.width, 0);

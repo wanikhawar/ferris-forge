@@ -1,5 +1,6 @@
 // Vim mode: keystrokes go to the player's own Neovim (running on the game server),
 // and the editor shows Neovim's buffer, cursor and mode.
+import { gameKey } from "./api.js";
 
 const SPECIAL = {
   Escape: "Esc", Enter: "CR", Backspace: "BS", Tab: "Tab", Delete: "Del", Insert: "Insert",
@@ -17,6 +18,9 @@ export function nvimKey(e) {
   if (SPECIAL[k]) { name = SPECIAL[k]; special = true; }
   else if (k.length === 1 || [...k].length === 1) name = PRINTABLE_NAMES[k] || k;
   else return null;
+  // AltGr (Ctrl+Alt on Windows) types characters like @ { [ on many keyboards: that's
+  // text, not a Ctrl/Alt shortcut.
+  if (!special && e.getModifierState?.("AltGraph")) return name.length === 1 || [...name].length === 1 ? name : `<${name}>`;
   let mods = "";
   if (e.ctrlKey) mods += "C-";
   if (e.altKey || e.metaKey) mods += "M-";
@@ -61,20 +65,34 @@ export class VimBridge {
     this.seq = 0;
     this.ws = null;
     this.closed = false;
+    // Requests someone is waiting on: seq -> resolve.
+    this.waiters = new Map();
   }
 
   connect() {
     if (this.ws && this.ws.readyState <= 1) return;
     const proto = location.protocol === "https:" ? "wss" : "ws";
-    this.ws = new WebSocket(`${proto}://${location.host}/api/vim`);
+    this.ws = new WebSocket(`${proto}://${location.host}/api/vim?key=${encodeURIComponent(gameKey)}`);
     this.ws.onopen = () => { for (const m of this.queue.splice(0)) this.ws.send(m); };
     this.ws.onmessage = ev => {
       let msg;
       try { msg = JSON.parse(ev.data); } catch { return; }
       if (msg.type === "error" || msg.type === "stopped") this.onError(msg);
       else this.onState(msg);
+      // Replies come in order, so everything up to this one has been answered.
+      if (!msg.push) this.settleUpTo(msg.seq);
     };
-    this.ws.onclose = () => { if (!this.closed) this.onError({ type: "disconnected", message: "Lost the connection to Neovim." }); };
+    this.ws.onclose = () => {
+      this.settleUpTo(Infinity);
+      if (!this.closed) this.onError({ type: "disconnected", message: "Lost the connection to Neovim. Type to restart it." });
+    };
+  }
+
+  settleUpTo(seq) {
+    if (typeof seq !== "number") return;
+    for (const [s, resolve] of this.waiters) {
+      if (s <= seq) { this.waiters.delete(s); resolve(); }
+    }
   }
 
   /** Send a request; returns its sequence number (replies echo it back). */
@@ -86,6 +104,14 @@ export class VimBridge {
     return obj.seq;
   }
 
+  /** Send a request and wait for its reply (or for the connection to end). */
+  request(obj) {
+    return new Promise(resolve => {
+      const seq = this.send(obj);
+      this.waiters.set(seq, resolve);
+    });
+  }
+
   start(text, row, col, config) { return this.send({ type: "start", text, row, col, config }); }
   keys(keys) { return this.send({ type: "keys", keys }); }
   set(text, row = 1, col = 0) { return this.send({ type: "set", text, row, col }); }
@@ -95,6 +121,7 @@ export class VimBridge {
   close() {
     this.closed = true;
     this.queue = [];
+    this.settleUpTo(Infinity);
     if (this.ws) this.ws.close();
   }
 }

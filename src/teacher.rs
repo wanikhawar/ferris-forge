@@ -16,6 +16,12 @@ const REPLY_DEADLINE: Duration = Duration::from_secs(240);
 /// Returned when the browser stopped listening; nothing needs to be shown.
 pub const CANCELLED: &str = "cancelled";
 
+/// At most two Claude Code processes at once; more requests wait their turn.
+static CLAUDE_SLOTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
+/// The most of a reply (and of Claude Code's error output) that is kept.
+const MAX_REPLY_BYTES: usize = 200_000;
+const MAX_STDERR_BYTES: u64 = 16_000;
+
 pub const SYSTEM_PROMPT: &str = r#"You are Ferris, the friendly orange crab who is the mascot of the Rust programming language. You are the mentor inside "Ferris' Forge", a cozy pixel-art game (think Stardew Valley) that teaches Rust from the ground up.
 
 Your student knows Python and C but is not a professional developer. They learn best when a new Rust idea is connected to something they already know, so compare with C (pointers, malloc/free, undefined behaviour, int sizes) or Python (references, garbage collection, exceptions) when it genuinely helps — one short comparison, not both every time.
@@ -223,6 +229,19 @@ pub async fn ask(
     usage: &Arc<Mutex<Option<Value>>>,
 ) -> Result<Reply, String> {
     std::fs::create_dir_all(workdir).map_err(|e| e.to_string())?;
+    // One deadline for the whole reply, from waiting for a free slot to the last line.
+    let deadline = tokio::time::Instant::now() + REPLY_DEADLINE;
+    let too_slow = || {
+        format!(
+            "Claude took longer than {} minutes, so I stopped it. Try again, or pick a faster model.",
+            REPLY_DEADLINE.as_secs() / 60
+        )
+    };
+    let _slot = tokio::select! {
+        slot = CLAUDE_SLOTS.acquire() => slot.expect("semaphore is never closed"),
+        _ = tokio::time::sleep_until(deadline) => return Err(too_slow()),
+        _ = tx.closed() => return Err(CANCELLED.into()),
+    };
     let mut child = Command::new("claude")
         .arg("-p")
         .args(["--model", model])
@@ -249,17 +268,25 @@ pub async fn ask(
             }
         })?;
 
+    // Write the prompt in the background, so the deadline and "nobody is listening"
+    // checks below also cover a Claude Code that doesn't read it. Killing the process
+    // ends the write too.
     let mut stdin = child.stdin.take().expect("stdin is piped");
-    stdin
-        .write_all(prompt.as_bytes())
-        .await
-        .map_err(|e| e.to_string())?;
-    drop(stdin);
+    tokio::spawn(async move {
+        let _ = stdin.write_all(prompt.as_bytes()).await;
+    });
 
-    let mut stderr = child.stderr.take().expect("stderr is piped");
+    // Keep the start of the error output (for messages) and throw the rest away, so a
+    // chatty process can neither fill memory nor block on a full pipe.
+    let stderr = child.stderr.take().expect("stderr is piped");
     let stderr_task = tokio::spawn(async move {
+        let mut stderr = stderr;
         let mut s = String::new();
-        let _ = stderr.read_to_string(&mut s).await;
+        let _ = (&mut stderr)
+            .take(MAX_STDERR_BYTES)
+            .read_to_string(&mut s)
+            .await;
+        let _ = tokio::io::copy(&mut stderr, &mut tokio::io::sink()).await;
         s
     });
 
@@ -270,13 +297,10 @@ pub async fn ask(
 
     // Stop Claude if it runs too long, or as soon as nobody is listening any more
     // (the player left the page). Dropping `child` kills the process.
-    let deadline = tokio::time::Instant::now() + REPLY_DEADLINE;
     loop {
         let line = tokio::select! {
             line = lines.next_line() => line,
-            _ = tokio::time::sleep_until(deadline) => {
-                return Err(format!("Claude took longer than {} minutes, so I stopped it. Try again, or pick a faster model.", REPLY_DEADLINE.as_secs() / 60));
-            }
+            _ = tokio::time::sleep_until(deadline) => return Err(too_slow()),
             _ = tx.closed() => return Err(CANCELLED.into()),
         };
         let Ok(Some(line)) = line else { break };
@@ -295,6 +319,11 @@ pub async fn ask(
                     }
                     Some("content_block_delta") if inner["delta"]["type"] == "text_delta" => {
                         if let Some(t) = inner["delta"]["text"].as_str() {
+                            if text.len() + t.len() > MAX_REPLY_BYTES {
+                                return Err(
+                                    "Claude's reply was far too long, so I stopped it.".into()
+                                );
+                            }
                             text.push_str(t);
                             if tx.send(json!({"type": "delta", "text": t})).await.is_err() {
                                 return Err(CANCELLED.into());
@@ -323,7 +352,11 @@ pub async fn ask(
         Ok(status) => status.map_err(|e| e.to_string())?,
         Err(_) => return Err("Claude Code didn't exit after answering.".into()),
     };
-    let stderr_text = stderr_task.await.unwrap_or_default();
+    let stderr_text = tokio::time::timeout(Duration::from_secs(2), stderr_task)
+        .await
+        .ok()
+        .and_then(Result::ok)
+        .unwrap_or_default();
     match final_result {
         Some((false, result)) => Ok(Reply {
             text: if text.is_empty() { result } else { text },
