@@ -1,14 +1,50 @@
-# 🦀 Ferris' Forge
+<p align="center">
+  <img src="docs/images/banner.png" alt="Ferris' Forge: Ferris the crab and two crab friends dancing on a pixel-art beach, under a rusty wooden sign">
+</p>
 
-A cozy pixel-art game that teaches Rust from the ground up. Ferris the crab is your teacher, powered by Claude through your Claude Code subscription.
+<h1 align="center">Ferris' Forge</h1>
+
+<p align="center">
+  <b>A cozy pixel-art game that teaches Rust from the ground up.</b><br>
+  25 islands · 187 levels · the whole Rust Book · a real compiler · and Ferris the crab as your teacher, powered by Claude.
+</p>
+
+<p align="center">
+  <img src="docs/images/crew.png" width="420" alt="Ferris and his two crab friends">
+</p>
 
 ## Play
 
+You need [Rust](https://rustup.rs) (the game compiles your code with your own `rustc`). For Ferris to talk, you also need [Claude Code](https://claude.com/claude-code); without it, switch Ferris to offline mode in Settings and he gives built-in hints. [Neovim](https://neovim.io) is optional, for Vim mode.
+
 ```bash
+git clone https://github.com/wanikhawar/ferris-forge
+cd ferris-forge
 cargo run
 ```
 
-Your browser opens at http://127.0.0.1:7878. Press Ctrl+C in the terminal to quit.
+Your browser opens the game at http://127.0.0.1:7878. Press Ctrl+C in the terminal to quit.
+
+The link the game opens (and prints in the terminal) ends in `#key=…`. The game runs Rust code and Neovim for whoever uses its API, so the API only answers pages that have this key; other programs and other users on your computer can't. Your browser remembers it, so later you can just open http://127.0.0.1:7878. In a new browser or a private window, use the printed link once. The key is kept in `save/game.key`, readable only by you; delete that file to make a new one.
+
+Developed and tested on Linux.
+
+## A look around
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/map.png" alt="The world map: 25 islands, one for each part of the Rust Book"><br><b>The world map.</b> 25 islands, each a part of the Rust Book. Clear an island's boss to unlock the next.</td>
+    <td width="50%"><img src="docs/images/level.png" alt="A level: code on the left, Ferris and his hints on the right"><br><b>A level.</b> Code on the left, Ferris on the right. Hints, explanations and code reviews come from Ferris.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/console.png" alt="The console showing that all of Ferris' tests passed"><br><b>Real results.</b> Your code is compiled and run with <code>rustc</code>, and checked by its output or by Ferris' tests.</td>
+    <td width="50%"><img src="docs/images/lesson.png" alt="A lesson popup with Rust, In C and In Python tabs"><br><b>Lessons.</b> A short lesson for every level, with how it compares to C and Python, and a link to the book.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/vim.png" alt="The editor in Vim mode, with lines selected in visual-line mode"><br><b>Vim mode.</b> Edit with your own Neovim and your own config, running invisibly behind the editor.</td>
+    <td width="50%" align="center"><img src="docs/images/moods.png" alt="Ferris in seven moods: idle, happy, talking, thinking, worried, excited and sleepy"><br><b>Ferris has moods.</b> He thinks while you compile, worries when it breaks, and dances when it works.</td>
+  </tr>
+</table>
 
 ## How it works
 
@@ -17,6 +53,18 @@ Your browser opens at http://127.0.0.1:7878. Press Ctrl+C in the terminal to qui
 - **Switch models** with the 🧠 chip under Ferris (Fable, Opus, Sonnet, Haiku, or any model name Claude Code accepts) and pick an effort level.
 - **The ⚡ "E" bar** in the top-right corner shows how much of your Claude usage limit is left. It updates after Ferris answers.
 - **Offline mode** (in Settings) uses built-in hints and doesn't touch your Claude limit.
+
+## Level types
+
+<p align="center">
+  <img src="docs/images/kinds.png" width="560" alt="The five level types: Fix it, Fill it, Predict it, Quiz and Boss">
+</p>
+
+🔧 **Fix it**: broken code to repair · ✍️ **Fill it**: write the missing part · 🔮 **Predict it**: guess the output · 📖 **Quiz**: a concept question · 👹 **Boss**: a mini-project at the end of each world.
+
+Levels can also give your program keyboard input, command-line arguments, environment variables and extra files (see the `stdin`, `args`, `env` and `files` fields in the level TOML).
+
+Hints cost XP on that level (−10%, −30%, then −60% for the full answer). If Ferris' code review says your passing code is idiomatic, you get +15 bonus XP.
 
 ## Vim mode
 
@@ -31,46 +79,18 @@ Click **VIM** above the editor (or turn it on in Settings) and every keystroke g
 | Key | Action |
 |---|---|
 | Ctrl+Enter | Run your code |
-| 1–9, 0, N | Hotbar: Run, Compiler, Output, Expected/Tests, Hint, Explain, Review, Reset, Skip, Map, Next |
+| 1–9, N | Hotbar: Run, Compiler, Output/Results (with the Expected or Tests tab), Hint, Explain, Review, Reset, Skip, Map, Next |
 | A–D | Answer a predict question |
 | Tab / Shift+Tab | Indent / dedent |
 | Ctrl+/ | Toggle comment (when Vim mode is off) |
 | L | Open the lesson |
 | Q | Quick questions for Ferris |
 
-## Level types
+<p align="center"><img src="docs/images/divider.png" width="480" alt=""></p>
 
-🔧 **Fix it**: broken code to repair · ✍️ **Fill it**: write the missing part · 🔮 **Predict it**: guess the output · 📖 **Quiz**: a concept question · 👹 **Boss**: a mini-project at the end of each world.
+## The islands
 
-Levels can also give your program keyboard input, command-line arguments, environment variables and extra files (see the `stdin`, `args`, `env` and `files` fields in the level TOML).
-
-Hints cost XP on that level (−10%, −30%, then −60% for the full answer). If Ferris' code review says your passing code is idiomatic, you get +15 bonus XP.
-
-## Project layout
-
-```
-src/        Rust backend (axum): runner (rustc), teacher (claude -p), progress, API
-levels/     the curriculum: one TOML file per world
-web/        the pixel UI (plain HTML/CSS/JS, no build step)
-save/       your progress (created on first run)
-```
-
-To check that every level is solvable (each starter fails, each solution passes, each predict answer is correct):
-
-```bash
-cargo run -- verify      # every world
-cargo run -- verify 5    # just world 5
-```
-
-## Follows the Rust Book
-
-The curriculum follows **The Rust Programming Language**, using Brown University's interactive edition (https://rust-book.cs.brown.edu). `levels/book.toml` lists every chapter and section. Each level says which sections it teaches, and the lesson popup links straight to them.
-
-`cargo run -- verify` also checks **coverage**: every book topic must be taught by at least one level (built or planned), and every section id a level mentions must exist.
-
-## Roadmap
-
-25 islands cover the whole book, ordered by what you need to know first rather than by chapter number. **Worlds 0–15 are playable (129 levels)**; Worlds 16–24 are placeholders whose planned levels already have names and goals.
+The curriculum follows **The Rust Programming Language**, using Brown University's interactive edition (https://rust-book.cs.brown.edu). The 25 islands cover the whole book, ordered by what you need to know first rather than by chapter number. `levels/book.toml` lists every chapter and section; each level says which sections it teaches, and the lesson popup links straight to them.
 
 | # | Island | Book |
 |---|---|---|
@@ -100,4 +120,30 @@ The curriculum follows **The Rust Programming Language**, using Brown University
 | 23 | Web Server Citadel 🛠 | Ch 21 (final project) |
 | 24 | Ferris' Library 📚 | Appendices |
 
-The Guessing Game, Minigrep and async worlds will need extra runner features (keyboard input for programs, command-line arguments and files, and external crates like `rand`) before their levels can be built.
+Levels are compiled with plain `rustc`, so they can't use crates. The Async Archipelago levels therefore come with `runtime.rs`, a tiny async runtime built from the standard library (block_on, sleep, join, race, channels and streams) that stands in for tokio or the book's `trpl`. The Web Server Citadel tests act as browsers over real TCP connections on 127.0.0.1.
+
+## Project layout
+
+```
+src/        Rust backend (axum): runner (rustc), teacher (claude -p), Vim bridge, progress, API
+levels/     the curriculum: one TOML file per world, plus book.toml (the book's contents)
+web/        the pixel UI (plain HTML/CSS/JS, no build step)
+docs/       the README's images; docs/art/make-art.html redraws its artwork
+save/       your progress (created on first run)
+```
+
+To check that every level is solvable (each starter fails, each solution passes, each predict answer is correct):
+
+```bash
+cargo run -- verify      # every world
+cargo run -- verify 5    # just world 5
+```
+
+`cargo run -- verify` also checks **coverage**: every book topic must be taught by at least one level, and every section id a level mentions must exist.
+
+## Safety
+
+The game runs on your own computer and only listens on 127.0.0.1. It runs the code you write (as you, like `cargo run` would), so be as careful with code pasted from elsewhere as you would be in a terminal.
+
+- Only the game's own page can use its API (see the key above); other websites and other local programs can't.
+- Each program runs with limits on memory, file size and CPU time, and is stopped after 5 seconds. On Linux it runs in its own process namespace, so nothing it starts outlives the run.

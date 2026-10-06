@@ -1,0 +1,123 @@
+<!doctype html>
+<!--
+  Artwork for the README, drawn with the game's own sprite code.
+  Serve the repository root (e.g. `python3 -m http.server`) and open /docs/art/make-art.html;
+  each picture is a canvas, and window.art() returns them as PNG data URLs.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Ferris' Forge artwork</title>
+  <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@700&family=VT323&display=swap" rel="stylesheet">
+  <style>
+    body { background: #2b2b2b; color: #eee; font-family: sans-serif; }
+    canvas { display: block; margin: 16px; image-rendering: pixelated; background: repeating-conic-gradient(#3a3a3a 0 25%, #333 0 50%) 0 0 / 16px 16px; }
+  </style>
+</head>
+<body>
+  <canvas id="crew"></canvas>
+  <canvas id="moods"></canvas>
+  <canvas id="kinds"></canvas>
+  <canvas id="divider"></canvas>
+  <script type="module">
+    import { ferrisGrid, drawGrid, crabPalette, danceStep } from "../../web/js/sprites.js";
+    import { pixelIcon } from "../../web/js/icons.js";
+
+    const S = 5; // pixels per sprite cell
+    const teal = crabPalette("#2fa7a0", "#6fd9cf", "#1d7a75", "#0f3b39");
+    const purple = crabPalette("#9b5de5", "#c49af2", "#6c3aa8", "#2e1650");
+
+    function shadow(ctx, x, y, w) {
+      ctx.fillStyle = "rgba(0, 0, 0, .18)";
+      ctx.fillRect(x + 8 * S, y + 29 * S, (w - 16) * S, S);
+      ctx.fillRect(x + 11 * S, y + 30 * S, (w - 22) * S, S);
+    }
+
+    function crab(ctx, x, y, frame, palette, scale = S) {
+      const step = danceStep(frame);
+      let g = ferrisGrid({ mood: step.mood, frame, mouthOpen: frame % 2 === 0 });
+      if (step.flip) g = g.map(r => r.slice().reverse());
+      drawGrid(ctx, g, x / scale + step.dx * 0.5, y / scale + step.hop, scale, palette);
+    }
+
+    // Ferris and his two friends, mid-dance.
+    {
+      const c = document.getElementById("crew");
+      c.width = 150 * S; c.height = 40 * S;
+      const ctx = c.getContext("2d");
+      // Frames where everyone has both feet on the sand (no hop), claws up.
+      for (const [i, pal, frame] of [[0, teal, 16], [1, undefined, 20], [2, purple, 16]]) {
+        const x = (5 + i * 48) * S, y = 6 * S;
+        shadow(ctx, x, y, 40);
+        crab(ctx, x, y, frame, pal);
+      }
+    }
+
+    // The five kinds of level, as their pixel icons.
+    async function kinds() {
+      const list = [["fix", "Fix it"], ["fill", "Fill it"], ["predict", "Predict it"], ["quiz", "Quiz"], ["boss", "Boss"]];
+      const c = document.getElementById("kinds");
+      const cell = 170;
+      c.width = list.length * cell; c.height = 130;
+      const ctx = c.getContext("2d");
+      ctx.imageSmoothingEnabled = false;
+      for (const [i, [kind, label]] of list.entries()) {
+        const svg = pixelIcon(kind, 6).replace("<svg ", '<svg xmlns="http://www.w3.org/2000/svg" ');
+        const img = new Image();
+        img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+        await img.decode();
+        ctx.drawImage(img, i * cell + (cell - img.width) / 2, 6);
+        ctx.fillStyle = "#c0702e";
+        ctx.font = "34px VT323";
+        ctx.textAlign = "center";
+        ctx.fillText(label, i * cell + cell / 2, 122);
+      }
+    }
+
+    // A thin divider: a row of little crabs walking along a strip of sand.
+    {
+      const c = document.getElementById("divider");
+      const W = 240, H = 18, P = 4;
+      c.width = W * P; c.height = H * P;
+      const ctx = c.getContext("2d");
+      for (let x = 0; x < W; x++) {
+        const y = 14 + Math.round(Math.sin(x * 0.15) * 0.6);
+        ctx.fillStyle = "#f2d28e"; ctx.fillRect(x * P, y * P, P, (H - y) * P);
+        ctx.fillStyle = "#ffffff"; if (x % 9 < 4) ctx.fillRect(x * P, (y - 1) * P, P, P);
+      }
+      const tiny = [".r...r.", "rr.r.rr", ".rrrrr.", "r.r.r.r"];
+      for (let i = 0; i < 6; i++) {
+        const x0 = 18 + i * 40, y0 = 9;
+        tiny.forEach((row, j) => [...row].forEach((ch, k) => {
+          if (ch !== "r") return;
+          ctx.fillStyle = i % 3 === 1 ? "#2fa7a0" : i % 3 === 2 ? "#9b5de5" : "#f2601c";
+          ctx.fillRect((x0 + k) * P, (y0 + j) * P, P, P);
+        }));
+      }
+    }
+
+    window.artReady = (async () => {
+      // Canvas text only uses a web font once it has loaded, so load it first.
+      await Promise.all([document.fonts.load('28px VT323'), document.fonts.load('34px VT323')]);
+      // Ferris' moods, labelled in the pixel font (so wait for it to load).
+      const moods = document.getElementById("moods");
+      moods.width = 7 * 46 * 4; moods.height = 42 * 4;
+      {
+        const list = ["idle", "happy", "talking", "thinking", "worried", "excited", "sleepy"];
+        const ctx = moods.getContext("2d");
+        list.forEach((mood, i) => {
+          drawGrid(ctx, ferrisGrid({ mood, frame: 1, mouthOpen: true }), i * 46 + 3, 1, 4);
+          ctx.fillStyle = "#c0702e";
+          ctx.font = "28px VT323";
+          ctx.textAlign = "center";
+          ctx.fillText(mood, (i * 46 + 23) * 4, 40 * 4);
+        });
+      }
+      await kinds();
+      return true;
+    })();
+
+    window.art = () => Object.fromEntries([...document.querySelectorAll("canvas")].map(c => [c.id, c.toDataURL("image/png")]));
+  </script>
+</body>
+</html>
