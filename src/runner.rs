@@ -149,6 +149,13 @@ async fn compile(dir: &Path, source: &str, as_tests: bool) -> std::io::Result<Co
         // `main` is never called in test mode, so don't nag about it.
         cmd.arg("--test").arg("-A").arg("dead_code");
     }
+    // SAFETY: only calls setrlimit, which is async-signal-safe, between fork and exec.
+    unsafe {
+        cmd.pre_exec(|| {
+            set_compiler_limits();
+            Ok(())
+        });
+    }
     let mut child = cmd.spawn()?;
     // Read the compiler's messages with the same cap as program output, so a flood of
     // errors can't fill memory. (rustc prints nothing useful on stdout.)
@@ -355,17 +362,33 @@ async fn contained() -> bool {
 /// Limits for a running program, so a runaway one can't take the whole computer down
 /// before the timeout stops it: memory, size of any file it writes, and CPU time.
 fn set_limits() {
-    let limit = |resource, value: libc::rlim_t| {
-        let l = libc::rlimit {
-            rlim_cur: value,
-            rlim_max: value,
-        };
-        // SAFETY: setrlimit only reads the struct we pass.
-        unsafe { libc::setrlimit(resource, &l) };
-    };
     limit(libc::RLIMIT_AS, 2 << 30);
     limit(libc::RLIMIT_FSIZE, 64 << 20);
     limit(libc::RLIMIT_CPU, 20);
+}
+
+/// The compiler's memory limit, so a tiny program asking for a huge constant (say
+/// `[0u8; 1 << 34]`) gets "tried to allocate more memory than available" instead of
+/// eating all your RAM. It limits writable memory (RLIMIT_DATA), not address space: the
+/// linker starts a thread per CPU core, and the space they only reserve (not yet
+/// writable) alone goes past RLIMIT_AS on a many-core machine. A normal compile needs about 1 GB.
+fn set_compiler_limits() {
+    limit(libc::RLIMIT_DATA, 4 << 30);
+}
+
+/// What `setrlimit` takes to name a limit: its own type on glibc, a plain int elsewhere.
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+type Resource = libc::__rlimit_resource_t;
+#[cfg(not(all(target_os = "linux", target_env = "gnu")))]
+type Resource = libc::c_int;
+
+fn limit(resource: Resource, value: libc::rlim_t) {
+    let l = libc::rlimit {
+        rlim_cur: value,
+        rlim_max: value,
+    };
+    // SAFETY: setrlimit only reads the struct we pass.
+    unsafe { libc::setrlimit(resource, &l) };
 }
 
 /// Kill a whole process group (the program plus anything it spawned).

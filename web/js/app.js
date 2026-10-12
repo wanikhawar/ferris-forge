@@ -1,5 +1,5 @@
 // Ferris' Forge — game UI.
-import { api } from "./api.js";
+import { api, gameKey } from "./api.js";
 import { Editor, errorLinesFrom, escapeHtml } from "./editor.js";
 import { renderMarkdown } from "./md.js";
 import { Ferris, grassTileURL } from "./sprites.js";
@@ -742,6 +742,8 @@ async function runCode() {
   const lv = S.level;
   if (!lv || S.running) return;
   if (lv.kind === "quiz") return;
+  // A run saves its code as the draft, which would bring the old attempt back (see replayLevel).
+  if (replaying.has(lv.id)) return;
   if (answers(lv.kind)) return runPredict();
   S.running = true;
   setSlotBusy("run", true);
@@ -750,7 +752,8 @@ async function runCode() {
   try {
     // Vim mode: compile what Neovim has, including keys it's still working on.
     await editor.sync();
-    if (S.level !== lv) return;
+    // Replay may have started while Neovim caught up: this code is the old attempt's now.
+    if (S.level !== lv || replaying.has(lv.id)) return;
     const res = await api.run(lv.id, editor.value);
     S.game.player = res.player;
     updateHUD();
@@ -776,7 +779,8 @@ async function runCode() {
 
 async function runPredict() {
   const lv = S.level;
-  if (!lv || S.running) return;
+  // Answer first, then see the real output (whichever way Run was pressed).
+  if (!lv || S.running || !S.quizSolved) return;
   S.running = true;
   setSlotBusy("run", true);
   sound.compile();
@@ -795,6 +799,8 @@ async function onPass(res, lv) {
   sound.success();
   ferris.setMood("excited", 3500);
   ferris.setMood("happy");
+  // A skipped level that's now solved is no longer skipped (the server forgets it too).
+  lv.skipped = false;
   if (res.first_clear) {
     lv.done = true;
     $("#lv-xp").className = "badge xp done";
@@ -873,6 +879,7 @@ async function answerQuiz(i, btn) {
   if (res.correct) {
     S.quizSolved = true;
     lv.done = true;
+    lv.skipped = false;
     btn.classList.add("right");
     for (const b of document.querySelectorAll(".choice")) b.disabled = true;
     sound.success();
@@ -941,15 +948,26 @@ function resetCode() {
 }
 
 async function replayLevel(lv) {
+  // Edits typed from now on belong to the old attempt: never save (or run) them, or one
+  // could land after the server cleared the draft and come back instead of the starter.
+  replaying.add(lv.id);
+  cancelDraft();
+  storeUnsaved();
+  let res;
   try {
-    // Let queued saves land first, or one could restore the old code after the reset.
-    cancelDraft();
+    // Let saves already on their way land first, before the server clears the draft.
     await draftChain;
-    const res = await api.replay(lv.id);
-    // Edits typed while the replay was in flight belong to the old attempt.
-    cancelDraft();
-    await draftChain;
+    res = await api.replay(lv.id);
+  } catch (e) {
+    replaying.delete(lv.id);
+    // Nothing was reset, so what's in the editor is still this attempt's code.
+    if (S.level === lv && !answers(lv.kind)) scheduleDraft(lv.id, editor.value);
+    toast("⚠", escapeHtml(e.message));
+    return;
+  }
+  try {
     unsavedDrafts.delete(lv.id);
+    storeUnsaved();
     S.game.player = res.player;
     delete S.history[lv.id];
     saveHistory();
@@ -960,9 +978,12 @@ async function replayLevel(lv) {
     } catch { /* ignore */ }
     updateHUD();
     toast(pixelIcon("replay", 2), res.xp_returned ? `Level ${lv.num} reset. ${res.xp_returned} XP returned; earn it again!` : `Level ${lv.num} reset. Fresh start!`);
+    // Still blocked while it reopens: in Vim mode, keys Neovim is still applying arrive then.
     await openLevel(lv.id);
   } catch (e) {
     toast("⚠", escapeHtml(e.message));
+  } finally {
+    replaying.delete(lv.id);
   }
 }
 
@@ -973,14 +994,38 @@ let draftChain = Promise.resolve();
 // Code per level that the server hasn't confirmed yet. Reopening a level shows this
 // instead of the server's (older) draft, so a failed save never loses edits.
 const unsavedDrafts = new Map();
+// Levels being replayed right now: their edits aren't saved (see replayLevel).
+const replaying = new Set();
+// A copy of unsavedDrafts in this browser (per save folder), so they survive a reload or a
+// closed tab: a save still on its way is cancelled along with the page.
+const UNSAVED_KEY = `ff-unsaved-${gameKey}`;
+
+function storeUnsaved() {
+  const keep = [...unsavedDrafts].filter(([id]) => !replaying.has(id));
+  try {
+    if (keep.length) localStorage.setItem(UNSAVED_KEY, JSON.stringify(keep));
+    else localStorage.removeItem(UNSAVED_KEY);
+  } catch { /* storage unavailable or full */ }
+}
+
+/** Edits a previous visit couldn't save: save them now (opening the level shows them). */
+function restoreUnsaved() {
+  let saved = [];
+  try { saved = JSON.parse(localStorage.getItem(UNSAVED_KEY) || "[]"); } catch { /* ignore */ }
+  for (const [id, code] of saved) saveDraft(id, code);
+}
 
 function saveDraft(id, code) {
   unsavedDrafts.set(id, code);
+  storeUnsaved();
   draftChain = draftChain
     .then(() => api.draft(id, code))
     .then(() => {
       // A newer edit queued behind this one is still unsaved.
-      if (unsavedDrafts.get(id) === code) unsavedDrafts.delete(id);
+      if (unsavedDrafts.get(id) === code) {
+        unsavedDrafts.delete(id);
+        storeUnsaved();
+      }
       if (!unsavedDrafts.size) setSaveStatus(null);
     })
     .catch(e => setSaveStatus(e.message || "Couldn't autosave your code."));
@@ -999,6 +1044,7 @@ function setSaveStatus(error) {
 }
 
 function scheduleDraft(id, code) {
+  if (replaying.has(id)) return;
   clearTimeout(draftTimer);
   draftPending = { id, code };
   draftTimer = setTimeout(() => { const d = draftPending; draftPending = null; if (d) saveDraft(d.id, d.code); }, 800);
@@ -1007,6 +1053,17 @@ function scheduleDraft(id, code) {
 function cancelDraft() {
   clearTimeout(draftTimer);
   draftPending = null;
+}
+
+/** The page is going away (reload, closed tab): the autosave timer and any save still on
+ *  its way would be lost with it. Keep every edit the server hasn't confirmed in this
+ *  browser for next time, and try sending it now too (that only fits up to 64 KB). */
+function saveDraftsOnExit() {
+  clearTimeout(draftTimer);
+  if (draftPending) unsavedDrafts.set(draftPending.id, draftPending.code);
+  draftPending = null;
+  storeUnsaved();
+  for (const [id, code] of unsavedDrafts) if (!replaying.has(id)) api.draftOnExit(id, code);
 }
 
 /** Save a pending edit right away (e.g. before switching levels). Resolves once every
@@ -1716,6 +1773,8 @@ async function boot() {
       if (id && !answers(S.level.kind)) scheduleDraft(id, code);
     },
   });
+  addEventListener("pagehide", saveDraftsOnExit);
+  restoreUnsaved();
 
   requestAnimationFrame(titleLoop);
 

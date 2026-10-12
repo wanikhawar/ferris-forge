@@ -43,6 +43,14 @@ export const api = {
   skip: id => request("POST", "/api/skip", { id }),
   replay: id => request("POST", "/api/replay", { id }),
   draft: (id, code) => request("POST", "/api/draft", { id, code }),
+  /** Autosave while the page is closing or reloading: a normal request would be cancelled
+   *  along with the page, a `keepalive` one is still sent (up to 64 KB). */
+  draftOnExit: (id, code) => fetch("/api/draft", {
+    method: "POST",
+    keepalive: true,
+    headers: { "content-type": "application/json", "x-ferris-key": gameKey },
+    body: JSON.stringify({ id, code }),
+  }).catch(() => {}),
   setName: name => request("POST", "/api/name", { name }),
   saveSettings: s => request("POST", "/api/settings", s),
   models: () => request("GET", "/api/models"),

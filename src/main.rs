@@ -50,6 +50,18 @@ async fn main() {
         .map(PathBuf::from)
         .unwrap_or_else(|| root.join("save"));
     std::fs::create_dir_all(save_dir.join("tmp")).expect("can't create save folder");
+    // Absolute, because compiles run inside a scratch folder and a relative path would
+    // then point somewhere else.
+    let save_dir = save_dir.canonicalize().expect("can't find the save folder");
+    // Only one game at a time per save folder: two would each keep their own copy of your
+    // progress and overwrite each other's. A second start just points you to the first.
+    let mut lock = lock_save_dir(&save_dir).unwrap_or_else(|e| {
+        eprintln!("Couldn't lock {}: {e}", save_dir.display());
+        std::process::exit(1);
+    });
+    let Some(lock_file) = lock.as_mut() else {
+        already_running(&save_dir);
+    };
     let (progress, notice) = progress::Progress::load(&save_dir.join("progress.json"))
         .unwrap_or_else(|e| {
             eprintln!("Couldn't start: {e}");
@@ -76,6 +88,12 @@ async fn main() {
             .expect("can't open a port"),
     };
     let port = listener.local_addr().unwrap().port();
+    {
+        use std::io::Write;
+        // Tell a second start where this game is.
+        let _ = lock_file.set_len(0);
+        let _ = lock_file.write_all(port.to_string().as_bytes());
+    }
     let key = game_key(&save_dir).unwrap_or_else(|e| {
         eprintln!(
             "Couldn't create the game's key in {}: {e}",
@@ -97,6 +115,56 @@ async fn main() {
         let _ = open::that(&url);
     }
     axum::serve(listener, app).await.unwrap();
+}
+
+/// Lock `save/game.lock` for as long as the game runs (the OS lets go when it exits, even
+/// after a crash). `None` means another game already holds it. The file holds that
+/// game's port.
+fn lock_save_dir(save_dir: &Path) -> std::io::Result<Option<std::fs::File>> {
+    use std::os::fd::AsRawFd;
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(save_dir.join("game.lock"))?;
+    // SAFETY: flock only acts on a file descriptor that `file` keeps open.
+    if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0 {
+        // Forget the last game's port until this one has its own.
+        file.set_len(0)?;
+        return Ok(Some(file));
+    }
+    let err = std::io::Error::last_os_error();
+    if err.raw_os_error() == Some(libc::EWOULDBLOCK) {
+        Ok(None)
+    } else {
+        Err(err)
+    }
+}
+
+/// Another game is using this save folder: open that one instead of starting a second.
+fn already_running(save_dir: &Path) -> ! {
+    let port = std::fs::read_to_string(save_dir.join("game.lock"))
+        .ok()
+        .and_then(|s| s.trim().parse::<u16>().ok());
+    let key = std::fs::read_to_string(save_dir.join("game.key")).ok();
+    match (port, key) {
+        (Some(port), Some(key)) => {
+            let url = format!("http://127.0.0.1:{port}/#key={}", key.trim());
+            println!("\n  🦀  Ferris' Forge is already running at {url}\n");
+            if std::env::var_os("FERRIS_NO_BROWSER").is_none() {
+                let _ = open::that(&url);
+            }
+            std::process::exit(0);
+        }
+        _ => {
+            eprintln!(
+                "Ferris' Forge is already running with the save folder {} (it is still starting up).",
+                save_dir.display()
+            );
+            std::process::exit(1);
+        }
+    }
 }
 
 /// "1.99.0" from `rustc --version` ("rustc 1.99.0 (b940084d7 2026-09-28)").
