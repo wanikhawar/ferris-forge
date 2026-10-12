@@ -10,6 +10,10 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/wanikhawar/ferris-forge/actions/workflows/ci.yml"><img src="https://github.com/wanikhawar/ferris-forge/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+</p>
+
+<p align="center">
   <img src="docs/images/crew.png" width="420" alt="Ferris and his two crab friends">
 </p>
 

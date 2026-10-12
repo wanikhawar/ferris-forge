@@ -1,0 +1,39 @@
+name: A level is broken
+description: A correct answer fails, a wrong one passes, the starter already passes, or a lesson is wrong.
+labels: [level]
+body:
+  - type: input
+    id: level
+    attributes:
+      label: Level
+      description: The number shown on the level, e.g. 4.2.
+      placeholder: "4.2"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you expected and what the game did instead.
+    validations:
+      required: true
+  - type: textarea
+    id: code
+    attributes:
+      label: Your code
+      description: The code you ran, if it matters.
+      render: rust
+  - type: textarea
+    id: output
+    attributes:
+      label: Compiler output or test results
+      description: From the Compiler and Output tabs.
+      render: text
+  - type: input
+    id: rustc
+    attributes:
+      label: rustc version
+      description: Output of `rustc --version`. Levels can break with a new Rust release.
+      placeholder: rustc 1.99.0 (b940084d7 2026-09-28)
+    validations:
+      required: true
