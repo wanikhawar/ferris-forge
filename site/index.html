@@ -1,0 +1,567 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ferris' Forge — Learn Rust on 25 Pixel Islands</title>
+    <meta
+      name="description"
+      content="A cozy pixel-art game that teaches Rust from the ground up: 25 islands, 187 levels, the whole Rust Book, a real compiler, and Ferris the crab as your teacher, powered by Claude."
+    />
+    <meta name="theme-color" content="#fff2cf" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Ferris' Forge" />
+    <meta
+      property="og:description"
+      content="A cozy pixel-art game that teaches Rust from the ground up."
+    />
+    <link rel="canonical" href="https://wanikhawar.github.io/ferris-forge/" />
+    <meta property="og:url" content="https://wanikhawar.github.io/ferris-forge/" />
+    <meta
+      property="og:image"
+      content="https://wanikhawar.github.io/ferris-forge/assets/figures/banner.png"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+    <script src="./assets/theme.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600;700&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap"
+    />
+    <link rel="stylesheet" href="assets/styles.css" />
+    <script src="assets/main.js" defer></script>
+    <script type="module" src="assets/home.js"></script>
+    <script type="module" src="assets/predict-demo.js"></script>
+    <script type="application/json" id="website-messages">
+      {}
+    </script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="#play" aria-label="Ferris' Forge, home">
+          <span class="brand-mark" aria-hidden="true">🦀</span>
+          <span>Ferris' Forge</span>
+        </a>
+        <nav class="header-links" aria-label="Project">
+          <a href="https://github.com/wanikhawar/ferris-forge">
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path
+                d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
+              />
+            </svg>
+            <span>GitHub</span>
+            <span class="star-count" data-github-stars hidden></span>
+          </a>
+          <button
+            type="button"
+            class="theme-switch"
+            data-theme-switch
+            aria-label="Night mode"
+            aria-pressed="false"
+            hidden
+          >
+            <span class="theme-icon theme-icon-sun" aria-hidden="true">☀</span>
+            <span class="theme-icon theme-icon-moon" aria-hidden="true">☾</span>
+          </button>
+        </nav>
+      </div>
+    </header>
+
+    <details class="home-nav" data-home-nav>
+      <summary>
+        <span class="home-nav-heading">On this page</span>
+        <span class="home-nav-current" data-home-nav-current>Play</span>
+      </summary>
+      <nav aria-label="On this page">
+        <ol>
+          <li><a href="#play">Play</a></li>
+          <li><a href="#how-ferris-helps">How Ferris helps</a></li>
+          <li><a href="#try-it">Try a level</a></li>
+          <li><a href="#look-around">A look around</a></li>
+          <li><a href="#how-it-works">How it works</a></li>
+          <li><a href="#islands">The islands</a></li>
+          <li><a href="#questions">Questions</a></li>
+        </ol>
+      </nav>
+    </details>
+
+    <main id="main">
+      <section class="container hero" id="play">
+        <div class="hero-copy">
+          <p class="eyebrow">A cozy pixel-art game · v1.0</p>
+          <h1>Learn Rust from <mark>Ferris</mark> himself.</h1>
+          <p class="lede">
+            25 islands, 187 levels and the whole Rust Book. Your code is
+            compiled by a real <code>rustc</code>, and Ferris the crab, powered
+            by Claude, explains every error along the way.
+          </p>
+          <div class="terminal" aria-labelledby="install-label">
+            <div class="terminal-bar">
+              <span id="install-label">Start playing</span>
+              <button type="button" class="copy-button" data-copy="install">
+                Copy
+              </button>
+            </div>
+            <pre
+              class="terminal-prompt"
+            ><code id="install">git clone https://github.com/wanikhawar/ferris-forge
+cd ferris-forge
+cargo run</code></pre>
+          </div>
+          <p class="hint-line">
+            Opens the game at <code>127.0.0.1:7878</code>. Needs
+            <a href="https://rustup.rs">Rust</a>; Ferris talks through
+            <a href="https://claude.com/claude-code">Claude Code</a> or gives
+            built-in hints offline.
+          </p>
+          <p class="visually-hidden" id="copy-status" role="status"></p>
+        </div>
+        <figure class="hero-art">
+          <button
+            type="button"
+            class="hero-ferris"
+            aria-pressed="false"
+            aria-describedby="hero-ferris-label"
+          >
+            <canvas
+              data-hero-ferris
+              width="416"
+              height="304"
+              role="img"
+              aria-label="Ferris the crab, drawn with the game's own sprite code"
+            ></canvas>
+          </button>
+          <figcaption id="hero-ferris-label" data-hero-ferris-label>
+            Click Ferris to make him dance.
+          </figcaption>
+        </figure>
+        <dl class="hero-stats">
+          <div><dt>Islands</dt><dd>25</dd></div>
+          <div><dt>Levels</dt><dd>187</dd></div>
+          <div><dt>Level types</dt><dd>5</dd></div>
+          <div><dt>Build step</dt><dd>0</dd></div>
+        </dl>
+      </section>
+
+      <section class="section" id="how-ferris-helps">
+        <div class="container">
+          <p class="section-kicker">01 · How Ferris helps</p>
+          <h2>Stuck on a compiler error? Ferris walks you through it.</h2>
+          <p class="section-lede">
+            This is level 4.1 on Borrow Bridge. The goal is to make it print
+            <code>ferris has 6 letters</code>, but <code>rustc</code> refuses.
+            Step through what happens next.
+          </p>
+
+          <figure class="step-comparison" data-step-comparison>
+            <div
+              class="step-selector"
+              role="group"
+              aria-label="Follow Ferris through the level"
+            >
+              <button
+                type="button"
+                data-select-step="1"
+                aria-pressed="true"
+                aria-controls="level-code compiler-output ferris-notes"
+              >
+                <span>01</span> Read the error
+              </button>
+              <button
+                type="button"
+                data-select-step="2"
+                aria-pressed="false"
+                aria-controls="level-code compiler-output ferris-notes"
+              >
+                <span>02</span> Take a hint
+              </button>
+              <button
+                type="button"
+                data-select-step="3"
+                aria-pressed="false"
+                aria-controls="level-code compiler-output ferris-notes"
+              >
+                <span>03</span> Fix &amp; review
+              </button>
+            </div>
+
+            <div class="step-grid">
+              <div class="step-code">
+                <div class="code-block">
+                  <div class="code-header">
+                    <span>🔧 Fix it · <strong>Just looking, thanks!</strong></span>
+                    <span>main.rs</span>
+                  </div>
+                  <pre><code id="level-code"><span class="code-step" data-step="2 3"><span class="tok-kw">fn</span> <span class="tok-fn">count_letters</span>(word: <span class="tok-ty">String</span>) -&gt; <span class="tok-ty">usize</span> {</span>
+    word.<span class="tok-fn">len</span>()
+}
+
+<span class="tok-kw">fn</span> <span class="tok-fn">main</span>() {
+<span class="code-step" data-step="1">    <span class="tok-kw">let</span> word = <span class="tok-ty">String</span>::<span class="tok-fn">from</span>(<span class="tok-str">"ferris"</span>);</span>
+<span class="code-step" data-step="1 2 3">    <span class="tok-kw">let</span> n = <span class="tok-fn">count_letters</span>(word);</span>
+<span class="code-step" data-step="1">    <span class="tok-mac">println!</span>(<span class="tok-str">"{} has {} letters"</span>, word, n);</span>
+}</code></pre>
+                </div>
+                <details class="code-block compiler-output" data-compiler-output open>
+                  <summary class="code-header">
+                    <span>Compiler · real <code>rustc</code> output</span>
+                    <span class="disclosure" aria-hidden="true"></span>
+                  </summary>
+                  <pre><code id="compiler-output"><span class="out-error">error[E0382]: borrow of moved value: `word`</span>
+ --&gt; main.rs:8:35
+  |
+<span class="code-step" data-step="1">6 |     let word = String::from("ferris");
+  |         ---- move occurs because `word` has type `String`,
+  |              which does not implement the `Copy` trait
+7 |     let n = count_letters(word);
+  |                           ---- value moved here
+8 |     println!("{} has {} letters", word, n);
+  |                                   ^^^^ value borrowed here after move</span>
+  |
+<span class="code-step" data-step="2"><span class="out-note">note</span>: consider changing this parameter type in function
+      `count_letters` to borrow instead if owning the value
+      isn't necessary
+ --&gt; main.rs:1:24
+  |
+1 | fn count_letters(word: String) -&gt; usize {
+  |                        ^^^^^^ this parameter takes ownership</span></code></pre>
+                </details>
+              </div>
+
+              <aside
+                class="ferris-notes"
+                id="ferris-notes"
+                aria-label="Illustrative replies from Ferris"
+              >
+                <p class="notes-label">
+                  <span aria-hidden="true">🦀</span> Ferris
+                  <span class="notes-disclaimer">illustrative; he's Claude, so wording varies</span>
+                </p>
+                <div class="speech" data-step-note="1">
+                  <p class="speech-action">Explain · free</p>
+                  <p>
+                    <code>rustc</code> is telling a story in three beats. Line
+                    6 makes <code>word</code>. Line 7 <em>moves</em> it into
+                    <code>count_letters</code>. Line 8 tries to use it again.
+                  </p>
+                  <p>
+                    After line 7, <code>main</code> doesn't own
+                    <code>word</code> any more. That's
+                    <strong>E0382: borrow of moved value</strong>.
+                  </p>
+                </div>
+                <div class="speech" data-step-note="2" hidden>
+                  <p class="speech-action">Hint 1 of 3 · −10% XP</p>
+                  <p>
+                    The function takes ownership of the word, so
+                    <code>main</code> can't print it afterwards. Could the
+                    function just <strong>borrow</strong> it?
+                  </p>
+                  <p class="speech-aside">
+                    The compiler's own note points at the same spot: the
+                    parameter type.
+                  </p>
+                </div>
+                <div class="speech" data-step-note="3" hidden>
+                  <p class="speech-action">Run · Review</p>
+                  <pre class="diff"><code><span class="diff-del">- fn count_letters(word: String) -&gt; usize {</span>
+<span class="diff-add">+ fn count_letters(word: &amp;String) -&gt; usize {</span>
+<span class="diff-del">-     let n = count_letters(word);</span>
+<span class="diff-add">+     let n = count_letters(&amp;word);</span></code></pre>
+                  <p class="console-pass">✔ ferris has 6 letters · +40 XP</p>
+                  <p>
+                    It passes! One idiomatic tweak: take <code>&amp;str</code>
+                    instead of <code>&amp;String</code>, so string literals
+                    work too. Code that's already idiomatic earns
+                    <strong>+15 bonus XP</strong>.
+                  </p>
+                </div>
+              </aside>
+            </div>
+            <figcaption>
+              The compiler and the tests decide whether you pass. Ferris
+              explains, hints and reviews, and he can only talk: he has no
+              tools in the game.
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="section" id="try-it">
+        <div class="container">
+          <p class="section-kicker">02 · Try a level</p>
+          <h2>🔮 Predict it: does this compile?</h2>
+          <p class="section-lede">
+            Three real levels from Ownership Caves and Borrow Bridge. Pick an
+            answer and watch Ferris react.
+          </p>
+
+          <div class="predict-demo" data-predict-demo>
+            <div class="predict-stage" hidden>
+              <canvas
+                data-predict-ferris
+                role="img"
+                aria-label="Ferris reacting to your answer"
+              ></canvas>
+              <p class="speech predict-status" data-predict-status role="status"></p>
+              <p class="predict-xp">
+                <span>XP</span>
+                <output data-predict-xp>0</output>
+              </p>
+            </div>
+
+            <div class="predict-questions">
+              <article class="predict-question" data-predict-question data-answer="0">
+                <p class="level-tag">Ownership Caves · Copy or move?</p>
+                <div class="code-block">
+                  <pre><code><span class="tok-kw">fn</span> <span class="tok-fn">main</span>() {
+    <span class="tok-kw">let</span> a = <span class="tok-num">5</span>;
+    <span class="tok-kw">let</span> b = a;
+    <span class="tok-kw">let</span> s1 = <span class="tok-ty">String</span>::<span class="tok-fn">from</span>(<span class="tok-str">"hi"</span>);
+    <span class="tok-kw">let</span> s2 = s1;
+    <span class="tok-mac">println!</span>(<span class="tok-str">"{} {}"</span>, a, b);
+    <span class="tok-mac">println!</span>(<span class="tok-str">"{}"</span>, s2);
+}</code></pre>
+                </div>
+                <ol class="predict-choices">
+                  <li><button type="button" data-choice="0"><kbd>A</kbd> <span>Prints <code>5 5</code> then <code>hi</code></span></button></li>
+                  <li><button type="button" data-choice="1"><kbd>B</kbd> <span>It doesn't compile: <code>a</code> was moved into <code>b</code></span></button></li>
+                  <li><button type="button" data-choice="2"><kbd>C</kbd> <span>It doesn't compile: <code>s1</code> was moved into <code>s2</code></span></button></li>
+                  <li><button type="button" data-choice="3"><kbd>D</kbd> <span>Prints <code>5 0</code> then <code>hi</code></span></button></li>
+                </ol>
+                <details class="predict-answer" data-predict-answer>
+                  <summary>Answer: A</summary>
+                  <p>
+                    <code>i32</code> is <code>Copy</code>, so <code>a</code> and
+                    <code>b</code> both hold 5. <code>s1</code> <em>was</em>
+                    moved into <code>s2</code>, but <code>s1</code> is never
+                    used again, so there's no error. Moving isn't a problem by
+                    itself; only using the old name afterwards is.
+                  </p>
+                </details>
+              </article>
+
+              <article class="predict-question" data-predict-question data-answer="2">
+                <p class="level-tag">Ownership Caves · Scope</p>
+                <div class="code-block">
+                  <pre><code><span class="tok-kw">fn</span> <span class="tok-fn">main</span>() {
+    <span class="tok-kw">let</span> outer = <span class="tok-ty">String</span>::<span class="tok-fn">from</span>(<span class="tok-str">"outer"</span>);
+    {
+        <span class="tok-kw">let</span> inner = <span class="tok-ty">String</span>::<span class="tok-fn">from</span>(<span class="tok-str">"inner"</span>);
+        <span class="tok-mac">println!</span>(<span class="tok-str">"{} {}"</span>, outer, inner);
+    }
+    <span class="tok-mac">println!</span>(<span class="tok-str">"{} {}"</span>, outer, inner);
+}</code></pre>
+                </div>
+                <ol class="predict-choices">
+                  <li><button type="button" data-choice="0"><kbd>A</kbd> <span>Prints <code>outer inner</code> twice</span></button></li>
+                  <li><button type="button" data-choice="1"><kbd>B</kbd> <span>Prints <code>outer inner</code> then <code>outer</code></span></button></li>
+                  <li><button type="button" data-choice="2"><kbd>C</kbd> <span>It doesn't compile: <code>inner</code> doesn't exist on the last line</span></button></li>
+                  <li><button type="button" data-choice="3"><kbd>D</kbd> <span>It panics at runtime: <code>inner</code> was already freed</span></button></li>
+                </ol>
+                <details class="predict-answer" data-predict-answer>
+                  <summary>Answer: C</summary>
+                  <p>
+                    <code>inner</code> only exists inside the inner
+                    <code>{ }</code>. At the <code>}</code> it is dropped and
+                    its name is gone, so the last line is error E0425. Rust
+                    catches this at compile time, so it can never become a
+                    use-after-free at runtime.
+                  </p>
+                </details>
+              </article>
+
+              <article class="predict-question" data-predict-question data-answer="1">
+                <p class="level-tag">Borrow Bridge · The three keys: Read, Write, Own</p>
+                <div class="code-block">
+                  <pre><code><span class="tok-kw">fn</span> <span class="tok-fn">main</span>() {
+    <span class="tok-kw">let mut</span> v = <span class="tok-mac">vec!</span>[<span class="tok-num">1</span>, <span class="tok-num">2</span>, <span class="tok-num">3</span>];
+    <span class="tok-kw">let</span> first = &amp;v[<span class="tok-num">0</span>];
+    v.<span class="tok-fn">push</span>(<span class="tok-num">4</span>);
+    <span class="tok-mac">println!</span>(<span class="tok-str">"{}"</span>, first);
+}</code></pre>
+                </div>
+                <ol class="predict-choices">
+                  <li><button type="button" data-choice="0"><kbd>A</kbd> <span>Prints <code>1</code></span></button></li>
+                  <li><button type="button" data-choice="1"><kbd>B</kbd> <span>It doesn't compile: <code>v</code> can't change while <code>first</code> borrows it</span></button></li>
+                  <li><button type="button" data-choice="2"><kbd>C</kbd> <span>It crashes: <code>first</code> points to freed memory</span></button></li>
+                  <li><button type="button" data-choice="3"><kbd>D</kbd> <span>Prints <code>4</code></span></button></li>
+                </ol>
+                <details class="predict-answer" data-predict-answer>
+                  <summary>Answer: B</summary>
+                  <p>
+                    <code>first</code> borrows from <code>v</code>, so
+                    <code>v</code> loses its Write permission until
+                    <code>first</code>'s last use on line 5.
+                    <code>v.push(4)</code> needs Write, so it's error E0502.
+                    Pushing could reallocate the vector and leave
+                    <code>first</code> dangling, which is exactly the bug Rust
+                    prevents.
+                  </p>
+                </details>
+              </article>
+
+              <div class="predict-controls" hidden>
+                <span data-predict-progress></span>
+                <button type="button" class="button" data-predict-next disabled>
+                  Next level
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="look-around">
+        <div class="container">
+          <p class="section-kicker">03 · A look around</p>
+          <h2>A whole world, drawn in code.</h2>
+          <div class="gallery">
+            <figure class="shot shot-wide">
+              <img src="assets/figures/map.png" width="1432" height="786" loading="lazy" alt="The world map: 25 islands, one for each part of the Rust Book" />
+              <figcaption><strong>The world map.</strong> Clear an island's boss to unlock the next.</figcaption>
+            </figure>
+            <figure class="shot">
+              <img src="assets/figures/level.png" width="1432" height="786" loading="lazy" alt="A level: code on the left, Ferris and his hints on the right" />
+              <figcaption><strong>A level.</strong> Code on the left, Ferris on the right.</figcaption>
+            </figure>
+            <figure class="shot">
+              <img src="assets/figures/console.png" width="1432" height="786" loading="lazy" alt="The console showing that all of Ferris' tests passed" />
+              <figcaption><strong>Real results.</strong> Compiled with <code>rustc</code>, checked by output or tests.</figcaption>
+            </figure>
+            <figure class="shot">
+              <img src="assets/figures/lesson.png" width="1432" height="786" loading="lazy" alt="A lesson popup with Rust, In C and In Python tabs" />
+              <figcaption><strong>Lessons.</strong> Every level compared with C and Python, linked to the book.</figcaption>
+            </figure>
+            <figure class="shot">
+              <img src="assets/figures/vim.png" width="1432" height="786" loading="lazy" alt="The editor in Vim mode, with lines selected in visual-line mode" />
+              <figcaption><strong>Vim mode.</strong> Your own Neovim and config, running invisibly behind the editor.</figcaption>
+            </figure>
+            <figure class="shot shot-wide">
+              <img src="assets/figures/moods.png" width="1288" height="168" loading="lazy" alt="Ferris in seven moods: idle, happy, talking, thinking, worried, excited and sleepy" />
+              <figcaption><strong>Ferris has moods.</strong> He thinks while you compile, worries when it breaks, and dances when it works.</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="how-it-works">
+        <div class="container">
+          <p class="section-kicker">04 · How it works</p>
+          <h2>A real compiler, and a crab who can only talk.</h2>
+          <dl class="feature-list">
+            <div>
+              <dt>⚙️ Real compiler</dt>
+              <dd>Your code runs through your own <code>rustc</code>. The compiler and tests decide whether you pass, not the AI.</dd>
+            </div>
+            <div>
+              <dt>🦀 Ferris = Claude</dt>
+              <dd>Explanations, hints, reviews and chat go through <code>claude -p</code>, so they use your Claude subscription. No API key.</dd>
+            </div>
+            <div>
+              <dt>🧠 Pick a brain</dt>
+              <dd>Switch Ferris between Fable, Opus, Sonnet and Haiku, and choose an effort level.</dd>
+            </div>
+            <div>
+              <dt>⚡ Energy bar</dt>
+              <dd>The “E” bar shows how much of your Claude usage limit is left. Offline mode uses built-in hints and costs nothing.</dd>
+            </div>
+            <div>
+              <dt>🔒 Local only</dt>
+              <dd>Listens on 127.0.0.1, and its API only answers the game's own page. Each run is limited in memory, CPU time and file size, and stopped after 5 seconds.</dd>
+            </div>
+            <div>
+              <dt>✅ Every level verified</dt>
+              <dd><code>cargo run -- verify</code> checks that every starter fails, every solution passes, and every book topic is taught.</dd>
+            </div>
+          </dl>
+          <figure class="kinds">
+            <img src="assets/figures/kinds.png" width="850" height="130" loading="lazy" alt="The five level types: Fix it, Fill it, Predict it, Quiz and Boss" />
+          </figure>
+        </div>
+      </section>
+
+      <section class="section" id="islands">
+        <div class="container">
+          <p class="section-kicker">05 · The islands</p>
+          <h2>The whole Rust Book, in the order you need it.</h2>
+          <p class="section-lede">
+            The curriculum follows Brown University's interactive edition of
+            <cite>The Rust Programming Language</cite>.
+          </p>
+          <ol class="island-list" start="0">
+            <li><strong>Tutorial Beach</strong><span>Wash ashore, meet Ferris, and say your first words in Rust.</span></li>
+            <li><strong>Variable Village</strong><span>let, mut, shadowing, number types, tuples and arrays.</span></li>
+            <li><strong>Flow Forest</strong><span>if, functions, loop, while and for.</span></li>
+            <li><strong>Ownership Caves</strong><span>Rust's big idea: every value has exactly one owner.</span></li>
+            <li><strong>Borrow Bridge</strong><span>Lend things out without giving them away.</span></li>
+            <li><strong>Struct Smithy</strong><span>Forge your own types.</span></li>
+            <li><strong>Enum Isles</strong><span>A value that can be one of several things.</span></li>
+            <li><strong>Collection Citadel</strong><span>Lists, text and dictionaries.</span></li>
+            <li><strong>Error Marsh</strong><span>When things go wrong, and what to do about it.</span></li>
+            <li class="is-project"><strong>Guessing Game Grotto</strong><span>Build the book's guessing game.</span></li>
+            <li><strong>Pattern Plains</strong><span>Every shape a pattern can take.</span></li>
+            <li><strong>Module Mines</strong><span>Organize bigger programs into neat tunnels.</span></li>
+            <li><strong>Testing Grounds</strong><span>Prove your code works, automatically.</span></li>
+            <li><strong>Trait Tower</strong><span>Write code once, for many types.</span></li>
+            <li><strong>Lifetime Labyrinth</strong><span>How long does a reference live?</span></li>
+            <li><strong>Iterator Rapids</strong><span>Little functions and conveyor belts.</span></li>
+            <li class="is-project"><strong>Minigrep Harbor</strong><span>Build a real command-line search tool.</span></li>
+            <li><strong>Pointer Peaks</strong><span>Box, Rc, RefCell and friends.</span></li>
+            <li><strong>Object Observatory</strong><span>Objects, Rust style.</span></li>
+            <li><strong>Thread Volcano</strong><span>Doing many things at once, safely.</span></li>
+            <li><strong>Async Archipelago</strong><span>Waiting for many things without wasting time.</span></li>
+            <li><strong>Cargo Docks</strong><span>Ship your code to the world.</span></li>
+            <li><strong>Advanced Abyss</strong><span>The deep end of Rust.</span></li>
+            <li class="is-project"><strong>Web Server Citadel</strong><span>The final project: a multithreaded web server.</span></li>
+            <li class="is-bonus"><strong>Ferris' Library</strong><span>The book's appendices as quick quizzes.</span></li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="section" id="questions">
+        <div class="container narrow">
+          <p class="section-kicker">06 · Questions</p>
+          <h2>Before you set sail</h2>
+          <div class="faq">
+            <details>
+              <summary>Do I need Claude to play?</summary>
+              <p>No. Without Claude Code, switch Ferris to offline mode in Settings and he gives built-in hints. Every level is still compiled and checked the same way.</p>
+            </details>
+            <details>
+              <summary>Can levels use crates like tokio?</summary>
+              <p>Levels are compiled with plain <code>rustc</code>, so no. Async Archipelago comes with <code>runtime.rs</code>, a tiny async runtime built from the standard library that stands in for tokio.</p>
+            </details>
+            <details>
+              <summary>Is it safe to run?</summary>
+              <p>It runs the code you write as you, like <code>cargo run</code> would. The game only listens on 127.0.0.1, its API needs a per-install key, and on Linux each program runs in its own process namespace.</p>
+            </details>
+            <details>
+              <summary>What does Vim mode use?</summary>
+              <p>Your own Neovim, through <code>nvim --embed</code>, with your config by default. It never writes files; the game saves your code itself.</p>
+            </details>
+            <details>
+              <summary>Which systems does it run on?</summary>
+              <p>It's developed and tested on Linux.</p>
+            </details>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <img src="assets/figures/divider.png" width="480" height="36" alt="" loading="lazy" />
+      <div class="container footer-inner">
+        <p>Ferris' Forge · <a href="https://github.com/wanikhawar/ferris-forge/blob/main/LICENSE">MIT license</a></p>
+        <p>Plain HTML, CSS and JavaScript. No build step, like the game.</p>
+      </div>
+    </footer>
+    <noscript>
+      <p class="noscript">The answers to the levels are under each question. Turn on JavaScript to play with Ferris.</p>
+    </noscript>
+  </body>
+</html>
