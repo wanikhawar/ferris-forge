@@ -729,6 +729,7 @@ details:not([open]) > summary .disclosure::after {
 
 .step-code {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
 }
 
@@ -897,6 +898,7 @@ details:not([open]) > summary .disclosure::after {
 
 .predict-question {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
 }
 
@@ -1260,8 +1262,37 @@ details:not([open]) > summary .disclosure::after {
     grid-template-columns: 1fr;
   }
 
+  .header-inner {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .brand {
+    gap: 8px;
+    font-size: 20px;
+  }
+
+  .brand-mark {
+    font-size: 22px;
+  }
+
+  .header-links {
+    gap: 4px;
+    margin-left: auto;
+  }
+
+  .header-links a {
+    padding-inline: 6px;
+  }
+
+  /* Hidden visually but kept as the link's accessible name. */
   .header-links a span:not(.star-count) {
-    display: none;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .step-selector button {

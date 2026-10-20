@@ -5,13 +5,16 @@ function initializeHeroFerris() {
   const canvas = document.querySelector("[data-hero-ferris]");
   if (canvas === null) return;
   const button = canvas.closest("button");
+  const caption = button
+    .closest("figure")
+    .querySelector("[data-hero-ferris-label]");
   const ferris = createMascot(canvas, { scale: 8, pad: 6 });
   ferris.setMood("happy");
   button.addEventListener("click", () => {
     const dancing = !ferris.dancing;
     ferris.setDance(dancing);
     button.setAttribute("aria-pressed", String(dancing));
-    button.querySelector("[data-hero-ferris-label]").textContent = dancing
+    caption.textContent = dancing
       ? t("Ferris is dancing. Click to let him rest.")
       : t("Click Ferris to make him dance.");
   });

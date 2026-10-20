@@ -19,6 +19,7 @@ export function createMascot(canvas, { scale = 6, pad = 0 } = {}) {
   canvas.height = (32 + pad) * scale;
   const context = canvas.getContext("2d");
   let timer = 0;
+  let dancing = false;
   const draw = (mood) => {
     context.clearRect(0, 0, canvas.width, canvas.height);
     drawGrid(context, ferrisGrid({ mood }), pad, 1 + pad, scale);
@@ -31,8 +32,11 @@ export function createMascot(canvas, { scale = 6, pad = 0 } = {}) {
       if (ms > 0) timer = window.setTimeout(() => draw("idle"), ms);
     },
     setDance(on) {
+      dancing = on;
       draw(on ? "excited" : "idle");
     },
-    dancing: false,
+    get dancing() {
+      return dancing;
+    },
   };
 }
